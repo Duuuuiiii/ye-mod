@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "package": "com.ye.mod.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "AbstractClientPlayerMixin",
+    "GameRendererMixin",
+    "GuiMixin",
+    "LocalPlayerMixin",
+    "ParticleEngineMixin",
+    "ScreenEffectRendererMixin",
+    "SoundEngineMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

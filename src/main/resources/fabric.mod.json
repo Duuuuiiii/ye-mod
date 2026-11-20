@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "ye",
+  "version": "${version}",
+  "name": "Ye",
+  "description": "Modern minimalist utility mod for 3c3u & Minecraft 1.21.11",
+  "authors": [
+    "ye"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/ye/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.ye.mod.YeClient"
+    ]
+  },
+  "mixins": [
+    {
+      "config": "ye.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
