@@ -56,13 +56,13 @@ public final class CapeManager {
         initialized = true;
 
         // 1. Load all 48 bundled official Minecraft capes
-        try (InputStream in = CapeManager.class.getResourceAsStream("/assets/ye/capes/official/manifest.json")) {
+        try (InputStream in = CapeManager.class.getResourceAsStream("/assets/ye/textures/capes/official/manifest.json")) {
             if (in != null) {
                 List<ManifestEntry> entries = GSON.fromJson(new InputStreamReader(in, StandardCharsets.UTF_8), MANIFEST_TYPE);
                 if (entries != null) {
                     entries.sort(Comparator.comparing(e -> e.name));
                     for (ManifestEntry e : entries) {
-                        Identifier texId = Identifier.fromNamespaceAndPath("ye", "capes/official/" + e.file);
+                        Identifier texId = Identifier.fromNamespaceAndPath("ye", "textures/capes/official/" + e.file);
                         CAPES.put(e.id, new CapeEntry(e.id, e.name, texId, false));
                     }
                 }

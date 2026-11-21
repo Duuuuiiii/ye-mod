@@ -8,6 +8,7 @@ import com.ye.mod.modules.render.CustomSkinModule;
 import com.ye.mod.modules.render.NoRenderModule;
 import com.ye.mod.modules.render.SkinManager;
 import com.ye.mod.modules.system.BorderlessFullscreenModule;
+import com.ye.mod.modules.system.ChatFilterModule;
 import com.ye.mod.modules.visual.HudModule;
 import com.ye.mod.modules.visual.NoFovModule;
 import com.ye.mod.ui.YeMenuScreen;
@@ -29,6 +30,7 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new NoRenderModule());
         ModuleManager.register(new NoFovModule());
         ModuleManager.register(new BorderlessFullscreenModule());
+        ModuleManager.register(new ChatFilterModule());
         ModuleManager.register(new HudModule());
 
         ConfigManager.load();
