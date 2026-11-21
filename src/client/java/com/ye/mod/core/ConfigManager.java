@@ -30,8 +30,18 @@ public final class ConfigManager {
     });
 
     private static volatile boolean loading = false;
+    private static volatile int menuKey = org.lwjgl.glfw.GLFW.GLFW_KEY_F9;
 
     private ConfigManager() {}
+
+    public static int getMenuKey() {
+        return menuKey;
+    }
+
+    public static void setMenuKey(int key) {
+        menuKey = key;
+        saveAsync();
+    }
 
     public static Path getConfigDir() {
         return FabricLoader.getInstance().getConfigDir().resolve("ye");
@@ -68,6 +78,9 @@ public final class ConfigManager {
             if (!parsed.isJsonObject()) return;
 
             JsonObject root = parsed.getAsJsonObject();
+            if (root.has("menuKey")) {
+                menuKey = root.get("menuKey").getAsInt();
+            }
             JsonObject modulesObj = root.has("modules") && root.get("modules").isJsonObject()
                     ? root.getAsJsonObject("modules")
                     : null;
@@ -131,6 +144,7 @@ public final class ConfigManager {
             modulesObj.add(module.getId(), mObj);
         }
 
+        root.addProperty("menuKey", menuKey);
         root.add("modules", modulesObj);
         return root;
     }

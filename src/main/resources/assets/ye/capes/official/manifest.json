@@ -1,0 +1,242 @@
+[
+  {
+    "id": "official:15th_anniversary_cape",
+    "name": "15th Anniversary Cape",
+    "file": "15th_anniversary_cape.png"
+  },
+  {
+    "id": "official:4j_studios_cape",
+    "name": "4J Studios Cape",
+    "file": "4j_studios_cape.png"
+  },
+  {
+    "id": "official:aurora_cape",
+    "name": "Aurora Cape",
+    "file": "aurora_cape.png"
+  },
+  {
+    "id": "official:bacon_cape",
+    "name": "Bacon Cape",
+    "file": "bacon_cape.png"
+  },
+  {
+    "id": "official:birthday_cape",
+    "name": "Birthday Cape",
+    "file": "birthday_cape.png"
+  },
+  {
+    "id": "official:cheapsh0t_s_cape",
+    "name": "Cheapsh0t's Cape",
+    "file": "cheapsh0t_s_cape.png"
+  },
+  {
+    "id": "official:cherry_blossom_cape",
+    "name": "Cherry Blossom Cape",
+    "file": "cherry_blossom_cape.png"
+  },
+  {
+    "id": "official:chinese_translator_cape",
+    "name": "Chinese Translator Cape",
+    "file": "chinese_translator_cape.png"
+  },
+  {
+    "id": "official:christmas_2010_cape",
+    "name": "Christmas 2010 Cape",
+    "file": "christmas_2010_cape.png"
+  },
+  {
+    "id": "official:cobalt_cape",
+    "name": "Cobalt Cape",
+    "file": "cobalt_cape.png"
+  },
+  {
+    "id": "official:common_cape",
+    "name": "Common Cape",
+    "file": "common_cape.png"
+  },
+  {
+    "id": "official:dannybstyle_s_cape",
+    "name": "DannyBstyle's Cape",
+    "file": "dannybstyle_s_cape.png"
+  },
+  {
+    "id": "official:follower_s_cape",
+    "name": "Follower's Cape",
+    "file": "follower_s_cape.png"
+  },
+  {
+    "id": "official:hero_cape",
+    "name": "Hero Cape",
+    "file": "hero_cape.png"
+  },
+  {
+    "id": "official:hero_cape__texture__rv1",
+    "name": "Hero Cape (texture) rv1",
+    "file": "hero_cape__texture__rv1.png"
+  },
+  {
+    "id": "official:home_cape",
+    "name": "Home Cape",
+    "file": "home_cape.png"
+  },
+  {
+    "id": "official:julianclark_s_cape",
+    "name": "JulianClark's Cape",
+    "file": "julianclark_s_cape.png"
+  },
+  {
+    "id": "official:menace_cape",
+    "name": "Menace Cape",
+    "file": "menace_cape.png"
+  },
+  {
+    "id": "official:migrator_cape",
+    "name": "Migrator Cape",
+    "file": "migrator_cape.png"
+  },
+  {
+    "id": "official:turtle_cape",
+    "name": "Turtle Cape",
+    "file": "turtle_cape.png"
+  },
+  {
+    "id": "official:minecon_2011_cape",
+    "name": "MINECON 2011 Cape",
+    "file": "minecon_2011_cape.png"
+  },
+  {
+    "id": "official:minecon_2012_cape",
+    "name": "MINECON 2012 Cape",
+    "file": "minecon_2012_cape.png"
+  },
+  {
+    "id": "official:minecon_2013_cape",
+    "name": "MINECON 2013 Cape",
+    "file": "minecon_2013_cape.png"
+  },
+  {
+    "id": "official:minecon_2015_cape",
+    "name": "MINECON 2015 Cape",
+    "file": "minecon_2015_cape.png"
+  },
+  {
+    "id": "official:minecon_2016_cape",
+    "name": "MINECON 2016 Cape",
+    "file": "minecon_2016_cape.png"
+  },
+  {
+    "id": "official:minecon_2019_cape",
+    "name": "MINECON 2019 Cape",
+    "file": "minecon_2019_cape.png"
+  },
+  {
+    "id": "official:millionth_customer_cape",
+    "name": "Millionth Customer Cape",
+    "file": "millionth_customer_cape.png"
+  },
+  {
+    "id": "official:minecraft_experience_cape",
+    "name": "Minecraft Experience Cape",
+    "file": "minecraft_experience_cape.png"
+  },
+  {
+    "id": "official:minecraft_experience_cape__texture___old",
+    "name": "Minecraft Experience Cape (texture) (old)",
+    "file": "minecraft_experience_cape__texture___old.png"
+  },
+  {
+    "id": "official:moderator_cape",
+    "name": "Moderator Cape",
+    "file": "moderator_cape.png"
+  },
+  {
+    "id": "official:mojang_cape",
+    "name": "Mojang Cape",
+    "file": "mojang_cape.png"
+  },
+  {
+    "id": "official:mojang_classic_cape",
+    "name": "Mojang Classic Cape",
+    "file": "mojang_classic_cape.png"
+  },
+  {
+    "id": "official:mojang_office_cape",
+    "name": "Mojang Office Cape",
+    "file": "mojang_office_cape.png"
+  },
+  {
+    "id": "official:mrmessiah_s_cape",
+    "name": "MrMessiah's Cape",
+    "file": "mrmessiah_s_cape.png"
+  },
+  {
+    "id": "official:new_years_2011_cape",
+    "name": "New Years 2011 Cape",
+    "file": "new_years_2011_cape.png"
+  },
+  {
+    "id": "official:one_vanilla_cape",
+    "name": "One Vanilla Cape",
+    "file": "one_vanilla_cape.png"
+  },
+  {
+    "id": "official:prismarine_cape",
+    "name": "Prismarine Cape",
+    "file": "prismarine_cape.png"
+  },
+  {
+    "id": "official:progress_pride_cape__texture__rv1",
+    "name": "Progress Pride Cape (texture) rv1",
+    "file": "progress_pride_cape__texture__rv1.png"
+  },
+  {
+    "id": "official:progress_pride_cape__texture__rv2",
+    "name": "Progress Pride Cape (texture) rv2",
+    "file": "progress_pride_cape__texture__rv2.png"
+  },
+  {
+    "id": "official:progress_pride_cape__texture__rv3",
+    "name": "Progress Pride Cape (texture) rv3",
+    "file": "progress_pride_cape__texture__rv3.png"
+  },
+  {
+    "id": "official:progress_pride_cape__texture__rv4",
+    "name": "Progress Pride Cape (texture) rv4",
+    "file": "progress_pride_cape__texture__rv4.png"
+  },
+  {
+    "id": "official:purple_heart_cape",
+    "name": "Purple Heart Cape",
+    "file": "purple_heart_cape.png"
+  },
+  {
+    "id": "official:scrolls_champion_cape",
+    "name": "Scrolls Champion Cape",
+    "file": "scrolls_champion_cape.png"
+  },
+  {
+    "id": "official:the_pan_cape",
+    "name": "The Pan Cape",
+    "file": "the_pan_cape.png"
+  },
+  {
+    "id": "official:translator_cape",
+    "name": "Translator Cape",
+    "file": "translator_cape.png"
+  },
+  {
+    "id": "official:twisted_cape",
+    "name": "Twisted Cape",
+    "file": "twisted_cape.png"
+  },
+  {
+    "id": "official:unidentified_cape_1",
+    "name": "Unidentified Cape 1",
+    "file": "unidentified_cape_1.png"
+  },
+  {
+    "id": "official:xbox_1st_birthday_cape",
+    "name": "Xbox 1st Birthday Cape",
+    "file": "xbox_1st_birthday_cape.png"
+  }
+]

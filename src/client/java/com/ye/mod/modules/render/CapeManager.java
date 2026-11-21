@@ -1,5 +1,7 @@
 package com.ye.mod.modules.render;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.ye.mod.core.ConfigManager;
 import net.minecraft.client.Minecraft;
@@ -10,10 +12,14 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -21,36 +27,58 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * Manages built-in preset capes and user-provided local PNG capes.
+ * Manages all bundled official Minecraft capes, built-in presets, and user-provided local PNG capes.
  */
 public final class CapeManager {
     private static final Logger LOGGER = LoggerFactory.getLogger("ye-capes");
+    private static final Gson GSON = new Gson();
+    private static final Type MANIFEST_TYPE = new TypeToken<List<ManifestEntry>>() {}.getType();
     private static final Map<String, CapeEntry> CAPES = new LinkedHashMap<>();
-    private static boolean presetsInitialized = false;
+    private static boolean initialized = false;
 
     public record CapeEntry(String id, String displayName, Identifier textureId, boolean custom) {}
+
+    private static final class ManifestEntry {
+        String id;
+        String name;
+        String file;
+    }
 
     private CapeManager() {}
 
     public static void init() {
-        ensurePresets();
+        ensureBuiltIns();
         refreshCustomCapes();
     }
 
-    private static void ensurePresets() {
-        if (presetsInitialized) return;
-        presetsInitialized = true;
+    private static void ensureBuiltIns() {
+        if (initialized) return;
+        initialized = true;
 
+        // 1. Load all 48 bundled official Minecraft capes
+        try (InputStream in = CapeManager.class.getResourceAsStream("/assets/ye/capes/official/manifest.json")) {
+            if (in != null) {
+                List<ManifestEntry> entries = GSON.fromJson(new InputStreamReader(in, StandardCharsets.UTF_8), MANIFEST_TYPE);
+                if (entries != null) {
+                    entries.sort(Comparator.comparing(e -> e.name));
+                    for (ManifestEntry e : entries) {
+                        Identifier texId = Identifier.fromNamespaceAndPath("ye", "capes/official/" + e.file);
+                        CAPES.put(e.id, new CapeEntry(e.id, e.name, texId, false));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Failed to load official cape manifest", e);
+        }
+
+        // 2. Built-in procedural presets
         registerPreset("preset:3c3u", "3c3u 暗影", CapeManager::draw3c3uCape);
         registerPreset("preset:obsidian_gold", "黑曜鎏金", CapeManager::drawObsidianGoldCape);
         registerPreset("preset:cyber_neon", "赛博霓虹", CapeManager::drawCyberNeonCape);
-        registerPreset("preset:crimson", "绯红星芒", CapeManager::drawCrimsonCape);
-        registerPreset("preset:starlight", "星夜极简", CapeManager::drawStarlightCape);
     }
 
     public static void refreshCustomCapes() {
-        ensurePresets();
-        // Remove old custom entries
+        ensureBuiltIns();
         CAPES.entrySet().removeIf(e -> e.getValue().custom());
 
         ConfigManager.ensureDirectories();
@@ -85,7 +113,6 @@ public final class CapeManager {
         String slug = id.replace("preset:", "");
         Identifier texId = Identifier.fromNamespaceAndPath("ye", "capes/preset_" + slug);
         NativeImage img = new NativeImage(64, 32, true);
-        // Fill base transparent/dark
         for (int y = 0; y < 32; y++) {
             for (int x = 0; x < 64; x++) {
                 img.setPixel(x, y, 0xFF0E1117);
@@ -98,12 +125,12 @@ public final class CapeManager {
     }
 
     public static List<CapeEntry> getAllCapes() {
-        ensurePresets();
+        ensureBuiltIns();
         return Collections.unmodifiableList(new ArrayList<>(CAPES.values()));
     }
 
     public static CapeEntry getCape(String id) {
-        ensurePresets();
+        ensureBuiltIns();
         CapeEntry entry = CAPES.get(id);
         if (entry == null && !CAPES.isEmpty()) {
             return CAPES.values().iterator().next();
@@ -116,9 +143,7 @@ public final class CapeManager {
         void paint(NativeImage img);
     }
 
-    // Minecraft cape UV: Front face is x=[1..10], y=[1..16]; Back face is x=[12..21], y=[1..16]
     private static void fillBothFaces(NativeImage img, PixelShader shader) {
-        // Front face (1..10, 1..16) -> 10x16
         for (int dy = 0; dy < 16; dy++) {
             for (int dx = 0; dx < 10; dx++) {
                 int color = shader.color(dx, dy);
@@ -126,7 +151,6 @@ public final class CapeManager {
                 img.setPixel(12 + dx, 1 + dy, color);
             }
         }
-        // Edges (top, bottom, left, right)
         for (int dx = 0; dx < 10; dx++) {
             img.setPixel(1 + dx, 0, shader.color(dx, 0));
             img.setPixel(11 + dx, 0, shader.color(dx, 15));
@@ -145,11 +169,9 @@ public final class CapeManager {
     private static void draw3c3uCape(NativeImage img) {
         fillBothFaces(img, (x, y) -> {
             int base = lerpColor(0xFF0F131F, 0xFF1A1F35, y / 15f);
-            // Subtle border
             if (x == 0 || x == 9 || y == 0 || y == 15) {
                 return lerpColor(0xFF38BDF8, 0xFF818CF8, y / 15f);
             }
-            // Minimalist diamond emblem in center (x=4..5, y=5..10)
             int dist = Math.abs(x * 2 - 9) + Math.abs(y - 7);
             if (dist <= 3) {
                 return dist == 3 ? 0xFF38BDF8 : 0xFFE0F2FE;
@@ -182,33 +204,6 @@ public final class CapeManager {
                 return 0xFF22D3EE;
             }
             return lerpColor(0xFF090D16, 0xFF161B2E, y / 15f);
-        });
-    }
-
-    private static void drawCrimsonCape(NativeImage img) {
-        fillBothFaces(img, (x, y) -> {
-            if (x == 0 || x == 9 || y == 0 || y == 15) {
-                return 0xFFEF4444;
-            }
-            if ((x == 4 || x == 5) && (y == 6 || y == 7)) {
-                return 0xFFFEF2F2;
-            }
-            if ((x == 3 || x == 6) && (y == 5 || y == 8)) {
-                return 0xFFFCA5A5;
-            }
-            return lerpColor(0xFF2A0A12, 0xFF5C101E, y / 15f);
-        });
-    }
-
-    private static void drawStarlightCape(NativeImage img) {
-        fillBothFaces(img, (x, y) -> {
-            if ((x == 2 && y == 3) || (x == 7 && y == 5) || (x == 4 && y == 10) || (x == 6 && y == 13)) {
-                return 0xFFF8FAFC;
-            }
-            if ((x == 5 && y == 4) || (x == 3 && y == 8)) {
-                return 0xFF93C5FD;
-            }
-            return lerpColor(0xFF0B1026, 0xFF1E293B, y / 15f);
         });
     }
 
