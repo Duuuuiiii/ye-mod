@@ -14,6 +14,7 @@ import com.ye.mod.modules.render.CapeManager;
 import com.ye.mod.modules.render.CustomCapeModule;
 import com.ye.mod.modules.render.CustomSkinModule;
 import com.ye.mod.modules.render.SkinManager;
+import com.ye.mod.modules.system.PlayerStatsManager;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.CharacterEvent;
@@ -36,6 +37,12 @@ import java.util.Map;
 public class YeMenuScreen extends Screen {
     private Category selectedCategory = null; // null = All
     private boolean keybindsTab = false;
+    private boolean statsTab = false;
+    private int statsSortMode = 0; // 0=messages, 1=kills, 2=deaths, 3=muted only
+    private String muteInput = "";
+    private boolean muteInputFocused = false;
+    private float targetStatsScroll = 0;
+    private float statsScroll = 0;
     private Module selectedModule;
     private String searchQuery = "";
     private boolean searchFocused = false;
@@ -112,6 +119,7 @@ public class YeMenuScreen extends Screen {
         openAnim = AppleUiRenderer.smooth(openAnim, 1.0F, 14.0F, dt);
         moduleScroll = AppleUiRenderer.smooth(moduleScroll, targetModuleScroll, 18.0F, dt);
         inspectorScroll = AppleUiRenderer.smooth(inspectorScroll, targetInspectorScroll, 18.0F, dt);
+        statsScroll = AppleUiRenderer.smooth(statsScroll, targetStatsScroll, 18.0F, dt);
 
         g.fill(0, 0, this.width, this.height, AppleUiRenderer.withAlpha(AppleUiRenderer.BG_BACKDROP, openAnim));
 
@@ -127,6 +135,8 @@ public class YeMenuScreen extends Screen {
 
         if (keybindsTab) {
             renderKeybindsPage(g, winX + SIDEBAR_W, contentY, winW - SIDEBAR_W, contentH, mouseX, mouseY);
+        } else if (statsTab) {
+            renderStatsPage(g, winX + SIDEBAR_W, contentY, winW - SIDEBAR_W, contentH, mouseX, mouseY);
         } else {
             int listX = winX + SIDEBAR_W;
             int inspX = listX + MODULE_LIST_W;
@@ -148,13 +158,14 @@ public class YeMenuScreen extends Screen {
         g.drawString(font, "1.21.11", winX + 54 + font.width("Ye "), winY + 14, AppleUiRenderer.TEXT_TERTIARY, false);
 
         int cy = winY + 42;
-        cy = drawCategoryPill(g, !keybindsTab && selectedCategory == null, "全部功能", ModuleManager.getAll().size(), winX + 12, cy, SIDEBAR_W - 22, mouseX, mouseY);
+        cy = drawCategoryPill(g, !keybindsTab && !statsTab && selectedCategory == null, "全部功能", ModuleManager.getAll().size(), winX + 12, cy, SIDEBAR_W - 22, mouseX, mouseY);
         for (Category cat : Category.values()) {
             int count = ModuleManager.getByCategory(cat).size();
-            cy = drawCategoryPill(g, !keybindsTab && selectedCategory == cat, cat.getDisplayName(), count, winX + 12, cy, SIDEBAR_W - 22, mouseX, mouseY);
+            cy = drawCategoryPill(g, !keybindsTab && !statsTab && selectedCategory == cat, cat.getDisplayName(), count, winX + 12, cy, SIDEBAR_W - 22, mouseX, mouseY);
         }
 
         cy += 6;
+        cy = drawCategoryPill(g, statsTab, "玩家统计", PlayerStatsManager.getAllRecords().size(), winX + 12, cy, SIDEBAR_W - 22, mouseX, mouseY);
         drawCategoryPill(g, keybindsTab, "按键设置", ModuleManager.getAll().size() + 1, winX + 12, cy, SIDEBAR_W - 22, mouseX, mouseY);
 
         int active = ModuleManager.getActiveCount();
@@ -229,6 +240,103 @@ public class YeMenuScreen extends Screen {
         AppleUiRenderer.drawRoundedRect(g, kx, y + 4, kw, 20, 6, active ? AppleUiRenderer.APPLE_BLUE : 0xFF282D3B);
         g.drawString(font, keyStr, kx + (kw - font.width(keyStr)) / 2, y + 10, active ? 0xFFFFFFFF : AppleUiRenderer.TEXT_PRIMARY, false);
         return y + h + 6;
+    }
+
+    private List<PlayerStatsManager.PlayerRecord> getFilteredStats() {
+        String q = searchQuery.trim().toLowerCase(Locale.ROOT);
+        List<PlayerStatsManager.PlayerRecord> list = new ArrayList<>();
+        if (statsSortMode == 3) {
+            for (String muted : PlayerStatsManager.getMutedPlayers()) {
+                if (!q.isEmpty() && !muted.contains(q)) continue;
+                PlayerStatsManager.PlayerRecord found = null;
+                for (PlayerStatsManager.PlayerRecord r : PlayerStatsManager.getAllRecords()) {
+                    if (r.name.equalsIgnoreCase(muted)) { found = r; break; }
+                }
+                if (found != null) list.add(found);
+                else list.add(new PlayerStatsManager.PlayerRecord(muted));
+            }
+        } else {
+            for (PlayerStatsManager.PlayerRecord r : PlayerStatsManager.getAllRecords()) {
+                if (!q.isEmpty() && !r.name.toLowerCase(Locale.ROOT).contains(q)) continue;
+                list.add(r);
+            }
+            list.sort((a, b) -> switch (statsSortMode) {
+                case 1 -> Integer.compare(b.kills, a.kills);
+                case 2 -> Integer.compare(b.deaths, a.deaths);
+                default -> Integer.compare(b.messages, a.messages);
+            });
+        }
+        return list;
+    }
+
+    private void renderStatsPage(GuiGraphics g, int x, int y, int w, int h, int mouseX, int mouseY) {
+        int pad = 14;
+        int innerW = w - pad * 2;
+        String[] sorts = {"按发言", "按击杀", "按死亡", "黑名单"};
+        int sx = x + pad;
+        for (int i = 0; i < sorts.length; i++) {
+            int bw = font.width(sorts[i]) + 14;
+            boolean sel = statsSortMode == i;
+            AppleUiRenderer.drawRoundedRect(g, sx, y + 6, bw, 20, 6, sel ? AppleUiRenderer.APPLE_BLUE : AppleUiRenderer.BG_CARD);
+            g.drawString(font, sorts[i], sx + 7, y + 12, sel ? 0xFFFFFFFF : AppleUiRenderer.TEXT_SECONDARY, false);
+            sx += bw + 6;
+        }
+
+        // Open logs button on right
+        String logBtn = "打开日志";
+        int lw = font.width(logBtn) + 14;
+        int lx = x + w - pad - lw;
+        boolean lhov = isInside(mouseX, mouseY, lx, y + 6, lw, 20);
+        AppleUiRenderer.drawRoundedRect(g, lx, y + 6, lw, 20, 6, lhov ? AppleUiRenderer.APPLE_BLUE : 0x260A84FF);
+        g.drawString(font, logBtn, lx + 7, y + 12, lhov ? 0xFFFFFFFF : AppleUiRenderer.APPLE_BLUE, false);
+
+        // Manual mute input bar
+        int iy = y + 32;
+        int addW = 64;
+        int boxW = innerW - addW - 6;
+        AppleUiRenderer.drawRoundedRect(g, x + pad, iy, boxW, 22, 7, muteInputFocused ? 0xFF232836 : AppleUiRenderer.BG_CARD);
+        String disp = muteInput.isEmpty() && !muteInputFocused ? "输入玩家 ID 添加到黑名单..." : muteInput + (muteInputFocused ? "_" : "");
+        g.drawString(font, disp, x + pad + 8, iy + 7, muteInput.isEmpty() && !muteInputFocused ? AppleUiRenderer.TEXT_TERTIARY : AppleUiRenderer.TEXT_PRIMARY, false);
+
+        int ax = x + pad + boxW + 6;
+        boolean ahov = isInside(mouseX, mouseY, ax, iy, addW, 22);
+        AppleUiRenderer.drawRoundedRect(g, ax, iy, addW, 22, 7, ahov ? AppleUiRenderer.APPLE_RED : 0x33FF453A);
+        g.drawString(font, "+ 拉黑", ax + 16, iy + 7, ahov ? 0xFFFFFFFF : AppleUiRenderer.APPLE_RED, false);
+
+        // Player rows
+        int listTop = iy + 28;
+        int listH = (y + h - 10) - listTop;
+        List<PlayerStatsManager.PlayerRecord> records = getFilteredStats();
+        int rowH = 30;
+        int gap = 5;
+        int totalH = records.size() * (rowH + gap) + 6;
+        int maxScroll = Math.max(0, totalH - listH);
+        targetStatsScroll = Math.max(0, Math.min(targetStatsScroll, maxScroll));
+
+        g.enableScissor(x + pad, listTop, x + w - pad, y + h - 8);
+        if (records.isEmpty()) {
+            g.drawString(font, "暂无记录（进入服务器聊天或击杀后自动统计）", x + pad + 4, listTop + 10, AppleUiRenderer.TEXT_TERTIARY, false);
+        } else {
+            int ry = Math.round(listTop - statsScroll);
+            for (PlayerStatsManager.PlayerRecord rec : records) {
+                if (ry + rowH >= listTop && ry <= y + h) {
+                    boolean muted = PlayerStatsManager.isMuted(rec.name);
+                    boolean hov = isInside(mouseX, mouseY, x + pad, ry, innerW, rowH);
+                    AppleUiRenderer.drawRoundedRect(g, x + pad, ry, innerW, rowH, 8, hov ? AppleUiRenderer.BG_CARD_HOVER : AppleUiRenderer.BG_CARD);
+                    g.drawString(font, rec.name, x + pad + 10, ry + 6, muted ? AppleUiRenderer.APPLE_RED : AppleUiRenderer.TEXT_PRIMARY, false);
+                    String sub = String.format("发言 %d  ·  击杀 %d  ·  死亡 %d", rec.messages, rec.kills, rec.deaths);
+                    g.drawString(font, sub, x + pad + 10, ry + 18, AppleUiRenderer.TEXT_TERTIARY, false);
+
+                    String mLabel = muted ? "取消拉黑" : "拉黑";
+                    int mw = Math.max(46, font.width(mLabel) + 14);
+                    int mx = x + w - pad - mw - 8;
+                    AppleUiRenderer.drawRoundedRect(g, mx, ry + 6, mw, 18, 6, muted ? AppleUiRenderer.APPLE_RED : 0xFF282D3B);
+                    g.drawString(font, mLabel, mx + (mw - font.width(mLabel)) / 2, ry + 11, muted ? 0xFFFFFFFF : AppleUiRenderer.TEXT_SECONDARY, false);
+                }
+                ry += rowH + gap;
+            }
+        }
+        g.disableScissor();
     }
 
     private void renderModuleList(GuiGraphics g, int x, int y, int w, int h, int mouseX, int mouseY, float dt) {
@@ -496,6 +604,7 @@ public class YeMenuScreen extends Screen {
         int cy = winY + 42;
         if (isInside(mx, my, winX + 12, cy, SIDEBAR_W - 22, 24)) {
             keybindsTab = false;
+            statsTab = false;
             selectedCategory = null;
             targetModuleScroll = 0;
             return true;
@@ -504,6 +613,7 @@ public class YeMenuScreen extends Screen {
         for (Category cat : Category.values()) {
             if (isInside(mx, my, winX + 12, cy, SIDEBAR_W - 22, 24)) {
                 keybindsTab = false;
+                statsTab = false;
                 selectedCategory = cat;
                 targetModuleScroll = 0;
                 return true;
@@ -512,12 +622,76 @@ public class YeMenuScreen extends Screen {
         }
         cy += 6;
         if (isInside(mx, my, winX + 12, cy, SIDEBAR_W - 22, 24)) {
+            statsTab = true;
+            keybindsTab = false;
+            targetStatsScroll = 0;
+            return true;
+        }
+        cy += 28;
+        if (isInside(mx, my, winX + 12, cy, SIDEBAR_W - 22, 24)) {
             keybindsTab = true;
+            statsTab = false;
             return true;
         }
 
         int contentY = winY + TOPBAR_H;
         int contentH = winH - TOPBAR_H;
+
+        if (statsTab) {
+            int px = winX + SIDEBAR_W;
+            int pw = winW - SIDEBAR_W;
+            int pad = 14;
+            int innerW = pw - pad * 2;
+            String[] sorts = {"按发言", "按击杀", "按死亡", "黑名单"};
+            int sx = px + pad;
+            for (int i = 0; i < sorts.length; i++) {
+                int bw = font.width(sorts[i]) + 14;
+                if (isInside(mx, my, sx, contentY + 6, bw, 20)) {
+                    statsSortMode = i;
+                    targetStatsScroll = 0;
+                    return true;
+                }
+                sx += bw + 6;
+            }
+            int lw = font.width("打开日志") + 14;
+            if (isInside(mx, my, px + pw - pad - lw, contentY + 6, lw, 20)) {
+                PlayerStatsManager.openLogsFolder();
+                return true;
+            }
+
+            int iy = contentY + 32;
+            int addW = 64;
+            int boxW = innerW - addW - 6;
+            if (isInside(mx, my, px + pad, iy, boxW, 22)) {
+                muteInputFocused = true;
+                searchFocused = false;
+                return true;
+            } else {
+                muteInputFocused = false;
+            }
+            if (isInside(mx, my, px + pad + boxW + 6, iy, addW, 22)) {
+                if (!muteInput.isBlank()) {
+                    PlayerStatsManager.addMute(muteInput.trim());
+                    muteInput = "";
+                }
+                return true;
+            }
+
+            int listTop = iy + 28;
+            if (my >= listTop) {
+                int ry = Math.round(listTop - statsScroll);
+                for (PlayerStatsManager.PlayerRecord rec : getFilteredStats()) {
+                    if (isInside(mx, my, px + pad, ry, innerW, 30)) {
+                        PlayerStatsManager.toggleMute(rec.name);
+                        return true;
+                    }
+                    ry += 35;
+                }
+            }
+            return true;
+        } else {
+            muteInputFocused = false;
+        }
 
         if (keybindsTab) {
             int pad = 14;
@@ -701,11 +875,15 @@ public class YeMenuScreen extends Screen {
         int inspW = winW - SIDEBAR_W - MODULE_LIST_W;
 
         float delta = (float) (-scrollY * 24.0);
-        if (!keybindsTab && isInside(mouseX, mouseY, listX, contentY, MODULE_LIST_W, contentH)) {
+        if (statsTab && isInside(mouseX, mouseY, winX + SIDEBAR_W, contentY, winW - SIDEBAR_W, contentH)) {
+            targetStatsScroll += delta;
+            return true;
+        }
+        if (!keybindsTab && !statsTab && isInside(mouseX, mouseY, listX, contentY, MODULE_LIST_W, contentH)) {
             targetModuleScroll += delta;
             return true;
         }
-        if (!keybindsTab && isInside(mouseX, mouseY, inspX, contentY, inspW, contentH)) {
+        if (!keybindsTab && !statsTab && isInside(mouseX, mouseY, inspX, contentY, inspW, contentH)) {
             targetInspectorScroll += delta;
             return true;
         }
@@ -732,6 +910,23 @@ public class YeMenuScreen extends Screen {
             return true;
         }
 
+        if (muteInputFocused) {
+            if (key == GLFW.GLFW_KEY_BACKSPACE && !muteInput.isEmpty()) {
+                muteInput = muteInput.substring(0, muteInput.length() - 1);
+                return true;
+            }
+            if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) && !muteInput.isBlank()) {
+                PlayerStatsManager.addMute(muteInput.trim());
+                muteInput = "";
+                return true;
+            }
+            if (key == GLFW.GLFW_KEY_ESCAPE) {
+                muteInputFocused = false;
+                return true;
+            }
+            return true;
+        }
+
         if (searchFocused) {
             if (key == GLFW.GLFW_KEY_BACKSPACE && !searchQuery.isEmpty()) {
                 searchQuery = searchQuery.substring(0, searchQuery.length() - 1);
@@ -754,6 +949,10 @@ public class YeMenuScreen extends Screen {
 
     @Override
     public boolean charTyped(CharacterEvent event) {
+        if (muteInputFocused && event.isAllowedChatCharacter() && muteInput.length() < 16) {
+            muteInput += event.codepointAsString();
+            return true;
+        }
         if (searchFocused && event.isAllowedChatCharacter()) {
             searchQuery += event.codepointAsString();
             targetModuleScroll = 0;

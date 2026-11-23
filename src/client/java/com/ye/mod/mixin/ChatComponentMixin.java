@@ -2,6 +2,7 @@ package com.ye.mod.mixin;
 
 import com.ye.mod.core.ModuleManager;
 import com.ye.mod.modules.system.ChatFilterModule;
+import com.ye.mod.modules.system.PlayerStatsManager;
 import net.minecraft.client.GuiMessageTag;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.network.chat.Component;
@@ -16,9 +17,13 @@ public abstract class ChatComponentMixin {
 
     @Inject(method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/GuiMessageTag;)V",
             at = @At("HEAD"), cancellable = true)
-    private void ye$filterChatMessage(Component message, MessageSignature signature, GuiMessageTag tag, CallbackInfo ci) {
+    private void ye$recordAndFilterChat(Component message, MessageSignature signature, GuiMessageTag tag, CallbackInfo ci) {
+        if (message == null) return;
+        // Always record stats & local logs first, even if hidden from chat!
+        PlayerStatsManager.ParsedMessage parsed = PlayerStatsManager.analyzeAndRecord(message);
+
         ChatFilterModule filter = ModuleManager.get(ChatFilterModule.class);
-        if (filter != null && filter.shouldBlock(message)) {
+        if (filter != null && filter.shouldBlock(parsed)) {
             ci.cancel();
         }
     }

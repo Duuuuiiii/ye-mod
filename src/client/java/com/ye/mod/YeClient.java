@@ -9,6 +9,7 @@ import com.ye.mod.modules.render.NoRenderModule;
 import com.ye.mod.modules.render.SkinManager;
 import com.ye.mod.modules.system.BorderlessFullscreenModule;
 import com.ye.mod.modules.system.ChatFilterModule;
+import com.ye.mod.modules.system.PlayerStatsManager;
 import com.ye.mod.modules.visual.HudModule;
 import com.ye.mod.modules.visual.NoFovModule;
 import com.ye.mod.ui.YeMenuScreen;
@@ -34,6 +35,7 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new HudModule());
 
         ConfigManager.load();
+        PlayerStatsManager.init();
 
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
             CapeManager.init();
@@ -44,7 +46,10 @@ public class YeClient implements ClientModInitializer {
             }
         });
 
-        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> ConfigManager.saveNow());
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
+            ConfigManager.saveNow();
+            PlayerStatsManager.saveStatsNow();
+        });
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.screen == null && client.getWindow() != null) {
