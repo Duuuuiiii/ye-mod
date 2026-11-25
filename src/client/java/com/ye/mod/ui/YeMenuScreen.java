@@ -146,7 +146,7 @@ public class YeMenuScreen extends Screen {
         // Brand pill
         int brandW = 68;
         AppleUiRenderer.drawRoundedRect(g, bx + 6, by + 5, brandW, 24, 7, AppleUiRenderer.APPLE_BLUE);
-        g.drawCenteredString(this.font, "Ye 1.0.5", bx + 6 + brandW / 2, by + 13, AppleUiRenderer.TEXT_PRIMARY);
+        g.drawCenteredString(this.font, "Ye 1.0.6", bx + 6 + brandW / 2, by + 13, AppleUiRenderer.TEXT_PRIMARY);
 
         // Action buttons on right
         int btnH = 24;

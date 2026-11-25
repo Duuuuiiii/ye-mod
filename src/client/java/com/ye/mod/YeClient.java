@@ -5,6 +5,7 @@ import com.ye.mod.core.ModuleManager;
 import com.ye.mod.modules.render.CapeManager;
 import com.ye.mod.modules.render.AntiLagModule;
 import com.ye.mod.modules.render.CustomCapeModule;
+import com.ye.mod.modules.render.LavaEspModule;
 import com.ye.mod.modules.render.CustomSkinModule;
 import com.ye.mod.modules.render.NoRenderModule;
 import com.ye.mod.modules.render.SkinManager;
@@ -30,6 +31,7 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new CustomCapeModule());
         ModuleManager.register(new CustomSkinModule());
         ModuleManager.register(new AntiLagModule());
+        ModuleManager.register(new LavaEspModule());
         ModuleManager.register(new NoRenderModule());
         ModuleManager.register(new NoFovModule());
         ModuleManager.register(new BorderlessFullscreenModule());

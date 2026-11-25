@@ -2,6 +2,7 @@ package com.ye.mod.mixin;
 
 import com.ye.mod.core.ModuleManager;
 import com.ye.mod.modules.render.AntiLagModule;
+import com.ye.mod.modules.render.LavaEspModule;
 import com.ye.mod.modules.render.NoRenderModule;
 import com.ye.mod.modules.visual.HudModule;
 import com.ye.mod.modules.visual.NoFovModule;
@@ -78,6 +79,10 @@ public abstract class GuiMixin {
         AntiLagModule antiLag = ModuleManager.get(AntiLagModule.class);
         if (antiLag != null) {
             antiLag.renderHudAlert(guiGraphics);
+        }
+        LavaEspModule lavaEsp = ModuleManager.get(LavaEspModule.class);
+        if (lavaEsp != null) {
+            lavaEsp.renderHudAlert(guiGraphics);
         }
     }
 }
