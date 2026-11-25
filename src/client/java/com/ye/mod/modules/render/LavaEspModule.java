@@ -15,6 +15,8 @@ import net.minecraft.gizmos.GizmoStyle;
 import net.minecraft.gizmos.Gizmos;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.material.FluidState;
 
 import java.util.ArrayList;
@@ -85,7 +87,7 @@ public class LavaEspModule extends Module {
         }
 
         tickCounter++;
-        if (tickCounter % 2 != 0) {
+        if (tickCounter % 5 != 0) {
             return;
         }
 
@@ -102,42 +104,69 @@ public class LavaEspModule extends Module {
         BlockPos.MutableBlockPos mpos = new BlockPos.MutableBlockPos();
         BlockPos.MutableBlockPos npos = new BlockPos.MutableBlockPos();
 
-        int maxResults = 800;
+        int minCx = (center.getX() - r) >> 4;
+        int maxCx = (center.getX() + r) >> 4;
+        int minCz = (center.getZ() - r) >> 4;
+        int maxCz = (center.getZ() + r) >> 4;
+        int minY = Math.max(level.getMinY(), center.getY() - r);
+        int maxY = Math.min(level.getMaxY() - 1, center.getY() + r);
+        int minSec = level.getSectionIndex(minY);
+        int maxSec = level.getSectionIndex(maxY);
+
+        int maxResults = 600;
         outer:
-        for (int dy = -r; dy <= r; dy++) {
-            int y = center.getY() + dy;
-            if (y < level.getMinY() || y >= level.getMaxY()) continue;
-            for (int dx = -r; dx <= r; dx++) {
-                for (int dz = -r; dz <= r; dz++) {
-                    double dSq = dx * dx + dy * dy + dz * dz;
-                    if (dSq > rSq) continue;
+        for (int cx = minCx; cx <= maxCx; cx++) {
+            for (int cz = minCz; cz <= maxCz; cz++) {
+                if (!level.hasChunk(cx, cz)) continue;
+                LevelChunk chunk = level.getChunk(cx, cz);
+                LevelChunkSection[] sections = chunk.getSections();
+                int bx = cx << 4;
+                int bz = cz << 4;
+                for (int secIdx = minSec; secIdx <= maxSec; secIdx++) {
+                    if (secIdx < 0 || secIdx >= sections.length) continue;
+                    LevelChunkSection sec = sections[secIdx];
+                    if (sec.hasOnlyAir() || !sec.maybeHas(s -> s.getFluidState().is(FluidTags.LAVA))) continue;
+                    int by = level.getSectionYFromSectionIndex(secIdx) << 4;
 
-                    mpos.set(center.getX() + dx, y, center.getZ() + dz);
-                    FluidState fluid = level.getFluidState(mpos);
-                    if (!fluid.is(FluidTags.LAVA)) continue;
+                    for (int ly = 0; ly < 16; ly++) {
+                        int wy = by + ly;
+                        if (wy < minY || wy > maxY) continue;
+                        int dy = wy - center.getY();
+                        for (int lx = 0; lx < 16; lx++) {
+                            int wx = bx + lx;
+                            int dx = wx - center.getX();
+                            if (Math.abs(dx) > r) continue;
+                            for (int lz = 0; lz < 16; lz++) {
+                                int wz = bz + lz;
+                                int dz = wz - center.getZ();
+                                double dSq = dx * dx + dy * dy + dz * dz;
+                                if (dSq > rSq) continue;
 
-                    boolean isSource = fluid.isSource();
-                    if (sourceOnly && !isSource) continue;
+                                FluidState fluid = sec.getFluidState(lx, ly, lz);
+                                if (!fluid.is(FluidTags.LAVA)) continue;
 
-                    if (edgesOnly) {
-                        boolean exposed = false;
-                        for (Direction dir : Direction.values()) {
-                            npos.setWithOffset(mpos, dir);
-                            if (!level.getFluidState(npos).is(FluidTags.LAVA)) {
-                                exposed = true;
-                                break;
+                                boolean isSource = fluid.isSource();
+                                if (sourceOnly && !isSource) continue;
+
+                                mpos.set(wx, wy, wz);
+                                if (edgesOnly) {
+                                    boolean exposed = false;
+                                    for (Direction dir : Direction.values()) {
+                                        npos.setWithOffset(mpos, dir);
+                                        if (!level.getFluidState(npos).is(FluidTags.LAVA)) {
+                                            exposed = true;
+                                            break;
+                                        }
+                                    }
+                                    if (!exposed) continue;
+                                }
+
+                                boolean isDanger = alertEnabled && dSq <= 16.0;
+                                if (isDanger) dangerFound = true;
+                                found.add(new LavaEntry(mpos.immutable(), isSource, isDanger));
+                                if (found.size() >= maxResults) break outer;
                             }
                         }
-                        if (!exposed) continue;
-                    }
-
-                    boolean isDanger = alertEnabled && dSq <= 16.0;
-                    if (isDanger) {
-                        dangerFound = true;
-                    }
-                    found.add(new LavaEntry(mpos.immutable(), isSource, isDanger));
-                    if (found.size() >= maxResults) {
-                        break outer;
                     }
                 }
             }

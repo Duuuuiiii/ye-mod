@@ -13,6 +13,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -59,7 +60,7 @@ public class PortalFinderModule extends Module {
             return;
         }
         tickCounter++;
-        if (tickCounter % 15 != 0) return;
+        if (tickCounter % 20 != 0) return;
 
         Level level = mc.level;
         int cr = Math.max(2, Math.min(12, (int) Math.round(rangeChunks.get())));
@@ -70,19 +71,28 @@ public class PortalFinderModule extends Module {
         BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
         int minY = Math.max(level.getMinY(), mc.player.getBlockY() - 64);
         int maxY = Math.min(level.getMaxY() - 1, mc.player.getBlockY() + 64);
+        int minSec = level.getSectionIndex(minY);
+        int maxSec = level.getSectionIndex(maxY);
 
         for (int cx = pcx - cr; cx <= pcx + cr; cx++) {
             for (int cz = pcz - cr; cz <= pcz + cr; cz++) {
                 if (!level.hasChunk(cx, cz)) continue;
                 LevelChunk chunk = level.getChunk(cx, cz);
+                LevelChunkSection[] sections = chunk.getSections();
                 int bx = cx << 4;
                 int bz = cz << 4;
-                for (int y = minY; y <= maxY; y += 2) {
-                    for (int x = 0; x < 16; x += 2) {
-                        for (int z = 0; z < 16; z += 2) {
-                            m.set(bx + x, y, bz + z);
-                            if (chunk.getBlockState(m).is(Blocks.NETHER_PORTAL)) {
-                                rawPortals.add(m.immutable());
+                for (int secIdx = minSec; secIdx <= maxSec; secIdx++) {
+                    if (secIdx < 0 || secIdx >= sections.length) continue;
+                    LevelChunkSection sec = sections[secIdx];
+                    if (sec.hasOnlyAir() || !sec.maybeHas(s -> s.is(Blocks.NETHER_PORTAL))) continue;
+                    int syBase = level.getSectionYFromSectionIndex(secIdx) << 4;
+                    for (int y = 0; y < 16; y += 2) {
+                        for (int x = 0; x < 16; x += 2) {
+                            for (int z = 0; z < 16; z += 2) {
+                                if (sec.getBlockState(x, y, z).is(Blocks.NETHER_PORTAL)) {
+                                    m.set(bx + x, syBase + y, bz + z);
+                                    rawPortals.add(m.immutable());
+                                }
                             }
                         }
                     }
