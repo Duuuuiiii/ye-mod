@@ -9,7 +9,6 @@ import com.ye.mod.modules.render.CustomCapeModule;
 import com.ye.mod.modules.render.DragonWingsModule;
 import com.ye.mod.modules.render.FlightModelModule;
 import com.ye.mod.modules.render.LavaEspModule;
-import com.ye.mod.modules.render.MotionTrailModule;
 import com.ye.mod.modules.render.TrajectoryPreviewModule;
 import com.ye.mod.modules.visual.AmbienceModule;
 import com.ye.mod.modules.visual.HitFeedbackModule;
@@ -56,7 +55,6 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new AccessoriesModule());
         ModuleManager.register(new FlightModelModule());
         ModuleManager.register(new TrajectoryPreviewModule());
-        ModuleManager.register(new MotionTrailModule());
         ModuleManager.register(new HitFeedbackModule());
         ModuleManager.register(new SoulRingsModule());
         ModuleManager.register(new PortalFinderModule());

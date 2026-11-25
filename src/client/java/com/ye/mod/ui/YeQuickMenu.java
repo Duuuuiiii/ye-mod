@@ -9,6 +9,7 @@ import com.ye.mod.core.setting.BoolSetting;
 import com.ye.mod.core.setting.DoubleSetting;
 import com.ye.mod.core.setting.EnumSetting;
 import com.ye.mod.core.setting.Setting;
+import com.ye.mod.modules.render.AccessoriesModule;
 import com.ye.mod.modules.render.CapeManager;
 import com.ye.mod.modules.render.CustomCapeModule;
 import com.ye.mod.modules.render.CustomSkinModule;
@@ -47,12 +48,15 @@ public final class YeQuickMenu {
 
     private static boolean open = false;
     private static float openAnim = 0.0f;
+    private static float pageSlide = 0.0f;
+    private static float smoothSelY = -1.0f;
 
     private static TopTab activeTab = TopTab.MODULES;
     private static Category activeCategory = Category.RENDER;
     private static Module activeModule = null;
     private static int selectedIndex = 0;
     private static double scrollOffset = 0;
+    private static double targetScroll = 0;
 
     private static EnumSetting<?> openDropdown = null;
     private static int dropX, dropY, dropW;
@@ -102,6 +106,8 @@ public final class YeQuickMenu {
     public static void render(GuiGraphics g, int mouseX, int mouseY, boolean mouseUnlocked) {
         AppleUiRenderer.updateThemeAnim();
         openAnim = AppleUiRenderer.smooth(openAnim, open ? 1.0f : 0.0f, 16.0f, 0.03f);
+        pageSlide = AppleUiRenderer.smooth(pageSlide, 0.0f, 18.0f, 0.02f);
+        scrollOffset = AppleUiRenderer.smooth((float) scrollOffset, (float) targetScroll, 18.0f, 0.02f);
         if (!open && openAnim < 0.02f) return;
 
         Minecraft mc = Minecraft.getInstance();
@@ -133,11 +139,14 @@ public final class YeQuickMenu {
                     sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
             HIT_RECTS.add(new HitRect(tx, wy + 4, tw, 16, () -> {
                 playClick();
+                if (activeTab != tab) pageSlide = (tab.ordinal() > activeTab.ordinal() ? 22.0f : -22.0f);
                 activeTab = tab;
                 activeModule = null;
                 openDropdown = null;
                 selectedIndex = 0;
                 scrollOffset = 0;
+                targetScroll = 0;
+                smoothSelY = -1.0f;
             }, null, null));
             tx += tw + 4;
         }
@@ -145,11 +154,12 @@ public final class YeQuickMenu {
         String hint = mouseUnlocked ? "ESC" : "F10鼠标";
         AppleUiRenderer.drawText(g, font, hint, wx + WIN_W - 8 - font.width(hint), wy + 8, AppleUiRenderer.textTertiary());
 
-        int bodyX = wx + 8;
+        int bodyX = wx + 8 + Math.round(pageSlide);
         int bodyY = wy + 28;
         int bodyW = WIN_W - 16;
         int bodyH = WIN_H - 36;
 
+        g.enableScissor(wx + 6, bodyY - 2, wx + WIN_W - 6, wy + WIN_H - 4);
         if (activeTab == TopTab.MODULES) {
             if (activeModule == null) {
                 renderModulesTab(g, font, bodyX, bodyY, bodyW, bodyH, mouseX, mouseY, mouseUnlocked, accent);
@@ -161,6 +171,7 @@ public final class YeQuickMenu {
         } else {
             renderThemeTab(g, font, bodyX, bodyY, bodyW, bodyH, mouseX, mouseY, accent);
         }
+        g.disableScissor();
 
         if (openDropdown != null && mouseUnlocked) {
             renderDropdown(g, font, openDropdown, mouseX, mouseY, accent);
@@ -182,9 +193,12 @@ public final class YeQuickMenu {
                     sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
             HIT_RECTS.add(new HitRect(cx, y, cw, 16, () -> {
                 playClick();
+                if (activeCategory != c) pageSlide = (c.ordinal() > activeCategory.ordinal() ? 18.0f : -18.0f);
                 activeCategory = c;
                 selectedIndex = 0;
                 scrollOffset = 0;
+                targetScroll = 0;
+                smoothSelY = -1.0f;
             }, null, null));
         }
 
@@ -201,11 +215,13 @@ public final class YeQuickMenu {
             boolean keySel = !mouseUnlocked && i == selectedIndex;
             int bg = m.isEnabled() ? accent : ((hovered || keySel) ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
 
+            if (keySel) {
+                if (smoothSelY < 0) smoothSelY = ry;
+                else smoothSelY = AppleUiRenderer.smooth(smoothSelY, ry, 20.0f, 0.02f);
+            }
+
             if (ry + 18 >= listY && ry <= listY + listH) {
                 AppleUiRenderer.drawRoundedRect(g, x, ry, w, 18, 5, bg);
-                if (keySel) {
-                    g.renderOutline(x, ry, w, 18, 0xAAFFFFFF);
-                }
                 String name = ConfigManager.english ? m.getSubtitle() : m.getName();
                 AppleUiRenderer.drawText(g, font, name, x + 7, ry + 5,
                         m.isEnabled() ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
@@ -225,13 +241,19 @@ public final class YeQuickMenu {
                             () -> {
                                 playClick();
                                 activeModule = m;
+                                pageSlide = 24.0f;
                                 selectedIndex = 0;
                                 scrollOffset = 0;
+                                targetScroll = 0;
+                                smoothSelY = -1.0f;
                                 openDropdown = null;
                             }, null));
                 }
             }
             ry += 20;
+        }
+        if (!mouseUnlocked && !mods.isEmpty() && smoothSelY >= listY - 18 && smoothSelY <= listY + listH) {
+            g.renderOutline(x, Math.round(smoothSelY), w, 18, 0xCCFFFFFF);
         }
         g.disableScissor();
     }
@@ -244,9 +266,12 @@ public final class YeQuickMenu {
         HIT_RECTS.add(new HitRect(x, y, 42, 16, () -> {
             playClick();
             activeModule = null;
+            pageSlide = -24.0f;
             openDropdown = null;
             selectedIndex = 0;
             scrollOffset = 0;
+            targetScroll = 0;
+            smoothSelY = -1.0f;
         }, null, null));
 
         String mName = ConfigManager.english ? activeModule.getSubtitle() : activeModule.getName();
@@ -260,7 +285,7 @@ public final class YeQuickMenu {
 
         int listY = y + 20;
         int listH = h - 20;
-        List<Setting<?>> settings = activeModule.getSettings();
+        List<Setting<?>> settings = getDisplaySettings(activeModule);
         if (selectedIndex >= settings.size()) selectedIndex = Math.max(0, settings.size() - 1);
 
         g.enableScissor(x, listY, x + w, listY + listH);
@@ -499,6 +524,43 @@ public final class YeQuickMenu {
         }, null, null));
     }
 
+    public static boolean handleEsc() {
+        if (!open) return false;
+        playClick();
+        if (openDropdown != null) {
+            openDropdown = null;
+            return true;
+        }
+        if (activeTab == TopTab.MODULES && activeModule != null) {
+            activeModule = null;
+            pageSlide = -24.0f;
+            selectedIndex = 0;
+            scrollOffset = 0;
+            targetScroll = 0;
+            smoothSelY = -1.0f;
+            return true;
+        }
+        if (activeTab != TopTab.MODULES) {
+            activeTab = TopTab.MODULES;
+            pageSlide = -24.0f;
+            selectedIndex = 0;
+            scrollOffset = 0;
+            targetScroll = 0;
+            smoothSelY = -1.0f;
+            return true;
+        }
+        setOpen(false);
+        ConfigManager.saveAsync();
+        return true;
+    }
+
+    private static List<Setting<?>> getDisplaySettings(Module m) {
+        if (m instanceof AccessoriesModule am) {
+            return am.getVisibleSettings();
+        }
+        return m.getSettings();
+    }
+
     public static void onKeyNav(int action) {
         // action: 0=UP, 1=DOWN, 2=LEFT, 3=RIGHT, 4=ENTER, 5=BACK
         if (!open) return;
@@ -511,24 +573,30 @@ public final class YeQuickMenu {
                 else if (action == 2) {
                     Category[] cs = Category.values();
                     activeCategory = cs[(activeCategory.ordinal() + cs.length - 1) % cs.length];
+                    pageSlide = -18.0f;
                     selectedIndex = 0;
                     scrollOffset = 0;
+                    targetScroll = 0;
+                    smoothSelY = -1.0f;
                 } else if (action == 3) {
-                    if (!mods.isEmpty() && !mods.get(selectedIndex).getSettings().isEmpty()) {
+                    if (!mods.isEmpty() && !getDisplaySettings(mods.get(selectedIndex)).isEmpty()) {
                         activeModule = mods.get(selectedIndex);
+                        pageSlide = 24.0f;
                         selectedIndex = 0;
                         scrollOffset = 0;
+                        targetScroll = 0;
+                        smoothSelY = -1.0f;
                     }
                 } else if (action == 4 && !mods.isEmpty()) {
                     mods.get(selectedIndex).toggle();
                     ConfigManager.saveAsync();
+                } else if (action == 5) {
+                    handleEsc();
                 }
             } else {
-                List<Setting<?>> sets = activeModule.getSettings();
+                List<Setting<?>> sets = getDisplaySettings(activeModule);
                 if (action == 5) {
-                    activeModule = null;
-                    selectedIndex = 0;
-                    scrollOffset = 0;
+                    handleEsc();
                 } else if (action == 0 && selectedIndex > 0) selectedIndex--;
                 else if (action == 1 && selectedIndex < sets.size() - 1) selectedIndex++;
                 else if (!sets.isEmpty()) {
@@ -551,7 +619,7 @@ public final class YeQuickMenu {
     }
 
     public static List<HitRect> getHitRects() { return HIT_RECTS; }
-    public static void addScroll(double delta) { scrollOffset = Math.max(0, scrollOffset - delta * 18); }
+    public static void addScroll(double delta) { targetScroll = Math.max(0, targetScroll - delta * 18); }
 
     private static boolean inBounds(double mx, double my, int x, int y, int w, int h) {
         return mx >= x && mx <= x + w && my >= y && my <= y + h;

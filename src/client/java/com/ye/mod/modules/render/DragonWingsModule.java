@@ -11,15 +11,20 @@ import com.ye.mod.core.setting.EnumSetting;
  */
 public class DragonWingsModule extends Module {
     public enum WingStyle {
-        SERAPH_GOLD("炽天使金羽"),
-        DEMON_CRIMSON("黑红恶魔翼"),
-        ICE_CRYSTAL("冰晶碎翼"),
-        CYBER_NEON("赛博光翼"),
-        FAIRY_PRISM("蝶翼幻彩"),
-        ENDER_DRAGON("末影龙翼");
+        DRAGON("末影龙翼", "textures/wings/dragon.png"),
+        ANGEL("圣洁天使翼", "textures/wings/angel.png"),
+        BAT("暗夜蝠翼", "textures/wings/bat.png"),
+        EVIL("深渊恶魔翼", "textures/wings/evil.png"),
+        FIRE("烈焰火翼", "textures/wings/fire.png"),
+        METALLIC("秘银机甲翼", "textures/wings/metallic.png"),
+        PARROT("七彩羽翼", "textures/wings/parrot.png");
 
         public final String label;
-        WingStyle(String label) { this.label = label; }
+        public final String texPath;
+        WingStyle(String label, String texPath) {
+            this.label = label;
+            this.texPath = texPath;
+        }
     }
 
     public enum WingColor {
@@ -35,7 +40,7 @@ public class DragonWingsModule extends Module {
     }
 
     public final EnumSetting<WingStyle> wingStyle = addSetting(new EnumSetting<>(
-            "wingStyle", "翅膀样式", "6种高精度羽翼/晶翼/龙翼", WingStyle.SERAPH_GOLD
+            "wingStyle", "翅膀样式", "7种多关节立体翅膀样式", WingStyle.DRAGON
     ));
 
     public final EnumSetting<WingColor> wingColor = addSetting(new EnumSetting<>(

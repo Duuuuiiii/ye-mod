@@ -15,6 +15,7 @@
     "GuiMixin",
     "HumanoidArmorLayerMixin",
     "LocalPlayerMixin",
+    "MinecraftMixin",
     "ParticleEngineMixin",
     "PlayerModelMixin",
     "ScreenEffectRendererMixin",

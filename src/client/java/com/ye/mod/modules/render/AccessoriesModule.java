@@ -4,40 +4,111 @@ import com.ye.mod.core.Category;
 import com.ye.mod.core.Module;
 import com.ye.mod.core.setting.BoolSetting;
 import com.ye.mod.core.setting.DoubleSetting;
+import com.ye.mod.core.setting.EnumSetting;
+import com.ye.mod.core.setting.Setting;
+
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 
 /**
- * Stackable 3D head & face accessories (11 items, any combination can be worn together).
+ * 3D Head & Face Accessories split into 2 mutually exclusive categories (1 Head + 1 Face),
+ * with independent Scale / Y / Z position settings saved per accessory.
  */
 public class AccessoriesModule extends Module {
-    public final BoolSetting sunglasses = addSetting(new BoolSetting("sunglasses", "酷炫墨镜", "佩戴墨镜", true));
-    public final BoolSetting crown = addSetting(new BoolSetting("crown", "王者金冠", "佩戴金冠", false));
-    public final BoolSetting topHat = addSetting(new BoolSetting("topHat", "绅士礼帽", "佩戴礼帽", false));
-    public final BoolSetting halo = addSetting(new BoolSetting("halo", "天使光环", "佩戴光环", false));
-    public final BoolSetting catEars = addSetting(new BoolSetting("catEars", "猫耳发箍", "佩戴猫耳", false));
-    public final BoolSetting devilHorns = addSetting(new BoolSetting("devilHorns", "恶魔双角", "佩戴恶魔角", false));
-    public final BoolSetting dragonHorns = addSetting(new BoolSetting("dragonHorns", "末影龙角", "佩戴龙角", false));
-    public final BoolSetting cyberVisor = addSetting(new BoolSetting("cyberVisor", "赛博护目镜", "佩戴发光护目镜", false));
-    public final BoolSetting foxMask = addSetting(new BoolSetting("foxMask", "和风狐面", "佩戴狐狸面具", false));
-    public final BoolSetting eyepatch = addSetting(new BoolSetting("eyepatch", "单边眼罩", "佩戴眼罩", false));
-    public final BoolSetting sprout = addSetting(new BoolSetting("sprout", "头顶嫩芽", "头顶小绿芽", false));
+    public enum HeadItem {
+        NONE("无"),
+        CROWN("王者金冠"),
+        TOP_HAT("绅士礼帽"),
+        HALO("天使光环"),
+        CAT_EARS("猫耳发箍"),
+        DEVIL_HORNS("恶魔双角"),
+        DRAGON_HORNS("末影龙角"),
+        SPROUT("头顶嫩芽");
 
-    public final DoubleSetting scale = addSetting(new DoubleSetting(
-            "scale", "大小", "缩放头部挂件尺寸", 1.0, 0.5, 1.8, 0.05
+        public final String label;
+        HeadItem(String label) { this.label = label; }
+    }
+
+    public enum FaceItem {
+        NONE("无"),
+        SUNGLASSES("酷炫墨镜"),
+        CYBER_VISOR("赛博护目镜"),
+        FOX_MASK("和风狐面"),
+        EYEPATCH("单边眼罩");
+
+        public final String label;
+        FaceItem(String label) { this.label = label; }
+    }
+
+    public record ItemTransform(DoubleSetting scale, DoubleSetting y, DoubleSetting z) {}
+
+    public final EnumSetting<HeadItem> headItem = addSetting(new EnumSetting<>(
+            "headItem", "头部挂件", "头部同时只能佩戴 1 个", HeadItem.CAT_EARS
     ));
 
-    public final DoubleSetting offsetY = addSetting(new DoubleSetting(
-            "offsetY", "上下位置", "微调挂件上下高度", 0.0, -0.4, 0.4, 0.02
-    ));
-
-    public final DoubleSetting offsetZ = addSetting(new DoubleSetting(
-            "offsetZ", "前后位置", "微调挂件前后偏移", 0.0, -0.4, 0.4, 0.02
+    public final EnumSetting<FaceItem> faceItem = addSetting(new EnumSetting<>(
+            "faceItem", "面部挂件", "面部同时只能佩戴 1 个", FaceItem.SUNGLASSES
     ));
 
     public final BoolSetting onlySelf = addSetting(new BoolSetting(
             "onlySelf", "仅自己", "只给自己佩戴挂件", true
     ));
 
+    private final Map<HeadItem, ItemTransform> headTransforms = new EnumMap<>(HeadItem.class);
+    private final Map<FaceItem, ItemTransform> faceTransforms = new EnumMap<>(FaceItem.class);
+
     public AccessoriesModule() {
-        super("accessories", "头部挂件", "Accessories", "11 种 3D 头部挂件，支持自由叠戴组合", Category.RENDER);
+        super("accessories", "头面挂件", "Accessories", "头部/面部各选 1 个挂件，每个挂件位置大小独立保存", Category.RENDER);
+
+        for (HeadItem item : HeadItem.values()) {
+            if (item == HeadItem.NONE) continue;
+            String p = "h_" + item.name().toLowerCase();
+            DoubleSetting s = addSetting(new DoubleSetting(p + "_s", item.label + "·大小", "独立缩放", 1.0, 0.5, 1.8, 0.05));
+            DoubleSetting y = addSetting(new DoubleSetting(p + "_y", item.label + "·上下", "独立上下偏移", 0.0, -0.4, 0.4, 0.02));
+            DoubleSetting z = addSetting(new DoubleSetting(p + "_z", item.label + "·前后", "独立前后偏移", 0.0, -0.4, 0.4, 0.02));
+            headTransforms.put(item, new ItemTransform(s, y, z));
+        }
+
+        for (FaceItem item : FaceItem.values()) {
+            if (item == FaceItem.NONE) continue;
+            String p = "f_" + item.name().toLowerCase();
+            DoubleSetting s = addSetting(new DoubleSetting(p + "_s", item.label + "·大小", "独立缩放", 1.0, 0.5, 1.8, 0.05));
+            DoubleSetting y = addSetting(new DoubleSetting(p + "_y", item.label + "·上下", "独立上下偏移", 0.0, -0.4, 0.4, 0.02));
+            DoubleSetting z = addSetting(new DoubleSetting(p + "_z", item.label + "·前后", "独立前后偏移", 0.0, -0.4, 0.4, 0.02));
+            faceTransforms.put(item, new ItemTransform(s, y, z));
+        }
+    }
+
+    public ItemTransform getHeadTransform(HeadItem item) {
+        return headTransforms.get(item);
+    }
+
+    public ItemTransform getFaceTransform(FaceItem item) {
+        return faceTransforms.get(item);
+    }
+
+    /**
+     * Returns only the settings relevant to the currently equipped Head & Face items.
+     */
+    public List<Setting<?>> getVisibleSettings() {
+        List<Setting<?>> out = new ArrayList<>();
+        out.add(headItem);
+        ItemTransform ht = headTransforms.get(headItem.get());
+        if (ht != null) {
+            out.add(ht.scale());
+            out.add(ht.y());
+            out.add(ht.z());
+        }
+        out.add(faceItem);
+        ItemTransform ft = faceTransforms.get(faceItem.get());
+        if (ft != null) {
+            out.add(ft.scale());
+            out.add(ft.y());
+            out.add(ft.z());
+        }
+        out.add(onlySelf);
+        return out;
     }
 }

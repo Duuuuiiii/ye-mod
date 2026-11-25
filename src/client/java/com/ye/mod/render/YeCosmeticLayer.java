@@ -7,8 +7,8 @@ import com.ye.mod.core.ModuleManager;
 import com.ye.mod.modules.render.AccessoriesModule;
 import com.ye.mod.modules.render.DragonWingsModule;
 import com.ye.mod.modules.render.FlightModelModule;
-import com.ye.mod.modules.render.MotionTrailModule;
 import com.ye.mod.modules.visual.SoulRingsModule;
+import com.ye.mod.render.wings.YeAvianWingsModel;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.EntityModelSet;
 import net.minecraft.client.model.geom.ModelLayers;
@@ -43,22 +43,13 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
 
     private final EnderDragonModel dragonModel;
     private final PhantomModel phantomModel;
-    private final ModelPart dragonLeftWing;
-    private final ModelPart dragonLeftWingTip;
-    private final ModelPart dragonRightWing;
-    private final ModelPart dragonRightWingTip;
+    private final YeAvianWingsModel avianWings = new YeAvianWingsModel();
     private final EnderDragonRenderState dragonState = new EnderDragonRenderState();
     private final PhantomRenderState phantomState = new PhantomRenderState();
 
     public YeCosmeticLayer(RenderLayerParent<AvatarRenderState, PlayerModel> parent, EntityModelSet modelSet) {
         super(parent);
-        ModelPart dragonRoot = modelSet.bakeLayer(ModelLayers.ENDER_DRAGON);
-        this.dragonModel = new EnderDragonModel(dragonRoot);
-        ModelPart dragonBody = dragonRoot.getChild("body");
-        this.dragonLeftWing = dragonBody.getChild("left_wing");
-        this.dragonLeftWingTip = this.dragonLeftWing.getChild("left_wing_tip");
-        this.dragonRightWing = dragonBody.getChild("right_wing");
-        this.dragonRightWingTip = this.dragonRightWing.getChild("right_wing_tip");
+        this.dragonModel = new EnderDragonModel(modelSet.bakeLayer(ModelLayers.ENDER_DRAGON));
         this.phantomModel = new PhantomModel(modelSet.bakeLayer(ModelLayers.PHANTOM));
     }
 
@@ -95,165 +86,137 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
                     && !(rings.hideInFirstPerson.get() && mc.options.getCameraType().isFirstPerson())) {
                 renderSoulRings(poseStack, collector, rings);
             }
-
-            MotionTrailModule trail = ModuleManager.get(MotionTrailModule.class);
-            if (trail != null && trail.isEnabled()) {
-                renderMotionRibbon(poseStack, collector, state, trail);
-            }
         }
     }
 
     private void renderHeadAccessory(PoseStack poseStack, SubmitNodeCollector collector, int light, AccessoriesModule acc) {
-        poseStack.pushPose();
-        this.getParentModel().head.translateAndRotate(poseStack);
-        poseStack.translate(0.0f, acc.offsetY.get().floatValue(), acc.offsetZ.get().floatValue());
-        float sc = acc.scale.get().floatValue();
-        poseStack.scale(sc, sc, sc);
+        AccessoriesModule.HeadItem head = acc.headItem.get();
+        if (head != AccessoriesModule.HeadItem.NONE) {
+            AccessoriesModule.ItemTransform ht = acc.getHeadTransform(head);
+            poseStack.pushPose();
+            this.getParentModel().head.translateAndRotate(poseStack);
+            if (ht != null) {
+                poseStack.translate(0.0f, ht.y().get().floatValue(), ht.z().get().floatValue());
+                float sc = ht.scale().get().floatValue();
+                poseStack.scale(sc, sc, sc);
+            }
+            collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
+                switch (head) {
+                    case TOP_HAT -> {
+                        drawBox(pose, vc, light, 0xFF14151C, -0.34f, -0.53f, -0.34f, 0.34f, -0.49f, 0.34f);
+                        drawBox(pose, vc, light, 0xFF991B1B, -0.24f, -0.60f, -0.24f, 0.24f, -0.53f, 0.24f);
+                        drawBox(pose, vc, light, 0xFF181922, -0.23f, -0.92f, -0.23f, 0.23f, -0.60f, 0.23f);
+                    }
+                    case CROWN -> {
+                        drawBox(pose, vc, 0xF000F0, 0xFFFACC15, -0.26f, -0.56f, -0.26f, 0.26f, -0.49f, 0.26f);
+                        for (int i = -1; i <= 1; i++) {
+                            float px = i * 0.18f;
+                            drawBox(pose, vc, 0xF000F0, 0xFFFBBF24, px - 0.04f, -0.67f, -0.26f, px + 0.04f, -0.56f, -0.21f);
+                            drawBox(pose, vc, 0xF000F0, 0xFFFBBF24, px - 0.04f, -0.67f, 0.21f, px + 0.04f, -0.56f, 0.26f);
+                        }
+                        drawBox(pose, vc, 0xF000F0, 0xFFEF4444, -0.04f, -0.55f, -0.27f, 0.04f, -0.50f, -0.24f);
+                    }
+                    case HALO -> {
+                        drawBox(pose, vc, 0xF000F0, 0xFFFDE047, -0.24f, -0.74f, -0.24f, 0.24f, -0.70f, -0.18f);
+                        drawBox(pose, vc, 0xF000F0, 0xFFFDE047, -0.24f, -0.74f, 0.18f, 0.24f, -0.70f, 0.24f);
+                        drawBox(pose, vc, 0xF000F0, 0xFFFDE047, -0.24f, -0.74f, -0.18f, -0.18f, -0.70f, 0.18f);
+                        drawBox(pose, vc, 0xF000F0, 0xFFFDE047, 0.18f, -0.74f, -0.18f, 0.24f, -0.70f, 0.18f);
+                    }
+                    case CAT_EARS -> {
+                        for (int s : new int[]{-1, 1}) {
+                            drawBox(pose, vc, light, 0xFF1E1B2E, s * 0.11f - 0.06f, -0.64f, -0.06f, s * 0.11f + 0.06f, -0.50f, 0.06f);
+                            drawBox(pose, vc, 0xF000F0, 0xFFF472B6, s * 0.11f - 0.03f, -0.61f, -0.07f, s * 0.11f + 0.03f, -0.52f, -0.05f);
+                        }
+                    }
+                    case DEVIL_HORNS -> {
+                        for (int s : new int[]{-1, 1}) {
+                            drawBox(pose, vc, light, 0xFF7F1D1D, s * 0.16f - 0.045f, -0.62f, -0.10f, s * 0.16f + 0.045f, -0.49f, -0.02f);
+                            drawBox(pose, vc, 0xF000F0, 0xFFDC2626, s * 0.21f - 0.035f, -0.74f, -0.05f, s * 0.21f + 0.035f, -0.62f, 0.02f);
+                            drawBox(pose, vc, 0xF000F0, 0xFFFCA5A5, s * 0.19f - 0.02f, -0.82f, -0.10f, s * 0.19f + 0.02f, -0.74f, -0.04f);
+                        }
+                    }
+                    case DRAGON_HORNS -> {
+                        for (int s : new int[]{-1, 1}) {
+                            drawBox(pose, vc, light, 0xFF1E1B2E, s * 0.16f - 0.04f, -0.60f, -0.04f, s * 0.16f + 0.04f, -0.49f, 0.08f);
+                            drawBox(pose, vc, 0xF000F0, 0xFFA855F7, s * 0.20f - 0.03f, -0.70f, 0.08f, s * 0.20f + 0.03f, -0.58f, 0.22f);
+                            drawBox(pose, vc, 0xF000F0, 0xFFFBBF24, s * 0.23f - 0.02f, -0.78f, 0.22f, s * 0.23f + 0.02f, -0.68f, 0.34f);
+                        }
+                    }
+                    case SPROUT -> {
+                        drawBox(pose, vc, light, 0xFF15803D, -0.02f, -0.66f, -0.02f, 0.02f, -0.50f, 0.02f);
+                        drawBox(pose, vc, 0xF000F0, 0xFF4ADE80, -0.14f, -0.71f, -0.05f, -0.01f, -0.64f, 0.05f);
+                        drawBox(pose, vc, 0xF000F0, 0xFF86EFAC, 0.01f, -0.73f, -0.05f, 0.14f, -0.66f, 0.05f);
+                    }
+                    default -> {}
+                }
+            });
+            poseStack.popPose();
+        }
 
-        collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
-            if (acc.sunglasses.get()) {
-                drawBox(pose, vc, 0xF000F0, 0xEE0B0D14, -0.24f, -0.28f, -0.285f, -0.04f, -0.17f, -0.255f);
-                drawBox(pose, vc, 0xF000F0, 0xEE0B0D14, 0.04f, -0.28f, -0.285f, 0.24f, -0.17f, -0.255f);
-                drawBox(pose, vc, light, 0xFF94A3B8, -0.25f, -0.29f, -0.27f, 0.25f, -0.26f, -0.25f);
-                drawBox(pose, vc, light, 0xFF64748B, -0.26f, -0.27f, -0.26f, -0.24f, -0.23f, 0.16f);
-                drawBox(pose, vc, light, 0xFF64748B, 0.24f, -0.27f, -0.26f, 0.26f, -0.23f, 0.16f);
+        AccessoriesModule.FaceItem face = acc.faceItem.get();
+        if (face != AccessoriesModule.FaceItem.NONE) {
+            AccessoriesModule.ItemTransform ft = acc.getFaceTransform(face);
+            poseStack.pushPose();
+            this.getParentModel().head.translateAndRotate(poseStack);
+            if (ft != null) {
+                poseStack.translate(0.0f, ft.y().get().floatValue(), ft.z().get().floatValue());
+                float sc = ft.scale().get().floatValue();
+                poseStack.scale(sc, sc, sc);
             }
-            if (acc.topHat.get()) {
-                drawBox(pose, vc, light, 0xFF14151C, -0.34f, -0.53f, -0.34f, 0.34f, -0.49f, 0.34f);
-                drawBox(pose, vc, light, 0xFF991B1B, -0.24f, -0.60f, -0.24f, 0.24f, -0.53f, 0.24f);
-                drawBox(pose, vc, light, 0xFF181922, -0.23f, -0.92f, -0.23f, 0.23f, -0.60f, 0.23f);
-            }
-            if (acc.crown.get()) {
-                drawBox(pose, vc, 0xF000F0, 0xFFFACC15, -0.26f, -0.56f, -0.26f, 0.26f, -0.49f, 0.26f);
-                for (int i = -1; i <= 1; i++) {
-                    float px = i * 0.18f;
-                    drawBox(pose, vc, 0xF000F0, 0xFFFBBF24, px - 0.04f, -0.67f, -0.26f, px + 0.04f, -0.56f, -0.21f);
-                    drawBox(pose, vc, 0xF000F0, 0xFFFBBF24, px - 0.04f, -0.67f, 0.21f, px + 0.04f, -0.56f, 0.26f);
+            collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
+                switch (face) {
+                    case SUNGLASSES -> {
+                        drawBox(pose, vc, 0xF000F0, 0xEE0B0D14, -0.24f, -0.28f, -0.285f, -0.04f, -0.17f, -0.255f);
+                        drawBox(pose, vc, 0xF000F0, 0xEE0B0D14, 0.04f, -0.28f, -0.285f, 0.24f, -0.17f, -0.255f);
+                        drawBox(pose, vc, light, 0xFF94A3B8, -0.25f, -0.29f, -0.27f, 0.25f, -0.26f, -0.25f);
+                        drawBox(pose, vc, light, 0xFF64748B, -0.26f, -0.27f, -0.26f, -0.24f, -0.23f, 0.16f);
+                        drawBox(pose, vc, light, 0xFF64748B, 0.24f, -0.27f, -0.26f, 0.26f, -0.23f, 0.16f);
+                    }
+                    case CYBER_VISOR -> {
+                        drawBox(pose, vc, 0xF000F0, 0xCC22D3EE, -0.26f, -0.31f, -0.295f, 0.26f, -0.17f, -0.26f);
+                        drawBox(pose, vc, light, 0xFF1E293B, -0.275f, -0.32f, -0.28f, -0.24f, -0.16f, 0.14f);
+                        drawBox(pose, vc, light, 0xFF1E293B, 0.24f, -0.32f, -0.28f, 0.275f, -0.16f, 0.14f);
+                        drawBox(pose, vc, 0xF000F0, 0xFF38BDF8, -0.29f, -0.29f, -0.08f, -0.26f, -0.19f, 0.06f);
+                        drawBox(pose, vc, 0xF000F0, 0xFF38BDF8, 0.26f, -0.29f, -0.08f, 0.29f, -0.19f, 0.06f);
+                    }
+                    case FOX_MASK -> {
+                        drawBox(pose, vc, light, 0xFFF8FAFC, -0.23f, -0.46f, -0.29f, 0.23f, -0.10f, -0.255f);
+                        drawBox(pose, vc, 0xF000F0, 0xFFEF4444, -0.20f, -0.44f, -0.295f, -0.06f, -0.34f, -0.285f);
+                        drawBox(pose, vc, 0xF000F0, 0xFFEF4444, 0.06f, -0.44f, -0.295f, 0.20f, -0.34f, -0.285f);
+                        drawBox(pose, vc, light, 0xFF0F172A, -0.18f, -0.27f, -0.296f, -0.06f, -0.21f, -0.285f);
+                        drawBox(pose, vc, light, 0xFF0F172A, 0.06f, -0.27f, -0.296f, 0.18f, -0.21f, -0.285f);
+                        drawBox(pose, vc, light, 0xFFF8FAFC, -0.21f, -0.58f, -0.28f, -0.09f, -0.46f, -0.23f);
+                        drawBox(pose, vc, light, 0xFFF8FAFC, 0.09f, -0.58f, -0.28f, 0.21f, -0.46f, -0.23f);
+                    }
+                    case EYEPATCH -> {
+                        drawBox(pose, vc, light, 0xFF0F172A, 0.04f, -0.28f, -0.282f, 0.21f, -0.16f, -0.255f);
+                        drawBox(pose, vc, light, 0xFF1E293B, -0.26f, -0.26f, -0.265f, 0.26f, -0.23f, 0.26f);
+                    }
+                    default -> {}
                 }
-                drawBox(pose, vc, 0xF000F0, 0xFFEF4444, -0.04f, -0.55f, -0.27f, 0.04f, -0.50f, -0.24f);
-            }
-            if (acc.halo.get()) {
-                drawBox(pose, vc, 0xF000F0, 0xFFFDE047, -0.24f, -0.74f, -0.24f, 0.24f, -0.70f, -0.18f);
-                drawBox(pose, vc, 0xF000F0, 0xFFFDE047, -0.24f, -0.74f, 0.18f, 0.24f, -0.70f, 0.24f);
-                drawBox(pose, vc, 0xF000F0, 0xFFFDE047, -0.24f, -0.74f, -0.18f, -0.18f, -0.70f, 0.18f);
-                drawBox(pose, vc, 0xF000F0, 0xFFFDE047, 0.18f, -0.74f, -0.18f, 0.24f, -0.70f, 0.18f);
-            }
-            if (acc.catEars.get()) {
-                for (int s : new int[]{-1, 1}) {
-                    drawBox(pose, vc, light, 0xFF1E1B2E, s * 0.11f - 0.06f, -0.64f, -0.06f, s * 0.11f + 0.06f, -0.50f, 0.06f);
-                    drawBox(pose, vc, 0xF000F0, 0xFFF472B6, s * 0.11f - 0.03f, -0.61f, -0.07f, s * 0.11f + 0.03f, -0.52f, -0.05f);
-                }
-            }
-            if (acc.devilHorns.get()) {
-                for (int s : new int[]{-1, 1}) {
-                    drawBox(pose, vc, light, 0xFF7F1D1D, s * 0.16f - 0.045f, -0.62f, -0.10f, s * 0.16f + 0.045f, -0.49f, -0.02f);
-                    drawBox(pose, vc, 0xF000F0, 0xFFDC2626, s * 0.21f - 0.035f, -0.74f, -0.05f, s * 0.21f + 0.035f, -0.62f, 0.02f);
-                    drawBox(pose, vc, 0xF000F0, 0xFFFCA5A5, s * 0.19f - 0.02f, -0.82f, -0.10f, s * 0.19f + 0.02f, -0.74f, -0.04f);
-                }
-            }
-            if (acc.dragonHorns.get()) {
-                for (int s : new int[]{-1, 1}) {
-                    drawBox(pose, vc, light, 0xFF1E1B2E, s * 0.16f - 0.04f, -0.60f, -0.04f, s * 0.16f + 0.04f, -0.49f, 0.08f);
-                    drawBox(pose, vc, 0xF000F0, 0xFFA855F7, s * 0.20f - 0.03f, -0.70f, 0.08f, s * 0.20f + 0.03f, -0.58f, 0.22f);
-                    drawBox(pose, vc, 0xF000F0, 0xFFFBBF24, s * 0.23f - 0.02f, -0.78f, 0.22f, s * 0.23f + 0.02f, -0.68f, 0.34f);
-                }
-            }
-            if (acc.cyberVisor.get()) {
-                drawBox(pose, vc, 0xF000F0, 0xCC22D3EE, -0.26f, -0.31f, -0.295f, 0.26f, -0.17f, -0.26f);
-                drawBox(pose, vc, light, 0xFF1E293B, -0.275f, -0.32f, -0.28f, -0.24f, -0.16f, 0.14f);
-                drawBox(pose, vc, light, 0xFF1E293B, 0.24f, -0.32f, -0.28f, 0.275f, -0.16f, 0.14f);
-                drawBox(pose, vc, 0xF000F0, 0xFF38BDF8, -0.29f, -0.29f, -0.08f, -0.26f, -0.19f, 0.06f);
-                drawBox(pose, vc, 0xF000F0, 0xFF38BDF8, 0.26f, -0.29f, -0.08f, 0.29f, -0.19f, 0.06f);
-            }
-            if (acc.foxMask.get()) {
-                drawBox(pose, vc, light, 0xFFF8FAFC, -0.23f, -0.46f, -0.29f, 0.23f, -0.10f, -0.255f);
-                drawBox(pose, vc, 0xF000F0, 0xFFEF4444, -0.20f, -0.44f, -0.295f, -0.06f, -0.34f, -0.285f);
-                drawBox(pose, vc, 0xF000F0, 0xFFEF4444, 0.06f, -0.44f, -0.295f, 0.20f, -0.34f, -0.285f);
-                drawBox(pose, vc, light, 0xFF0F172A, -0.18f, -0.27f, -0.296f, -0.06f, -0.21f, -0.285f);
-                drawBox(pose, vc, light, 0xFF0F172A, 0.06f, -0.27f, -0.296f, 0.18f, -0.21f, -0.285f);
-                drawBox(pose, vc, light, 0xFFF8FAFC, -0.21f, -0.58f, -0.28f, -0.09f, -0.46f, -0.23f);
-                drawBox(pose, vc, light, 0xFFF8FAFC, 0.09f, -0.58f, -0.28f, 0.21f, -0.46f, -0.23f);
-            }
-            if (acc.eyepatch.get()) {
-                drawBox(pose, vc, light, 0xFF0F172A, 0.04f, -0.28f, -0.282f, 0.21f, -0.16f, -0.255f);
-                drawBox(pose, vc, light, 0xFF1E293B, -0.26f, -0.26f, -0.265f, 0.26f, -0.23f, 0.26f);
-            }
-            if (acc.sprout.get()) {
-                drawBox(pose, vc, light, 0xFF15803D, -0.02f, -0.66f, -0.02f, 0.02f, -0.50f, 0.02f);
-                drawBox(pose, vc, 0xF000F0, 0xFF4ADE80, -0.14f, -0.71f, -0.05f, -0.01f, -0.64f, 0.05f);
-                drawBox(pose, vc, 0xF000F0, 0xFF86EFAC, 0.01f, -0.73f, -0.05f, 0.14f, -0.66f, 0.05f);
-            }
-        });
-        poseStack.popPose();
+            });
+            poseStack.popPose();
+        }
     }
 
     private void renderHighResWings(PoseStack poseStack, SubmitNodeCollector collector, int packedLight,
                                     AvatarRenderState state, DragonWingsModule wings) {
         long now = System.currentTimeMillis();
         int tint = wings.getTintColor(now);
-        float sc = wings.scale.get().floatValue() * 0.28f;
+        float sc = wings.scale.get().floatValue();
         float speed = wings.flapSpeed.get().floatValue();
+        Identifier tex = Identifier.fromNamespaceAndPath("ye-mod", wings.wingStyle.get().texPath);
 
-        float rate = state.isFallFlying ? 6.8f : (state.walkAnimationSpeed > 0.1f ? 4.2f : 2.0f);
-        float t = (now % 60000L) / 1000.0f * speed * rate;
-        float flapRad = (float) Math.sin(t) * (state.isFallFlying ? 0.42f : 0.20f) - 0.12f;
+        avianWings.setupProceduralAnim(state.isFallFlying, state.walkAnimationSpeed > 0.1f, speed, now);
 
-        float baseY = state.isCrouching ? 0.24f : 0.10f;
-
-        // Left 3D Vanilla EnderDragon Wing (with 2nd articulated wing_tip)
         poseStack.pushPose();
-        poseStack.translate(0.10f, baseY, 0.16f);
+        poseStack.translate(0.0f, -0.0625f, 0.0f);
+        if (!state.chestEquipment.isEmpty()) {
+            poseStack.translate(0.0f, 0.0f, 0.0625f);
+        }
+        this.getParentModel().body.translateAndRotate(poseStack);
         poseStack.scale(sc, sc, sc);
-        dragonLeftWing.x = 0.0f;
-        dragonLeftWing.y = 0.0f;
-        dragonLeftWing.z = 0.0f;
-        dragonLeftWing.xRot = 0.10f;
-        dragonLeftWing.yRot = -0.36f;
-        dragonLeftWing.zRot = flapRad;
-        dragonLeftWingTip.xRot = 0.0f;
-        dragonLeftWingTip.yRot = -0.14f;
-        dragonLeftWingTip.zRot = -flapRad * 0.65f - 0.38f;
-        collector.submitModelPart(
-                dragonLeftWing,
-                poseStack,
-                RenderTypes.entityCutoutNoCull(DRAGON_TEX),
-                packedLight,
-                OverlayTexture.NO_OVERLAY,
-                null,
-                false,
-                false,
-                tint,
-                null,
-                state.outlineColor
-        );
-        poseStack.popPose();
-
-        // Right 3D Vanilla EnderDragon Wing (with 2nd articulated wing_tip)
-        poseStack.pushPose();
-        poseStack.translate(-0.10f, baseY, 0.16f);
-        poseStack.scale(sc, sc, sc);
-        dragonRightWing.x = 0.0f;
-        dragonRightWing.y = 0.0f;
-        dragonRightWing.z = 0.0f;
-        dragonRightWing.xRot = 0.10f;
-        dragonRightWing.yRot = 0.36f;
-        dragonRightWing.zRot = -flapRad;
-        dragonRightWingTip.xRot = 0.0f;
-        dragonRightWingTip.yRot = 0.14f;
-        dragonRightWingTip.zRot = flapRad * 0.65f + 0.38f;
-        collector.submitModelPart(
-                dragonRightWing,
-                poseStack,
-                RenderTypes.entityCutoutNoCull(DRAGON_TEX),
-                packedLight,
-                OverlayTexture.NO_OVERLAY,
-                null,
-                false,
-                false,
-                tint,
-                null,
-                state.outlineColor
-        );
+        avianWings.submit(poseStack, collector, tex, packedLight, tint, state.outlineColor);
         poseStack.popPose();
     }
 
@@ -341,64 +304,6 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
                             -r, 0f, r, 0f, 1f));
             poseStack.popPose();
         }
-    }
-
-    private void renderMotionRibbon(PoseStack poseStack, SubmitNodeCollector collector, AvatarRenderState state, MotionTrailModule trail) {
-        List<MotionTrailModule.TrailPoint> pts = trail.getPointsSnapshot();
-        if (pts.size() < 2) return;
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null) return;
-
-        float pt = mc.getDeltaTracker().getGameTimeDeltaPartialTick(false);
-        Vec3 playerPos = mc.player.getPosition(pt);
-        Vec3 look = mc.player.getLookAngle();
-        Vec3 lookRaw = new Vec3(look.x, 0, look.z);
-        Vec3 lookXZ = lookRaw.lengthSqr() > 0.001 ? lookRaw.normalize() : new Vec3(0, 0, 1);
-
-        poseStack.pushPose();
-        poseStack.translate(0.0f, 1.501f, 0.0f);
-        poseStack.scale(-1.0f, -1.0f, 1.0f);
-        poseStack.mulPose(Axis.YP.rotationDegrees(-(180.0f - state.bodyRot)));
-
-        long now = System.currentTimeMillis();
-        long maxAge = Math.max(300L, Math.round(trail.durationSec.get() * 1000.0));
-        float halfW = trail.width.get().floatValue() * 0.5f;
-        MotionTrailModule.TrailPreset preset = trail.preset.get();
-
-        int c1, c2;
-        switch (preset) {
-            case PHOENIX_FLAME -> { c1 = 0xFDE047; c2 = 0xEF4444; }
-            case VOID_LIGHTNING -> { c1 = 0xE879F9; c2 = 0x7C3AED; }
-            case SAKURA_STREAM -> { c1 = 0xFFF1F2; c2 = 0xF472B6; }
-            default -> { c1 = 0x7DD3FC; c2 = 0x6366F1; }
-        }
-
-        collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucentEmissive(YeHighResTextures.TRAIL_STREAM_TEX), (pose, vc) -> {
-            for (int i = 1; i < pts.size(); i++) {
-                Vec3 w0 = pts.get(i - 1).pos().subtract(playerPos);
-                Vec3 w1 = pts.get(i).pos().subtract(playerPos);
-
-                if (w1.x * lookXZ.x + w1.z * lookXZ.z > -0.05) continue;
-
-                float age = Math.max(0.0f, Math.min(1.0f, 1.0f - (float) (now - pts.get(i).timeMs()) / maxAge));
-                int a = Math.max(18, Math.round(age * 220));
-                int col = (a << 24) | ((i % 2 == 0) ? c2 : c1);
-
-                Vec3 dir = w1.subtract(w0);
-                Vec3 side = new Vec3(-dir.z, 0, dir.x);
-                if (side.lengthSqr() < 0.0001) side = new Vec3(1, 0, 0);
-                else side = side.normalize().scale(halfW * (0.4f + 0.6f * age));
-
-                float u0 = ((i - 1) % 8) / 8.0f;
-                float u1 = u0 + 0.125f;
-                drawDoubleUvQuad(pose, vc, 0xF000F0, col,
-                        (float) (w0.x - side.x), (float) w0.y, (float) (w0.z - side.z), u0, 0f,
-                        (float) (w0.x + side.x), (float) w0.y, (float) (w0.z + side.z), u0, 1f,
-                        (float) (w1.x + side.x), (float) w1.y, (float) (w1.z + side.z), u1, 1f,
-                        (float) (w1.x - side.x), (float) w1.y, (float) (w1.z - side.z), u1, 0f);
-            }
-        });
-        poseStack.popPose();
     }
 
     private static void drawDoubleUvQuad(PoseStack.Pose pose, VertexConsumer vc, int light, int argb,
