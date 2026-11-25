@@ -25,7 +25,8 @@ public abstract class FogRendererMixin {
         }
     }
 
-    @ModifyArgs(method = "updateBuffer", at = @At("HEAD"))
+    @ModifyArgs(method = "setupFog",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/fog/FogRenderer;updateBuffer(Ljava/nio/ByteBuffer;ILorg/joml/Vector4f;FFFFFF)V"))
     private void ye$scaleFogDistance(Args args) {
         AmbienceModule ambience = ModuleManager.get(AmbienceModule.class);
         if (ambience != null && ambience.isEnabled() && ambience.customSkyAndFog.get()) {
