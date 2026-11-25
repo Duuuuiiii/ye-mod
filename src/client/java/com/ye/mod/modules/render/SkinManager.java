@@ -41,10 +41,12 @@ public final class SkinManager {
 
     public static void refreshSkins() {
         SKINS.clear();
-        registerPreset("preset:assassin", "暗夜刺客", 0xFF14161F, 0xFF1E2230, 0xFFA855F7, 0xFF2D1B4E);
-        registerPreset("preset:cyber", "赛博霓虹", 0xFF0F172A, 0xFF1E293B, 0xFF38BDF8, 0xFF0284C7);
-        registerPreset("preset:knight", "炽焰骑士", 0xFF271414, 0xFF451A1A, 0xFFF59E0B, 0xFF991B1B);
-        registerPreset("preset:frost", "冰霜法师", 0xFF0C1E2E, 0xFF16324A, 0xFF67E8F9, 0xFF0E7490);
+        registerBundledPreset("preset:technoblade", "猪神 Technoblade", "technoblade");
+        registerBundledPreset("preset:ranboo", "末影半身 Ranboo", "ranboo");
+        registerBundledPreset("preset:philza", "死神翼 Philza", "philza");
+        registerBundledPreset("preset:grian", "建筑大师 Grian", "grian");
+        registerBundledPreset("preset:sapnap", "烈焰 Sapnap", "sapnap");
+        registerBundledPreset("preset:illumina", "速通王 Illumina", "illumina");
         try {
             Files.createDirectories(getSkinsDir());
         } catch (IOException e) {
@@ -61,31 +63,8 @@ public final class SkinManager {
         }
     }
 
-    private static void registerPreset(String id, String name, int darkCol, int midCol, int eyeCol, int accentCol) {
-        String slug = id.replace("preset:", "");
-        Identifier texId = Identifier.fromNamespaceAndPath("ye", "skins/preset_" + slug);
-        NativeImage img = new NativeImage(64, 64, true);
-        // Base fill
-        for (int y = 0; y < 64; y++) {
-            for (int x = 0; x < 64; x++) {
-                boolean checker = ((x + y) & 1) == 0;
-                img.setPixel(x, y, checker ? darkCol : midCol);
-            }
-        }
-        // Head face (8..15, 8..15)
-        for (int y = 8; y < 16; y++) {
-            for (int x = 8; x < 16; x++) {
-                img.setPixel(x, y, (y < 10) ? accentCol : ((y == 12 && (x == 9 || x == 10 || x == 13 || x == 14)) ? eyeCol : 0xFFE5C29F));
-            }
-        }
-        // Torso chest accent (20..27, 20..31)
-        for (int y = 20; y < 32; y++) {
-            for (int x = 20; x < 28; x++) {
-                img.setPixel(x, y, (y == 27 || x == 23 || x == 24) ? accentCol : midCol);
-            }
-        }
-        DynamicTexture texture = new DynamicTexture(() -> "ye_skin_" + slug, img);
-        Minecraft.getInstance().getTextureManager().register(texId, texture);
+    private static void registerBundledPreset(String id, String name, String slug) {
+        Identifier texId = Identifier.fromNamespaceAndPath("ye-mod", "textures/skins/" + slug + ".png");
         SKINS.put(id, new SkinEntry(id, name, texId));
     }
 

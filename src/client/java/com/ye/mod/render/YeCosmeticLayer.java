@@ -296,7 +296,7 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
             poseStack.pushPose();
             poseStack.translate(0.0f, y, 0.0f);
             poseStack.mulPose(Axis.YP.rotationDegrees(spin));
-            collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucentEmissive(YeHighResTextures.RING_ARRAY_TEX), (pose, vc) ->
+            collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.RING_ARRAY_TEX), (pose, vc) ->
                     drawDoubleUvQuad(pose, vc, 0xF000F0, col,
                             -r, 0f, -r, 0f, 0f,
                             r, 0f, -r, 1f, 0f,
