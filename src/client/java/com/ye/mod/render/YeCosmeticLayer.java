@@ -98,43 +98,79 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
         poseStack.translate(0.0f, acc.offsetY.get().floatValue(), acc.offsetZ.get().floatValue());
         float sc = acc.scale.get().floatValue();
         poseStack.scale(sc, sc, sc);
-        AccessoriesModule.AccessoryType type = acc.type.get();
 
         collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
-            switch (type) {
-                case SUNGLASSES -> {
-                    drawBox(pose, vc, 0xF000F0, 0xEE0B0D14, -0.24f, -0.28f, -0.285f, -0.04f, -0.17f, -0.255f);
-                    drawBox(pose, vc, 0xF000F0, 0xEE0B0D14, 0.04f, -0.28f, -0.285f, 0.24f, -0.17f, -0.255f);
-                    drawBox(pose, vc, light, 0xFF94A3B8, -0.25f, -0.29f, -0.27f, 0.25f, -0.26f, -0.25f);
-                    drawBox(pose, vc, light, 0xFF64748B, -0.26f, -0.27f, -0.26f, -0.24f, -0.23f, 0.16f);
-                    drawBox(pose, vc, light, 0xFF64748B, 0.24f, -0.27f, -0.26f, 0.26f, -0.23f, 0.16f);
+            if (acc.sunglasses.get()) {
+                drawBox(pose, vc, 0xF000F0, 0xEE0B0D14, -0.24f, -0.28f, -0.285f, -0.04f, -0.17f, -0.255f);
+                drawBox(pose, vc, 0xF000F0, 0xEE0B0D14, 0.04f, -0.28f, -0.285f, 0.24f, -0.17f, -0.255f);
+                drawBox(pose, vc, light, 0xFF94A3B8, -0.25f, -0.29f, -0.27f, 0.25f, -0.26f, -0.25f);
+                drawBox(pose, vc, light, 0xFF64748B, -0.26f, -0.27f, -0.26f, -0.24f, -0.23f, 0.16f);
+                drawBox(pose, vc, light, 0xFF64748B, 0.24f, -0.27f, -0.26f, 0.26f, -0.23f, 0.16f);
+            }
+            if (acc.topHat.get()) {
+                drawBox(pose, vc, light, 0xFF14151C, -0.34f, -0.53f, -0.34f, 0.34f, -0.49f, 0.34f);
+                drawBox(pose, vc, light, 0xFF991B1B, -0.24f, -0.60f, -0.24f, 0.24f, -0.53f, 0.24f);
+                drawBox(pose, vc, light, 0xFF181922, -0.23f, -0.92f, -0.23f, 0.23f, -0.60f, 0.23f);
+            }
+            if (acc.crown.get()) {
+                drawBox(pose, vc, 0xF000F0, 0xFFFACC15, -0.26f, -0.56f, -0.26f, 0.26f, -0.49f, 0.26f);
+                for (int i = -1; i <= 1; i++) {
+                    float px = i * 0.18f;
+                    drawBox(pose, vc, 0xF000F0, 0xFFFBBF24, px - 0.04f, -0.67f, -0.26f, px + 0.04f, -0.56f, -0.21f);
+                    drawBox(pose, vc, 0xF000F0, 0xFFFBBF24, px - 0.04f, -0.67f, 0.21f, px + 0.04f, -0.56f, 0.26f);
                 }
-                case TOP_HAT -> {
-                    drawBox(pose, vc, light, 0xFF14151C, -0.34f, -0.53f, -0.34f, 0.34f, -0.49f, 0.34f);
-                    drawBox(pose, vc, light, 0xFF991B1B, -0.24f, -0.60f, -0.24f, 0.24f, -0.53f, 0.24f);
-                    drawBox(pose, vc, light, 0xFF181922, -0.23f, -0.92f, -0.23f, 0.23f, -0.60f, 0.23f);
+                drawBox(pose, vc, 0xF000F0, 0xFFEF4444, -0.04f, -0.55f, -0.27f, 0.04f, -0.50f, -0.24f);
+            }
+            if (acc.halo.get()) {
+                drawBox(pose, vc, 0xF000F0, 0xFFFDE047, -0.24f, -0.74f, -0.24f, 0.24f, -0.70f, -0.18f);
+                drawBox(pose, vc, 0xF000F0, 0xFFFDE047, -0.24f, -0.74f, 0.18f, 0.24f, -0.70f, 0.24f);
+                drawBox(pose, vc, 0xF000F0, 0xFFFDE047, -0.24f, -0.74f, -0.18f, -0.18f, -0.70f, 0.18f);
+                drawBox(pose, vc, 0xF000F0, 0xFFFDE047, 0.18f, -0.74f, -0.18f, 0.24f, -0.70f, 0.18f);
+            }
+            if (acc.catEars.get()) {
+                for (int s : new int[]{-1, 1}) {
+                    drawBox(pose, vc, light, 0xFF1E1B2E, s * 0.11f - 0.06f, -0.64f, -0.06f, s * 0.11f + 0.06f, -0.50f, 0.06f);
+                    drawBox(pose, vc, 0xF000F0, 0xFFF472B6, s * 0.11f - 0.03f, -0.61f, -0.07f, s * 0.11f + 0.03f, -0.52f, -0.05f);
                 }
-                case CROWN -> {
-                    drawBox(pose, vc, 0xF000F0, 0xFFFACC15, -0.26f, -0.56f, -0.26f, 0.26f, -0.49f, 0.26f);
-                    for (int i = -1; i <= 1; i++) {
-                        float px = i * 0.18f;
-                        drawBox(pose, vc, 0xF000F0, 0xFFFBBF24, px - 0.04f, -0.67f, -0.26f, px + 0.04f, -0.56f, -0.21f);
-                        drawBox(pose, vc, 0xF000F0, 0xFFFBBF24, px - 0.04f, -0.67f, 0.21f, px + 0.04f, -0.56f, 0.26f);
-                    }
-                    drawBox(pose, vc, 0xF000F0, 0xFFEF4444, -0.04f, -0.55f, -0.27f, 0.04f, -0.50f, -0.24f);
+            }
+            if (acc.devilHorns.get()) {
+                for (int s : new int[]{-1, 1}) {
+                    drawBox(pose, vc, light, 0xFF7F1D1D, s * 0.16f - 0.045f, -0.62f, -0.10f, s * 0.16f + 0.045f, -0.49f, -0.02f);
+                    drawBox(pose, vc, 0xF000F0, 0xFFDC2626, s * 0.21f - 0.035f, -0.74f, -0.05f, s * 0.21f + 0.035f, -0.62f, 0.02f);
+                    drawBox(pose, vc, 0xF000F0, 0xFFFCA5A5, s * 0.19f - 0.02f, -0.82f, -0.10f, s * 0.19f + 0.02f, -0.74f, -0.04f);
                 }
-                case HALO -> {
-                    drawBox(pose, vc, 0xF000F0, 0xFFFDE047, -0.24f, -0.74f, -0.24f, 0.24f, -0.70f, -0.18f);
-                    drawBox(pose, vc, 0xF000F0, 0xFFFDE047, -0.24f, -0.74f, 0.18f, 0.24f, -0.70f, 0.24f);
-                    drawBox(pose, vc, 0xF000F0, 0xFFFDE047, -0.24f, -0.74f, -0.18f, -0.18f, -0.70f, 0.18f);
-                    drawBox(pose, vc, 0xF000F0, 0xFFFDE047, 0.18f, -0.74f, -0.18f, 0.24f, -0.70f, 0.18f);
+            }
+            if (acc.dragonHorns.get()) {
+                for (int s : new int[]{-1, 1}) {
+                    drawBox(pose, vc, light, 0xFF1E1B2E, s * 0.16f - 0.04f, -0.60f, -0.04f, s * 0.16f + 0.04f, -0.49f, 0.08f);
+                    drawBox(pose, vc, 0xF000F0, 0xFFA855F7, s * 0.20f - 0.03f, -0.70f, 0.08f, s * 0.20f + 0.03f, -0.58f, 0.22f);
+                    drawBox(pose, vc, 0xF000F0, 0xFFFBBF24, s * 0.23f - 0.02f, -0.78f, 0.22f, s * 0.23f + 0.02f, -0.68f, 0.34f);
                 }
-                case CAT_EARS -> {
-                    for (int s : new int[]{-1, 1}) {
-                        drawBox(pose, vc, light, 0xFF1E1B2E, s * 0.11f - 0.06f, -0.64f, -0.06f, s * 0.11f + 0.06f, -0.50f, 0.06f);
-                        drawBox(pose, vc, 0xF000F0, 0xFFF472B6, s * 0.11f - 0.03f, -0.61f, -0.07f, s * 0.11f + 0.03f, -0.52f, -0.05f);
-                    }
-                }
+            }
+            if (acc.cyberVisor.get()) {
+                drawBox(pose, vc, 0xF000F0, 0xCC22D3EE, -0.26f, -0.31f, -0.295f, 0.26f, -0.17f, -0.26f);
+                drawBox(pose, vc, light, 0xFF1E293B, -0.275f, -0.32f, -0.28f, -0.24f, -0.16f, 0.14f);
+                drawBox(pose, vc, light, 0xFF1E293B, 0.24f, -0.32f, -0.28f, 0.275f, -0.16f, 0.14f);
+                drawBox(pose, vc, 0xF000F0, 0xFF38BDF8, -0.29f, -0.29f, -0.08f, -0.26f, -0.19f, 0.06f);
+                drawBox(pose, vc, 0xF000F0, 0xFF38BDF8, 0.26f, -0.29f, -0.08f, 0.29f, -0.19f, 0.06f);
+            }
+            if (acc.foxMask.get()) {
+                drawBox(pose, vc, light, 0xFFF8FAFC, -0.23f, -0.46f, -0.29f, 0.23f, -0.10f, -0.255f);
+                drawBox(pose, vc, 0xF000F0, 0xFFEF4444, -0.20f, -0.44f, -0.295f, -0.06f, -0.34f, -0.285f);
+                drawBox(pose, vc, 0xF000F0, 0xFFEF4444, 0.06f, -0.44f, -0.295f, 0.20f, -0.34f, -0.285f);
+                drawBox(pose, vc, light, 0xFF0F172A, -0.18f, -0.27f, -0.296f, -0.06f, -0.21f, -0.285f);
+                drawBox(pose, vc, light, 0xFF0F172A, 0.06f, -0.27f, -0.296f, 0.18f, -0.21f, -0.285f);
+                drawBox(pose, vc, light, 0xFFF8FAFC, -0.21f, -0.58f, -0.28f, -0.09f, -0.46f, -0.23f);
+                drawBox(pose, vc, light, 0xFFF8FAFC, 0.09f, -0.58f, -0.28f, 0.21f, -0.46f, -0.23f);
+            }
+            if (acc.eyepatch.get()) {
+                drawBox(pose, vc, light, 0xFF0F172A, 0.04f, -0.28f, -0.282f, 0.21f, -0.16f, -0.255f);
+                drawBox(pose, vc, light, 0xFF1E293B, -0.26f, -0.26f, -0.265f, 0.26f, -0.23f, 0.26f);
+            }
+            if (acc.sprout.get()) {
+                drawBox(pose, vc, light, 0xFF15803D, -0.02f, -0.66f, -0.02f, 0.02f, -0.50f, 0.02f);
+                drawBox(pose, vc, 0xF000F0, 0xFF4ADE80, -0.14f, -0.71f, -0.05f, -0.01f, -0.64f, 0.05f);
+                drawBox(pose, vc, 0xF000F0, 0xFF86EFAC, 0.01f, -0.73f, -0.05f, 0.14f, -0.66f, 0.05f);
             }
         });
         poseStack.popPose();
