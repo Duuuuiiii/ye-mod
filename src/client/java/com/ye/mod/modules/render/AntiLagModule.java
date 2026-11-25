@@ -47,11 +47,11 @@ public class AntiLagModule extends Module {
     ));
 
     public final DoubleSetting maxPerType = addSetting(new DoubleSetting(
-            "maxPerType", "同类渲染上限", "每种实体或方块实体最多渲染离你最近的多少个", 64.0, 8.0, 300.0, 4.0
+            "maxPerType", "同类数量阈值", "只有当 FPS 跌破熔断阈值且某类数量超过此值时才暂停渲染", 128.0, 32.0, 500.0, 16.0
     ));
 
     public final DoubleSetting panicFpsThreshold = addSetting(new DoubleSetting(
-            "panicFpsThreshold", "FPS 熔断阈值", "FPS 低于此值且存在超限类型时，暂时全停该类渲染", 15.0, 5.0, 60.0, 1.0
+            "panicFpsThreshold", "卡死熔断 FPS", "只有 FPS 真正跌破此值（真卡死）时才触发暂停渲染", 10.0, 3.0, 30.0, 1.0
     ));
 
     public final BoolSetting showHudAlert = addSetting(new BoolSetting(
@@ -118,15 +118,25 @@ public class AntiLagModule extends Module {
             return;
         }
 
-        int maxN = Math.max(4, (int) Math.round(maxPerType.get()));
+        int maxN = Math.max(32, (int) Math.round(maxPerType.get()));
         int fps = mc.getFps();
         int panicFps = (int) Math.round(panicFpsThreshold.get());
         boolean lowFps = fps > 0 && fps < panicFps;
-        boolean recoveredFps = fps >= panicFps + 5;
+        boolean recoveredFps = fps >= panicFps + 6;
 
         if (recoveredFps && brokenCooldownTicks <= 0) {
             brokenEntityTypes.clear();
             brokenBlockEntityTypes.clear();
+        }
+
+        // Do NOT throttle anything while FPS is healthy!
+        if (!lowFps && brokenEntityTypes.isEmpty() && brokenBlockEntityTypes.isEmpty() && !panicFreeze.get()) {
+            entityCutoffSqr.clear();
+            blockEntityCutoffSqr.clear();
+            blockEntitySampleDists.clear();
+            signTextCulled = false;
+            activeAlertText = "";
+            return;
         }
 
         int throttledTypes = 0;

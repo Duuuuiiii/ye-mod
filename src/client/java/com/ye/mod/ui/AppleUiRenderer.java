@@ -63,22 +63,12 @@ public final class AppleUiRenderer {
 
     public static void drawText(GuiGraphics g, Font font, String text, int x, int y, int color) {
         if (text == null) return;
-        boolean shadow = (fontStyle != FontStyle.CLEAN) && !lightTheme;
-        Component comp = switch (fontStyle) {
-            case BOLD -> Component.literal(text).withStyle(s -> s.withBold(true));
-            case ITALIC -> Component.literal(text).withStyle(s -> s.withItalic(true));
-            default -> Component.literal(text);
-        };
-        g.drawString(font, comp, x, y, color, shadow);
+        g.drawString(font, text, x, y, color, !lightTheme);
     }
 
     public static void drawCenteredText(GuiGraphics g, Font font, String text, int cx, int y, int color) {
         if (text == null) return;
-        int w = font.width(switch (fontStyle) {
-            case BOLD -> Component.literal(text).withStyle(s -> s.withBold(true));
-            case ITALIC -> Component.literal(text).withStyle(s -> s.withItalic(true));
-            default -> Component.literal(text);
-        });
+        int w = font.width(text);
         drawText(g, font, text, cx - w / 2, y, color);
     }
 

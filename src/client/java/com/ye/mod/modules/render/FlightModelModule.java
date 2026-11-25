@@ -28,7 +28,7 @@ public class FlightModelModule extends Module {
     ));
 
     public final DoubleSetting modelScale = addSetting(new DoubleSetting(
-            "modelScale", "坐骑缩放", "调整小末影龙/幻翼/飞剑模型的大小", 0.85, 0.4, 1.5, 0.05
+            "modelScale", "坐骑缩放", "调整末影龙/幻翼/飞剑模型的大小", 1.25, 0.6, 2.2, 0.05
     ));
 
     public final BoolSetting hideElytra = addSetting(new BoolSetting(

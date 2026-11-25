@@ -59,9 +59,9 @@ public class YeMenuScreen extends Screen {
     private static final Map<Category, PanelState> PANEL_STATES = new EnumMap<>(Category.class);
     private static final Map<String, Float> MODULE_ENABLE_ANIM = new java.util.HashMap<>();
     private static final Map<String, Float> MODULE_HOVER_ANIM = new java.util.HashMap<>();
-    private static final int PANEL_W = 148;
-    private static final int HEADER_H = 28;
-    private static final int ROW_H = 24;
+    private static final int PANEL_W = 128;
+    private static final int HEADER_H = 22;
+    private static final int ROW_H = 19;
 
     private float openProgress = 0.0f;
 
@@ -150,52 +150,45 @@ public class YeMenuScreen extends Screen {
     }
 
     private void renderTopBar(GuiGraphics g, int mouseX, int mouseY) {
-        int barW = Math.min(730, this.width - 20);
-        int barH = 34;
+        int barW = Math.min(560, this.width - 20);
+        int barH = 28;
         int bx = (this.width - barW) / 2;
-        int by = 12;
-        AppleUiRenderer.drawRoundedRect(g, bx, by, barW, barH, 11, AppleUiRenderer.bgWindow());
+        int by = 10;
+        AppleUiRenderer.drawRoundedRect(g, bx, by, barW, barH, 9, AppleUiRenderer.bgWindow());
 
         // Brand pill
-        int brandW = 64;
-        AppleUiRenderer.drawRoundedRect(g, bx + 6, by + 5, brandW, 24, 7, AppleUiRenderer.APPLE_BLUE);
-        AppleUiRenderer.drawCenteredText(g, this.font, "Ye 1.0.9", bx + 6 + brandW / 2, by + 13, AppleUiRenderer.TEXT_PRIMARY);
+        int brandW = 58;
+        AppleUiRenderer.drawRoundedRect(g, bx + 5, by + 4, brandW, 20, 6, AppleUiRenderer.APPLE_BLUE);
+        AppleUiRenderer.drawCenteredText(g, this.font, "Ye 1.1.0", bx + 5 + brandW / 2, by + 10, AppleUiRenderer.TEXT_PRIMARY);
 
         // Action buttons on right
-        int btnH = 24;
-        int btnY = by + 5;
+        int btnH = 20;
+        int btnY = by + 4;
 
-        int resetW = 58;
-        int resetX = bx + barW - 6 - resetW;
+        int resetW = 54;
+        int resetX = bx + barW - 5 - resetW;
         boolean resetHover = inBounds(mouseX, mouseY, resetX, btnY, resetW, btnH);
-        AppleUiRenderer.drawRoundedRect(g, resetX, btnY, resetW, btnH, 7, resetHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
-        AppleUiRenderer.drawCenteredText(g, this.font, "重置布局", resetX + resetW / 2, btnY + 8, AppleUiRenderer.textPrimary());
+        AppleUiRenderer.drawRoundedRect(g, resetX, btnY, resetW, btnH, 6, resetHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawCenteredText(g, this.font, "重置布局", resetX + resetW / 2, btnY + 6, AppleUiRenderer.textPrimary());
         hitAreas.add(new HitArea(resetX, btnY, resetW, btnH, () -> {
             overlayMode = OverlayMode.NONE;
             resetPanelLayout();
         }, null));
 
-        int fontW = 58;
-        int fontX = resetX - 5 - fontW;
-        boolean fontHover = inBounds(mouseX, mouseY, fontX, btnY, fontW, btnH);
-        AppleUiRenderer.drawRoundedRect(g, fontX, btnY, fontW, btnH, 7, fontHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
-        AppleUiRenderer.drawCenteredText(g, this.font, "字:" + AppleUiRenderer.fontStyle.label, fontX + fontW / 2, btnY + 8, AppleUiRenderer.textPrimary());
-        hitAreas.add(new HitArea(fontX, btnY, fontW, btnH, AppleUiRenderer::cycleFontStyle, null));
-
-        int themeW = 54;
-        int themeX = fontX - 5 - themeW;
+        int themeW = 48;
+        int themeX = resetX - 4 - themeW;
         boolean themeHover = inBounds(mouseX, mouseY, themeX, btnY, themeW, btnH);
-        AppleUiRenderer.drawRoundedRect(g, themeX, btnY, themeW, btnH, 7, themeHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
-        AppleUiRenderer.drawCenteredText(g, this.font, AppleUiRenderer.lightTheme ? "☀ 浅色" : "🌙 深色", themeX + themeW / 2, btnY + 8, AppleUiRenderer.textPrimary());
+        AppleUiRenderer.drawRoundedRect(g, themeX, btnY, themeW, btnH, 6, themeHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawCenteredText(g, this.font, AppleUiRenderer.lightTheme ? "☀ 浅色" : "🌙 深色", themeX + themeW / 2, btnY + 6, AppleUiRenderer.textPrimary());
         hitAreas.add(new HitArea(themeX, btnY, themeW, btnH, AppleUiRenderer::toggleTheme, null));
 
-        int keyW = 58;
-        int keyX = themeX - 5 - keyW;
+        int keyW = 54;
+        int keyX = themeX - 4 - keyW;
         boolean keyActive = overlayMode == OverlayMode.KEYBINDS;
         boolean keyHover = inBounds(mouseX, mouseY, keyX, btnY, keyW, btnH);
-        AppleUiRenderer.drawRoundedRect(g, keyX, btnY, keyW, btnH, 7,
+        AppleUiRenderer.drawRoundedRect(g, keyX, btnY, keyW, btnH, 6,
                 keyActive ? AppleUiRenderer.APPLE_BLUE : (keyHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard()));
-        AppleUiRenderer.drawCenteredText(g, this.font, "按键设置", keyX + keyW / 2, btnY + 8,
+        AppleUiRenderer.drawCenteredText(g, this.font, "按键设置", keyX + keyW / 2, btnY + 6,
                 keyActive ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
         hitAreas.add(new HitArea(keyX, btnY, keyW, btnH, () -> {
             overlayMode = (overlayMode == OverlayMode.KEYBINDS) ? OverlayMode.NONE : OverlayMode.KEYBINDS;
@@ -203,13 +196,13 @@ public class YeMenuScreen extends Screen {
             muteInputFocused = false;
         }, null));
 
-        int statsW = 58;
-        int statsX = keyX - 5 - statsW;
+        int statsW = 54;
+        int statsX = keyX - 4 - statsW;
         boolean statsActive = overlayMode == OverlayMode.STATS;
         boolean statsHover = inBounds(mouseX, mouseY, statsX, btnY, statsW, btnH);
-        AppleUiRenderer.drawRoundedRect(g, statsX, btnY, statsW, btnH, 7,
+        AppleUiRenderer.drawRoundedRect(g, statsX, btnY, statsW, btnH, 6,
                 statsActive ? AppleUiRenderer.APPLE_BLUE : (statsHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard()));
-        AppleUiRenderer.drawCenteredText(g, this.font, "玩家统计", statsX + statsW / 2, btnY + 8,
+        AppleUiRenderer.drawCenteredText(g, this.font, "玩家统计", statsX + statsW / 2, btnY + 6,
                 statsActive ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
         hitAreas.add(new HitArea(statsX, btnY, statsW, btnH, () -> {
             overlayMode = (overlayMode == OverlayMode.STATS) ? OverlayMode.NONE : OverlayMode.STATS;
@@ -218,15 +211,15 @@ public class YeMenuScreen extends Screen {
         }, null));
 
         // Search box in remaining center space
-        int searchX = bx + 6 + brandW + 8;
-        int searchW = Math.max(70, statsX - 8 - searchX);
+        int searchX = bx + 5 + brandW + 6;
+        int searchW = Math.max(64, statsX - 6 - searchX);
         int searchBg = searchFocused ? (AppleUiRenderer.lightTheme ? 0xFFDCE4F2 : 0xFF283548) : AppleUiRenderer.bgCard();
-        AppleUiRenderer.drawRoundedRect(g, searchX, btnY, searchW, btnH, 7, searchBg);
+        AppleUiRenderer.drawRoundedRect(g, searchX, btnY, searchW, btnH, 6, searchBg);
         String displaySearch = searchQuery.isEmpty()
-                ? (searchFocused ? "|" : "搜索模块...")
+                ? (searchFocused ? "|" : "搜索...")
                 : (searchQuery + (searchFocused ? "|" : ""));
         int searchColor = searchQuery.isEmpty() && !searchFocused ? AppleUiRenderer.textTertiary() : AppleUiRenderer.textPrimary();
-        AppleUiRenderer.drawText(g, this.font, trimToWidth(displaySearch, searchW - 14), searchX + 8, btnY + 8, searchColor);
+        AppleUiRenderer.drawText(g, this.font, trimToWidth(displaySearch, searchW - 12), searchX + 6, btnY + 6, searchColor);
         hitAreas.add(new HitArea(searchX, btnY, searchW, btnH, () -> {
             overlayMode = OverlayMode.NONE;
             searchFocused = true;
@@ -261,21 +254,21 @@ public class YeMenuScreen extends Screen {
             AppleUiRenderer.drawRoundedRect(g, px, py, PANEL_W, totalH, 10, AppleUiRenderer.bgWindow());
 
             // Header bar
-            AppleUiRenderer.drawRoundedRect(g, px, py, PANEL_W, HEADER_H, 10, AppleUiRenderer.bgSidebar());
-            AppleUiRenderer.drawCircle(g, px + 9, py + 10, 8, cat.getAccentColor());
-            AppleUiRenderer.drawText(g, this.font, cat.getDisplayName(), px + 22, py + 10, AppleUiRenderer.textPrimary());
+            AppleUiRenderer.drawRoundedRect(g, px, py, PANEL_W, HEADER_H, 8, AppleUiRenderer.bgSidebar());
+            AppleUiRenderer.drawCircle(g, px + 8, py + 7, 7, cat.getAccentColor());
+            AppleUiRenderer.drawText(g, this.font, cat.getDisplayName(), px + 19, py + 7, AppleUiRenderer.textPrimary());
 
-            String countStr = modules.size() + " " + (state.collapsed ? "▸" : "▾");
-            AppleUiRenderer.drawText(g, this.font, countStr, px + PANEL_W - 9 - this.font.width(countStr), py + 10, AppleUiRenderer.textTertiary());
+            String countStr = modules.size() + (state.collapsed ? "▸" : "▾");
+            AppleUiRenderer.drawText(g, this.font, countStr, px + PANEL_W - 7 - this.font.width(countStr), py + 7, AppleUiRenderer.textTertiary());
 
             hitAreas.add(new HitArea(px, py, PANEL_W, HEADER_H, null, () -> state.collapsed = !state.collapsed));
 
             if (animBodyH > 4) {
                 g.enableScissor(px, py + HEADER_H, px + PANEL_W, py + HEADER_H + animBodyH);
-                int ry = py + HEADER_H + 3;
+                int ry = py + HEADER_H + 2;
                 for (Module m : modules) {
-                    int rowX = px + 4;
-                    int rowW = PANEL_W - 8;
+                    int rowX = px + 3;
+                    int rowW = PANEL_W - 6;
                     boolean hover = inBounds(mouseX, mouseY, rowX, ry, rowW, ROW_H - 2);
                     if (hover && !state.collapsed) {
                         hoveredDesc = m.getName() + " — " + m.getDescription() + "  (左键开关 · 右键设置)";
@@ -289,16 +282,16 @@ public class YeMenuScreen extends Screen {
                     int offBg = AppleUiRenderer.lerpColor(AppleUiRenderer.bgCard(), AppleUiRenderer.bgCardHover(), hvAnim);
                     int onBg = AppleUiRenderer.activeRowBg(hover);
                     int rowBg = AppleUiRenderer.lerpColor(offBg, onBg, enAnim);
-                    AppleUiRenderer.drawRoundedRect(g, rowX, ry, rowW, ROW_H - 2, 6, rowBg);
+                    AppleUiRenderer.drawRoundedRect(g, rowX, ry, rowW, ROW_H - 2, 5, rowBg);
 
                     int dotColor = AppleUiRenderer.lerpColor(0xFF64748B, AppleUiRenderer.APPLE_GREEN, enAnim);
-                    AppleUiRenderer.drawCircle(g, rowX + 7, ry + 8, 6, dotColor);
+                    AppleUiRenderer.drawCircle(g, rowX + 6, ry + 6, 5, dotColor);
 
-                    String name = trimToWidth(m.getName(), rowW - 34);
-                    AppleUiRenderer.drawText(g, this.font, name, rowX + 17, ry + 7, AppleUiRenderer.textPrimary());
+                    String name = trimToWidth(m.getName(), rowW - 28);
+                    AppleUiRenderer.drawText(g, this.font, name, rowX + 14, ry + 5, AppleUiRenderer.textPrimary());
 
                     if (!m.getSettings().isEmpty()) {
-                        AppleUiRenderer.drawText(g, this.font, "⚙", rowX + rowW - 13, ry + 7, AppleUiRenderer.textTertiary());
+                        AppleUiRenderer.drawText(g, this.font, "⚙", rowX + rowW - 11, ry + 5, AppleUiRenderer.textTertiary());
                     }
 
                     if (!state.collapsed) {

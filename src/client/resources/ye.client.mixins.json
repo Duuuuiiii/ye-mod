@@ -15,6 +15,7 @@
     "GuiMixin",
     "LocalPlayerMixin",
     "ParticleEngineMixin",
+    "PlayerModelMixin",
     "ScreenEffectRendererMixin",
     "SkyRendererMixin",
     "SoundEngineMixin",
