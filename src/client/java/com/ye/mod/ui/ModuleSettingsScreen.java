@@ -39,6 +39,10 @@ public class ModuleSettingsScreen extends Screen {
     private DoubleSetting draggingSlider = null;
     private int sliderDragX = 0;
     private int sliderDragW = 120;
+    private EnumSetting<?> openDropdown = null;
+    private int dropdownX = 0;
+    private int dropdownY = 0;
+    private int dropdownW = 110;
 
     private final List<HitRect> hitRects = new ArrayList<>();
 
@@ -158,11 +162,6 @@ public class ModuleSettingsScreen extends Screen {
 
         int curY = (int) Math.round(contentY - scrollY);
 
-        // Description card
-        AppleUiRenderer.drawPanel(g, contentX, curY, contentW, 24, AppleUiRenderer.bgCard());
-        AppleUiRenderer.drawText(g, this.font, trimToWidth(module.getDescription(), contentW - 16), contentX + 8, curY + 8, AppleUiRenderer.textSecondary());
-        curY += 30;
-
         // Cape gallery
         if (module instanceof CustomCapeModule capeMod) {
             curY = renderCapeGallery(g, capeMod, contentX, curY, contentW, contentY, contentY + contentH, mouseX, mouseY);
@@ -194,7 +193,37 @@ public class ModuleSettingsScreen extends Screen {
             int barY = contentY + (int) ((contentH - barH) * (scrollY / maxScroll));
             g.fill(mx + mw - 5, barY, mx + mw - 2, barY + barH, 0x55FFFFFF);
         }
+
+        // Floating dropdown menu rendered above scissor
+        if (openDropdown != null) {
+            renderDropdownOverlay(g, openDropdown, mouseX, mouseY);
+        }
         g.pose().popMatrix();
+    }
+
+    private <E extends Enum<E>> void renderDropdownOverlay(GuiGraphics g, EnumSetting<E> enumSet, int mouseX, int mouseY) {
+        E[] values = enumSet.getDefaultValue().getDeclaringClass().getEnumConstants();
+        int itemH = 18;
+        int totalH = values.length * itemH + 4;
+        int dx = dropdownX;
+        int dy = Math.min(dropdownY, this.height - totalH - 8);
+        AppleUiRenderer.drawPanel(g, dx, dy, dropdownW, totalH, AppleUiRenderer.bgWindow());
+
+        for (int i = 0; i < values.length; i++) {
+            E opt = values[i];
+            int iy = dy + 2 + i * itemH;
+            boolean selected = opt == enumSet.get();
+            boolean hover = inBounds(mouseX, mouseY, dx + 2, iy, dropdownW - 4, itemH);
+            int bg = selected ? AppleUiRenderer.APPLE_BLUE : (hover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
+            g.fill(dx + 2, iy, dx + dropdownW - 2, iy + itemH - 1, bg);
+            AppleUiRenderer.drawText(g, this.font, trimToWidth(opt.name(), dropdownW - 10), dx + 6, iy + 5,
+                    selected ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
+            hitRects.add(new HitRect(dx + 2, iy, dropdownW - 4, itemH, () -> {
+                enumSet.set(opt);
+                openDropdown = null;
+                ConfigManager.saveAsync();
+            }, null));
+        }
     }
 
     private int renderCapeGallery(GuiGraphics g, CustomCapeModule capeMod, int x, int y, int w, int clipTop, int clipBottom, int mouseX, int mouseY) {
@@ -302,14 +331,12 @@ public class ModuleSettingsScreen extends Screen {
     }
 
     private int renderSettingRow(GuiGraphics g, Setting<?> setting, int x, int y, int w, int clipTop, int clipBottom, int mouseX, int mouseY) {
-        int rowH = (setting instanceof DoubleSetting) ? 42 : 34;
+        int rowH = (setting instanceof DoubleSetting) ? 36 : 26;
         if (y + rowH >= clipTop && y <= clipBottom) {
             boolean hover = inBounds(mouseX, mouseY, x, y, w, rowH);
             AppleUiRenderer.drawPanel(g, x, y, w, rowH, hover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
 
-            AppleUiRenderer.drawText(g, this.font, setting.getName(), x + 10, y + 6, AppleUiRenderer.textPrimary());
-            String desc = trimToWidth(setting.getDescription(), w - 160);
-            AppleUiRenderer.drawText(g, this.font, desc, x + 10, y + 19, AppleUiRenderer.textTertiary());
+            AppleUiRenderer.drawText(g, this.font, setting.getName(), x + 10, y + (setting instanceof DoubleSetting ? 6 : 9), AppleUiRenderer.textPrimary());
 
             boolean clickableInClip = y >= clipTop - 4 && y + rowH <= clipBottom + 4;
 
@@ -317,10 +344,11 @@ public class ModuleSettingsScreen extends Screen {
                 int swW = 32;
                 int swH = 16;
                 int swX = x + w - 10 - swW;
-                int swY = y + 9;
+                int swY = y + 5;
                 AppleUiRenderer.drawPillSwitch(g, swX, swY, swW, swH, boolSet.get() ? 1.0f : 0.0f);
                 if (clickableInClip) {
                     hitRects.add(new HitRect(x, y, w, rowH, () -> {
+                        openDropdown = null;
                         boolSet.toggle();
                         ConfigManager.saveAsync();
                     }, null));
@@ -329,51 +357,59 @@ public class ModuleSettingsScreen extends Screen {
                 String valText = formatDouble(dblSet.get());
                 AppleUiRenderer.drawText(g, this.font, valText, x + w - 10 - this.font.width(valText), y + 6, AppleUiRenderer.APPLE_BLUE);
 
-                int barW = Math.min(170, w / 2 - 20);
-                int barH = 5;
+                int barW = Math.min(180, w / 2 - 20);
+                int barH = 4;
                 int barX = x + w - 10 - barW;
-                int barY = y + 29;
+                int barY = y + 23;
                 double pct = (dblSet.get() - dblSet.getMin()) / Math.max(0.0001, dblSet.getMax() - dblSet.getMin());
                 pct = Math.max(0.0, Math.min(1.0, pct));
 
                 g.fill(barX, barY, barX + barW, barY + barH, 0xFF334155);
-                int fillW = Math.max(6, (int) Math.round(barW * pct));
-                AppleUiRenderer.drawRoundedRect(g, barX, barY, fillW, barH, 3, AppleUiRenderer.APPLE_BLUE);
-                AppleUiRenderer.drawCircle(g, barX + fillW - 5, barY - 2, 10, 0xFFFFFFFF);
+                int fillW = Math.max(4, (int) Math.round(barW * pct));
+                g.fill(barX, barY, barX + fillW, barY + barH, AppleUiRenderer.APPLE_BLUE);
+                AppleUiRenderer.drawCircle(g, barX + fillW - 4, barY - 2, 8, 0xFFFFFFFF);
 
                 if (clickableInClip) {
-                    hitRects.add(new HitRect(barX - 4, barY - 6, barW + 8, 18, null, dblSet));
+                    hitRects.add(new HitRect(barX - 4, barY - 6, barW + 8, 16, null, dblSet));
                 }
             } else if (setting instanceof EnumSetting<?> enumSet) {
-                String val = "< " + enumSet.get().name() + " >";
-                int btnW = Math.max(84, this.font.width(val) + 18);
-                int btnH = 22;
-                int btnX = x + w - 12 - btnW;
-                int btnY = y + 8;
-                AppleUiRenderer.drawRoundedRect(g, btnX, btnY, btnW, btnH, 6, 0xFF273244);
-                g.drawCenteredString(this.font, val, btnX + btnW / 2, btnY + 7, AppleUiRenderer.TEXT_PRIMARY);
+                String val = enumSet.get().name() + " ▾";
+                int btnW = Math.max(106, this.font.width(val) + 16);
+                int btnH = 18;
+                int btnX = x + w - 10 - btnW;
+                int btnY = y + 4;
+                boolean isOpen = (openDropdown == enumSet);
+                AppleUiRenderer.drawPanel(g, btnX, btnY, btnW, btnH, isOpen ? AppleUiRenderer.APPLE_BLUE : AppleUiRenderer.bgCardHover());
+                AppleUiRenderer.drawCenteredText(g, this.font, val, btnX + btnW / 2, btnY + 5,
+                        isOpen ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
                 if (clickableInClip) {
-                    hitRects.add(new HitRect(x, y, w, rowH, () -> {
-                        enumSet.cycle(1);
-                        ConfigManager.saveAsync();
+                    hitRects.add(new HitRect(btnX, btnY, btnW, btnH, () -> {
+                        if (openDropdown == enumSet) {
+                            openDropdown = null;
+                        } else {
+                            openDropdown = enumSet;
+                            dropdownX = btnX;
+                            dropdownY = btnY + btnH + 2;
+                            dropdownW = btnW;
+                        }
                     }, null));
                 }
             } else if (setting instanceof ActionSetting actionSet) {
-                int btnW = 74;
-                int btnH = 22;
-                int btnX = x + w - 12 - btnW;
-                int btnY = y + 8;
-                AppleUiRenderer.drawRoundedRect(g, btnX, btnY, btnW, btnH, 6, AppleUiRenderer.APPLE_BLUE);
-                g.drawCenteredString(this.font, "执行", btnX + btnW / 2, btnY + 7, AppleUiRenderer.TEXT_PRIMARY);
+                int btnW = 64;
+                int btnH = 18;
+                int btnX = x + w - 10 - btnW;
+                int btnY = y + 4;
+                g.fill(btnX, btnY, btnX + btnW, btnY + btnH, AppleUiRenderer.APPLE_BLUE);
+                AppleUiRenderer.drawCenteredText(g, this.font, ConfigManager.tr("执行", "Run"), btnX + btnW / 2, btnY + 5, AppleUiRenderer.TEXT_PRIMARY);
                 if (clickableInClip) {
                     hitRects.add(new HitRect(btnX, btnY, btnW, btnH, actionSet::trigger, null));
                 }
             } else if (setting instanceof StringSetting strSet) {
                 String val = trimToWidth(strSet.get(), 140);
-                g.drawString(this.font, val, x + w - 12 - this.font.width(val), y + 15, AppleUiRenderer.TEXT_SECONDARY, false);
+                AppleUiRenderer.drawText(g, this.font, val, x + w - 10 - this.font.width(val), y + 9, AppleUiRenderer.textSecondary());
             }
         }
-        return y + rowH + 6;
+        return y + rowH + 4;
     }
 
     @Override

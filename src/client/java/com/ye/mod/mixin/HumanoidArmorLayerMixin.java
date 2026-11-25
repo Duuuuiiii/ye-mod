@@ -2,7 +2,9 @@ package com.ye.mod.mixin;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.ye.mod.core.ModuleManager;
+import com.ye.mod.modules.render.DragonWingsModule;
 import com.ye.mod.modules.render.NoRenderModule;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
@@ -20,10 +22,19 @@ public abstract class HumanoidArmorLayerMixin<S extends HumanoidRenderState, M e
             at = @At("HEAD"), cancellable = true)
     private void ye$hidePlayerArmor(PoseStack poseStack, SubmitNodeCollector collector, int packedLight,
                                     HumanoidRenderState state, float yRot, float xRot, CallbackInfo ci) {
-        if (!(state instanceof AvatarRenderState)) return;
+        if (!(state instanceof AvatarRenderState avatarState)) return;
         NoRenderModule noRender = ModuleManager.get(NoRenderModule.class);
         if (noRender != null && noRender.isEnabled() && noRender.noArmor.get()) {
             ci.cancel();
+            return;
+        }
+        DragonWingsModule wings = ModuleManager.get(DragonWingsModule.class);
+        if (wings != null && wings.isEnabled() && wings.hideArmor.get()) {
+            Minecraft mc = Minecraft.getInstance();
+            boolean isSelf = mc.player != null && avatarState.id == mc.player.getId();
+            if (!wings.onlySelf.get() || isSelf) {
+                ci.cancel();
+            }
         }
     }
 }

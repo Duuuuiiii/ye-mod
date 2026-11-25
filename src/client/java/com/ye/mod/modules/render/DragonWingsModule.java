@@ -55,7 +55,19 @@ public class DragonWingsModule extends Module {
     ));
 
     public final BoolSetting hideWithElytra = addSetting(new BoolSetting(
-            "hideWithElytra", "滑翔时隐藏", "鞘翅飞行时暂时隐藏背部翅膀", false
+            "hideWithElytra", "滑翔时隐藏", "鞘翅飞行时隐藏龙翅膀", false
+    ));
+
+    public final BoolSetting hideElytra = addSetting(new BoolSetting(
+            "hideElytra", "不渲染鞘翅", "开启龙翼时隐藏原版鞘翅", true
+    ));
+
+    public final BoolSetting hideCape = addSetting(new BoolSetting(
+            "hideCape", "不渲染披风", "开启龙翼时隐藏披风", true
+    ));
+
+    public final BoolSetting hideArmor = addSetting(new BoolSetting(
+            "hideArmor", "不渲染盔甲", "开启龙翼时隐藏玩家盔甲", false
     ));
 
     public final BoolSetting onlySelf = addSetting(new BoolSetting(

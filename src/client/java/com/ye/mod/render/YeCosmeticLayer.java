@@ -251,11 +251,11 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
     private void renderDragonOrDemonWing(PoseStack poseStack, SubmitNodeCollector collector, int light, int side,
                                          int boneCol, int boneDark, int memCol, int memBright, float outerFlap, boolean demon) {
         collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(SCALE_TEX), (pose, vc) -> {
-            drawBox(pose, vc, light, boneDark, -0.055f, -0.06f, -0.055f, 0.055f, 0.06f, 0.055f);
-            drawThickBone(pose, vc, light, boneCol, 0f, 0f, 0f, side * 0.48f, -0.16f, 0.04f, 0.052f);
+            drawBox(pose, vc, light, boneDark, -0.025f, -0.028f, -0.025f, 0.025f, 0.028f, 0.025f);
+            drawThickBone(pose, vc, light, boneCol, 0f, 0f, 0f, side * 0.48f, -0.16f, 0.04f, 0.024f);
         });
         collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(WING_TEX), (pose, vc) ->
-                drawThickMembrane(pose, vc, light, memCol, 0.018f,
+                drawThickMembrane(pose, vc, light, memCol, 0.004f,
                         0.0f, 0.01f, 0.0f,
                         side * 0.48f, -0.15f, 0.04f,
                         side * 0.42f, 0.58f, 0.08f,
@@ -266,8 +266,8 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
         poseStack.mulPose(Axis.ZP.rotationDegrees(side * 10.0f));
 
         collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(SCALE_TEX), (pose, vc) -> {
-            drawBox(pose, vc, light, boneDark, -0.06f, -0.06f, -0.06f, 0.06f, 0.06f, 0.06f);
-            drawThickBone(pose, vc, light, memBright, 0f, -0.04f, -0.01f, side * 0.07f, -0.18f, -0.08f, 0.028f);
+            drawBox(pose, vc, light, boneDark, -0.025f, -0.025f, -0.025f, 0.025f, 0.025f, 0.025f);
+            drawThickBone(pose, vc, light, memBright, 0f, -0.02f, -0.01f, side * 0.06f, -0.14f, -0.06f, 0.014f);
             float[][] ribs = demon
                     ? new float[][]{{0.84f, -0.18f, 0.04f}, {0.70f, 0.24f, 0.08f}, {0.46f, 0.56f, 0.10f}, {0.18f, 0.70f, 0.08f}}
                     : new float[][]{{0.90f, -0.10f, 0.03f}, {0.76f, 0.26f, 0.07f}, {0.52f, 0.54f, 0.09f}, {0.20f, 0.68f, 0.07f}};
@@ -275,9 +275,9 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
                 float rx = side * ribs[i][0];
                 float ry = ribs[i][1];
                 float rz = ribs[i][2];
-                drawThickBone(pose, vc, light, (i == 0) ? boneCol : boneDark, 0f, 0f, 0f, rx, ry, rz, (i == 0) ? 0.038f : 0.024f);
+                drawThickBone(pose, vc, light, (i == 0) ? boneCol : boneDark, 0f, 0f, 0f, rx, ry, rz, (i == 0) ? 0.018f : 0.011f);
                 if (i == 0) {
-                    drawThickBone(pose, vc, light, memBright, rx, ry, rz, rx + side * 0.11f, ry - 0.07f, rz - 0.02f, 0.022f);
+                    drawThickBone(pose, vc, light, memBright, rx, ry, rz, rx + side * 0.10f, ry - 0.06f, rz - 0.02f, 0.010f);
                 }
             }
         });
@@ -292,7 +292,7 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
                 float nx = side * ribs[i + 1][0];
                 float ny = ribs[i + 1][1];
                 float nz = ribs[i + 1][2];
-                drawThickMembrane(pose, vc, light, (i % 2 == 0) ? memCol : darken(memCol, 0.88f), 0.014f,
+                drawThickMembrane(pose, vc, light, (i % 2 == 0) ? memCol : darken(memCol, 0.88f), 0.004f,
                         0f, 0f, 0f, rx, ry, rz,
                         (rx + nx) * (demon ? 0.43f : 0.48f), (ry + ny) * (demon ? 0.43f : 0.48f), (rz + nz) * 0.5f,
                         nx, ny, nz);

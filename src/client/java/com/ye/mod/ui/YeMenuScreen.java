@@ -178,7 +178,7 @@ public class YeMenuScreen extends Screen {
         // Brand tag
         int brandW = 54;
         g.fill(bx + 4, by + 4, bx + 4 + brandW, by + 22, AppleUiRenderer.APPLE_BLUE);
-        AppleUiRenderer.drawCenteredText(g, this.font, "Ye 1.4.0", bx + 4 + brandW / 2, by + 9, AppleUiRenderer.TEXT_PRIMARY);
+        AppleUiRenderer.drawCenteredText(g, this.font, "Ye 1.4.1", bx + 4 + brandW / 2, by + 9, AppleUiRenderer.TEXT_PRIMARY);
 
         int btnH = 18;
         int btnY = by + 4;
@@ -391,7 +391,8 @@ public class YeMenuScreen extends Screen {
         int bw = Math.max(54, this.font.width(val) + 14);
         int bx = x + w - 6 - bw;
         g.fill(bx, y + 4, bx + bw, y + 20, highlight ? AppleUiRenderer.APPLE_BLUE : AppleUiRenderer.bgCardHover());
-        AppleUiRenderer.drawCenteredText(g, this.font, val, bx + bw / 2, y + 8, AppleUiRenderer.TEXT_PRIMARY);
+        AppleUiRenderer.drawCenteredText(g, this.font, val, bx + bw / 2, y + 8,
+                highlight ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
         hitAreas.add(new HitArea(x, y, w, 24, onClick, null));
     }
 
