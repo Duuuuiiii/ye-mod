@@ -3,13 +3,16 @@ package com.ye.mod.modules.world;
 import com.ye.mod.core.Category;
 import com.ye.mod.core.ConfigManager;
 import com.ye.mod.core.Module;
+import com.ye.mod.core.setting.ActionSetting;
 import com.ye.mod.core.setting.BoolSetting;
 import com.ye.mod.core.setting.DoubleSetting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gizmos.GizmoStyle;
 import net.minecraft.gizmos.Gizmos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -23,6 +26,8 @@ import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
 import net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity;
 import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -36,11 +41,41 @@ import java.util.Set;
  */
 public class StashRadarModule extends Module {
     public final DoubleSetting rangeChunks = addSetting(new DoubleSetting(
-            "rangeChunks", "扫描半径", "扫描周围多少个区块内的容器", 5.0, 2.0, 10.0, 1.0
+            "rangeChunks", "扫描半径", "扫描周围多少个区块内的容器", 8.0, 2.0, 32.0, 1.0
     ));
 
     public final BoolSetting ignoreNatural = addSetting(new BoolSetting(
-            "ignoreNatural", "过滤自然箱子", "参考 Lotus 逻辑：检测周围刷怪笼/矿井/神殿方块，自动跳过自然箱子", true
+            "ignoreNatural", "过滤自然箱子", "参考 Lotus 逻辑：检测周围刷怪笼/矿井/神殿/地狱砖等，自动跳过自然箱子", true
+    ));
+
+    public final BoolSetting ignoreNetherBricks = addSetting(new BoolSetting(
+            "ignoreNetherBricks", "过滤地狱砖", "靠近地狱砖/红地狱砖的箱子不渲染", true
+    ));
+
+    public final ActionSetting addLookedBlock = addSetting(new ActionSetting(
+            "addLookedBlock", "添加准星方块过滤", "把当前准星指向的方块加入自然箱子过滤列表", () -> {
+                Minecraft mc = Minecraft.getInstance();
+                if (mc.level != null && mc.player != null && mc.hitResult instanceof BlockHitResult bhr && mc.hitResult.getType() == HitResult.Type.BLOCK) {
+                    Block b = mc.level.getBlockState(bhr.getBlockPos()).getBlock();
+                    String id = BuiltInRegistries.BLOCK.getKey(b).toString();
+                    ConfigManager.customRadarIgnoreBlocks.add(id);
+                    ConfigManager.saveAsync();
+                    mc.player.displayClientMessage(Component.literal("§b[Ye雷达] §f已添加过滤方块: §a" + id), false);
+                } else if (mc.player != null) {
+                    mc.player.displayClientMessage(Component.literal("§b[Ye雷达] §c请将准星对准一个方块后再点击添加"), false);
+                }
+            }
+    ));
+
+    public final ActionSetting clearCustomBlocks = addSetting(new ActionSetting(
+            "clearCustomBlocks", "清空自定义过滤", "清除所有手动添加的过滤方块", () -> {
+                ConfigManager.customRadarIgnoreBlocks.clear();
+                ConfigManager.saveAsync();
+                Minecraft mc = Minecraft.getInstance();
+                if (mc.player != null) {
+                    mc.player.displayClientMessage(Component.literal("§b[Ye雷达] §e已清空自定义过滤方块"), false);
+                }
+            }
     ));
 
     public final BoolSetting chests = addSetting(new BoolSetting("chests", "箱子木桶", "高亮箱子、陷阱箱与木桶", true));
@@ -85,10 +120,11 @@ public class StashRadarModule extends Module {
         if (tickCounter % 10 != 0) return;
 
         Level level = mc.level;
-        int cr = Math.max(2, Math.min(10, (int) Math.round(rangeChunks.get())));
+        int cr = Math.max(2, Math.min(32, (int) Math.round(rangeChunks.get())));
         int pcx = mc.player.chunkPosition().x;
         int pcz = mc.player.chunkPosition().z;
         boolean filterNat = ignoreNatural.get();
+        boolean filterNether = ignoreNetherBricks.get();
 
         List<StorageEntry> found = new ArrayList<>();
         int shulkersFound = 0;
@@ -105,7 +141,7 @@ public class StashRadarModule extends Module {
                         shulkersFound++;
                         if (alertedPositions.add(pos.asLong())) playAlert = true;
                     } else if ((be instanceof ChestBlockEntity || be instanceof BarrelBlockEntity) && chests.get()) {
-                        if (filterNat && isNaturalContainer(level, pos, be)) continue;
+                        if (filterNat && isNaturalContainer(level, pos, be, filterNether)) continue;
                         found.add(new StorageEntry(pos, 0xFFF59E0B, 0x33F59E0B, chestTracer.get()));
                         if (alertedPositions.add(pos.asLong())) playAlert = true;
                     } else if (be instanceof EnderChestBlockEntity && enderChests.get()) {
@@ -131,10 +167,11 @@ public class StashRadarModule extends Module {
         totalCount = found.size();
     }
 
-    private static boolean isNaturalContainer(Level level, BlockPos pos, BlockEntity be) {
+    private static boolean isNaturalContainer(Level level, BlockPos pos, BlockEntity be, boolean filterNether) {
         if (be instanceof RandomizableContainerBlockEntity rce && rce.getLootTable() != null) {
             return true;
         }
+        boolean hasCustom = !ConfigManager.customRadarIgnoreBlocks.isEmpty();
         BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
         for (int dx = -2; dx <= 2; dx++) {
             for (int dy = -1; dy <= 2; dy++) {
@@ -148,6 +185,17 @@ public class StashRadarModule extends Module {
                             || b == Blocks.TERRACOTTA || b == Blocks.INFESTED_STONE_BRICKS
                             || b == Blocks.SUSPICIOUS_SAND || b == Blocks.SUSPICIOUS_GRAVEL) {
                         return true;
+                    }
+                    if (filterNether && (b == Blocks.NETHER_BRICKS || b == Blocks.RED_NETHER_BRICKS
+                            || b == Blocks.CHISELED_NETHER_BRICKS || b == Blocks.CRACKED_NETHER_BRICKS
+                            || b == Blocks.NETHER_BRICK_FENCE || b == Blocks.NETHER_BRICK_STAIRS)) {
+                        return true;
+                    }
+                    if (hasCustom) {
+                        String id = BuiltInRegistries.BLOCK.getKey(b).toString();
+                        if (ConfigManager.customRadarIgnoreBlocks.contains(id)) {
+                            return true;
+                        }
                     }
                 }
             }

@@ -42,6 +42,10 @@ public class SoulRingsModule extends Module {
             "hideInFirstPerson", "第一人称隐藏", "第一人称视角隐藏魂环", true
     ));
 
+    public final BoolSetting showWhenGliding = addSetting(new BoolSetting(
+            "showWhenGliding", "滑翔时显示", "鞘翅滑翔时是否继续渲染魂环", true
+    ));
+
     public SoulRingsModule() {
         super("soul_rings", "炫酷魂环", "Soul Rings", "绑定玩家身上 0 延迟跟随的多层质感符文魂环", Category.VISUAL);
     }

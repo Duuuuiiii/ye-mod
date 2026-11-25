@@ -27,7 +27,11 @@ import java.util.Set;
  */
 public class PortalFinderModule extends Module {
     public final DoubleSetting rangeChunks = addSetting(new DoubleSetting(
-            "rangeChunks", "扫描半径", "扫描周围多少个区块内的下界传送门", 6.0, 2.0, 12.0, 1.0
+            "rangeChunks", "扫描半径", "扫描周围多少个区块内的下界传送门", 12.0, 2.0, 32.0, 1.0
+    ));
+
+    public final BoolSetting onlyOverworld = addSetting(new BoolSetting(
+            "onlyOverworld", "仅主世界", "仅在主世界查找传送门，下界不扫描", true
     ));
 
     public final BoolSetting tracerLine = addSetting(new BoolSetting(
@@ -59,20 +63,20 @@ public class PortalFinderModule extends Module {
             portalCenters = List.of();
             return;
         }
+        if (onlyOverworld.get() && mc.level.dimension() != Level.OVERWORLD) {
+            portalCenters = List.of();
+            return;
+        }
         tickCounter++;
         if (tickCounter % 20 != 0) return;
 
         Level level = mc.level;
-        int cr = Math.max(2, Math.min(12, (int) Math.round(rangeChunks.get())));
+        int cr = Math.max(2, Math.min(32, (int) Math.round(rangeChunks.get())));
         int pcx = mc.player.chunkPosition().x;
         int pcz = mc.player.chunkPosition().z;
 
         List<BlockPos> rawPortals = new ArrayList<>();
         BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
-        int minY = Math.max(level.getMinY(), mc.player.getBlockY() - 64);
-        int maxY = Math.min(level.getMaxY() - 1, mc.player.getBlockY() + 64);
-        int minSec = level.getSectionIndex(minY);
-        int maxSec = level.getSectionIndex(maxY);
 
         for (int cx = pcx - cr; cx <= pcx + cr; cx++) {
             for (int cz = pcz - cr; cz <= pcz + cr; cz++) {
@@ -81,14 +85,13 @@ public class PortalFinderModule extends Module {
                 LevelChunkSection[] sections = chunk.getSections();
                 int bx = cx << 4;
                 int bz = cz << 4;
-                for (int secIdx = minSec; secIdx <= maxSec; secIdx++) {
-                    if (secIdx < 0 || secIdx >= sections.length) continue;
+                for (int secIdx = 0; secIdx < sections.length; secIdx++) {
                     LevelChunkSection sec = sections[secIdx];
                     if (sec.hasOnlyAir() || !sec.maybeHas(s -> s.is(Blocks.NETHER_PORTAL))) continue;
                     int syBase = level.getSectionYFromSectionIndex(secIdx) << 4;
-                    for (int y = 0; y < 16; y += 2) {
-                        for (int x = 0; x < 16; x += 2) {
-                            for (int z = 0; z < 16; z += 2) {
+                    for (int y = 0; y < 16; y++) {
+                        for (int x = 0; x < 16; x++) {
+                            for (int z = 0; z < 16; z++) {
                                 if (sec.getBlockState(x, y, z).is(Blocks.NETHER_PORTAL)) {
                                     m.set(bx + x, syBase + y, bz + z);
                                     rawPortals.add(m.immutable());

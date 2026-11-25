@@ -2,6 +2,7 @@ package com.ye.mod.core;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -37,6 +38,7 @@ public final class ConfigManager {
     public static volatile boolean english = false;
     public static volatile int widgetX = -1;
     public static volatile int widgetY = -1;
+    public static final java.util.Set<String> customRadarIgnoreBlocks = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     public enum ThemeAccent {
         APPLE_BLUE("苹果蓝", "Blue", 0xFF0A84FF),
@@ -175,6 +177,12 @@ public final class ConfigManager {
             if (root.has("english")) {
                 english = root.get("english").getAsBoolean();
             }
+            if (root.has("customRadarIgnoreBlocks") && root.get("customRadarIgnoreBlocks").isJsonArray()) {
+                customRadarIgnoreBlocks.clear();
+                for (JsonElement el : root.getAsJsonArray("customRadarIgnoreBlocks")) {
+                    customRadarIgnoreBlocks.add(el.getAsString());
+                }
+            }
             if (root.has("hudSlots") && root.get("hudSlots").isJsonObject()) {
                 JsonObject hObj = root.getAsJsonObject("hudSlots");
                 for (HudSlot slot : HUD_SLOTS.values()) {
@@ -257,6 +265,11 @@ public final class ConfigManager {
         root.addProperty("lightTheme", lightTheme);
         root.addProperty("blurBackground", blurBackground);
         root.addProperty("english", english);
+        JsonArray ignoreArr = new JsonArray();
+        for (String id : customRadarIgnoreBlocks) {
+            ignoreArr.add(id);
+        }
+        root.add("customRadarIgnoreBlocks", ignoreArr);
 
         JsonObject hObj = new JsonObject();
         for (HudSlot slot : HUD_SLOTS.values()) {

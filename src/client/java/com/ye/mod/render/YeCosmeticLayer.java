@@ -82,7 +82,7 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
         if (isSelf) {
             SoulRingsModule rings = ModuleManager.get(SoulRingsModule.class);
             // Auto-hide Soul Rings when elytra-gliding
-            if (rings != null && rings.isEnabled() && !state.isFallFlying
+            if (rings != null && rings.isEnabled() && (rings.showWhenGliding.get() || !state.isFallFlying)
                     && !(rings.hideInFirstPerson.get() && mc.options.getCameraType().isFirstPerson())) {
                 renderSoulRings(poseStack, collector, rings);
             }
