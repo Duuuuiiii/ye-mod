@@ -46,18 +46,24 @@ public class YeMenuScreen extends Screen {
         int x;
         int y;
         boolean collapsed;
+        float expandAnim = 1.0f;
 
         PanelState(int x, int y, boolean collapsed) {
             this.x = x;
             this.y = y;
             this.collapsed = collapsed;
+            this.expandAnim = collapsed ? 0.0f : 1.0f;
         }
     }
 
     private static final Map<Category, PanelState> PANEL_STATES = new EnumMap<>(Category.class);
+    private static final Map<String, Float> MODULE_ENABLE_ANIM = new java.util.HashMap<>();
+    private static final Map<String, Float> MODULE_HOVER_ANIM = new java.util.HashMap<>();
     private static final int PANEL_W = 148;
     private static final int HEADER_H = 28;
     private static final int ROW_H = 24;
+
+    private float openProgress = 0.0f;
 
     private String searchQuery = "";
     private boolean searchFocused = false;
@@ -122,66 +128,89 @@ public class YeMenuScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         hitAreas.clear();
-        g.fill(0, 0, this.width, this.height, AppleUiRenderer.BG_BACKDROP);
+        openProgress = AppleUiRenderer.smooth(openProgress, 1.0f, 12.0f, 0.02f);
+        g.fill(0, 0, this.width, this.height, AppleUiRenderer.bgBackdrop());
 
-        renderTopBar(g, mouseX, mouseY);
+        int slideOffset = Math.round((1.0f - openProgress) * 14.0f);
+        g.pose().pushMatrix();
+        g.pose().translate(0.0f, slideOffset);
+
+        renderTopBar(g, mouseX, mouseY - slideOffset);
 
         if (overlayMode == OverlayMode.NONE) {
-            String hoveredDesc = renderCategoryPanels(g, mouseX, mouseY);
+            String hoveredDesc = renderCategoryPanels(g, mouseX, mouseY - slideOffset);
             renderBottomHint(g, hoveredDesc);
         } else if (overlayMode == OverlayMode.STATS) {
-            renderStatsOverlay(g, mouseX, mouseY);
+            renderStatsOverlay(g, mouseX, mouseY - slideOffset);
         } else if (overlayMode == OverlayMode.KEYBINDS) {
-            renderKeybindsOverlay(g, mouseX, mouseY);
+            renderKeybindsOverlay(g, mouseX, mouseY - slideOffset);
         }
+
+        g.pose().popMatrix();
     }
 
     private void renderTopBar(GuiGraphics g, int mouseX, int mouseY) {
-        int barW = Math.min(620, this.width - 24);
+        int barW = Math.min(730, this.width - 20);
         int barH = 34;
         int bx = (this.width - barW) / 2;
         int by = 12;
-        AppleUiRenderer.drawRoundedRect(g, bx, by, barW, barH, 11, AppleUiRenderer.BG_WINDOW);
+        AppleUiRenderer.drawRoundedRect(g, bx, by, barW, barH, 11, AppleUiRenderer.bgWindow());
 
         // Brand pill
-        int brandW = 68;
+        int brandW = 64;
         AppleUiRenderer.drawRoundedRect(g, bx + 6, by + 5, brandW, 24, 7, AppleUiRenderer.APPLE_BLUE);
-        g.drawCenteredString(this.font, "Ye 1.0.6", bx + 6 + brandW / 2, by + 13, AppleUiRenderer.TEXT_PRIMARY);
+        AppleUiRenderer.drawCenteredText(g, this.font, "Ye 1.0.7", bx + 6 + brandW / 2, by + 13, AppleUiRenderer.TEXT_PRIMARY);
 
         // Action buttons on right
         int btnH = 24;
         int btnY = by + 5;
 
-        int resetW = 64;
+        int resetW = 58;
         int resetX = bx + barW - 6 - resetW;
         boolean resetHover = inBounds(mouseX, mouseY, resetX, btnY, resetW, btnH);
-        AppleUiRenderer.drawRoundedRect(g, resetX, btnY, resetW, btnH, 7, resetHover ? AppleUiRenderer.BG_CARD_HOVER : AppleUiRenderer.BG_CARD);
-        g.drawCenteredString(this.font, "重置布局", resetX + resetW / 2, btnY + 8, AppleUiRenderer.TEXT_PRIMARY);
+        AppleUiRenderer.drawRoundedRect(g, resetX, btnY, resetW, btnH, 7, resetHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawCenteredText(g, this.font, "重置布局", resetX + resetW / 2, btnY + 8, AppleUiRenderer.textPrimary());
         hitAreas.add(new HitArea(resetX, btnY, resetW, btnH, () -> {
             overlayMode = OverlayMode.NONE;
             resetPanelLayout();
         }, null));
 
-        int keyW = 66;
-        int keyX = resetX - 6 - keyW;
+        int fontW = 58;
+        int fontX = resetX - 5 - fontW;
+        boolean fontHover = inBounds(mouseX, mouseY, fontX, btnY, fontW, btnH);
+        AppleUiRenderer.drawRoundedRect(g, fontX, btnY, fontW, btnH, 7, fontHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawCenteredText(g, this.font, "字:" + AppleUiRenderer.fontStyle.label, fontX + fontW / 2, btnY + 8, AppleUiRenderer.textPrimary());
+        hitAreas.add(new HitArea(fontX, btnY, fontW, btnH, AppleUiRenderer::cycleFontStyle, null));
+
+        int themeW = 54;
+        int themeX = fontX - 5 - themeW;
+        boolean themeHover = inBounds(mouseX, mouseY, themeX, btnY, themeW, btnH);
+        AppleUiRenderer.drawRoundedRect(g, themeX, btnY, themeW, btnH, 7, themeHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawCenteredText(g, this.font, AppleUiRenderer.lightTheme ? "☀ 浅色" : "🌙 深色", themeX + themeW / 2, btnY + 8, AppleUiRenderer.textPrimary());
+        hitAreas.add(new HitArea(themeX, btnY, themeW, btnH, AppleUiRenderer::toggleTheme, null));
+
+        int keyW = 58;
+        int keyX = themeX - 5 - keyW;
         boolean keyActive = overlayMode == OverlayMode.KEYBINDS;
         boolean keyHover = inBounds(mouseX, mouseY, keyX, btnY, keyW, btnH);
         AppleUiRenderer.drawRoundedRect(g, keyX, btnY, keyW, btnH, 7,
-                keyActive ? AppleUiRenderer.APPLE_BLUE : (keyHover ? AppleUiRenderer.BG_CARD_HOVER : AppleUiRenderer.BG_CARD));
-        g.drawCenteredString(this.font, "按键设置", keyX + keyW / 2, btnY + 8, AppleUiRenderer.TEXT_PRIMARY);
+                keyActive ? AppleUiRenderer.APPLE_BLUE : (keyHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard()));
+        AppleUiRenderer.drawCenteredText(g, this.font, "按键设置", keyX + keyW / 2, btnY + 8,
+                keyActive ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
         hitAreas.add(new HitArea(keyX, btnY, keyW, btnH, () -> {
             overlayMode = (overlayMode == OverlayMode.KEYBINDS) ? OverlayMode.NONE : OverlayMode.KEYBINDS;
             searchFocused = false;
             muteInputFocused = false;
         }, null));
 
-        int statsW = 66;
-        int statsX = keyX - 6 - statsW;
+        int statsW = 58;
+        int statsX = keyX - 5 - statsW;
         boolean statsActive = overlayMode == OverlayMode.STATS;
         boolean statsHover = inBounds(mouseX, mouseY, statsX, btnY, statsW, btnH);
         AppleUiRenderer.drawRoundedRect(g, statsX, btnY, statsW, btnH, 7,
-                statsActive ? AppleUiRenderer.APPLE_BLUE : (statsHover ? AppleUiRenderer.BG_CARD_HOVER : AppleUiRenderer.BG_CARD));
-        g.drawCenteredString(this.font, "玩家统计", statsX + statsW / 2, btnY + 8, AppleUiRenderer.TEXT_PRIMARY);
+                statsActive ? AppleUiRenderer.APPLE_BLUE : (statsHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard()));
+        AppleUiRenderer.drawCenteredText(g, this.font, "玩家统计", statsX + statsW / 2, btnY + 8,
+                statsActive ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
         hitAreas.add(new HitArea(statsX, btnY, statsW, btnH, () -> {
             overlayMode = (overlayMode == OverlayMode.STATS) ? OverlayMode.NONE : OverlayMode.STATS;
             searchFocused = false;
@@ -190,14 +219,14 @@ public class YeMenuScreen extends Screen {
 
         // Search box in remaining center space
         int searchX = bx + 6 + brandW + 8;
-        int searchW = Math.max(80, statsX - 8 - searchX);
-        int searchBg = searchFocused ? 0xFF283548 : AppleUiRenderer.BG_CARD;
+        int searchW = Math.max(70, statsX - 8 - searchX);
+        int searchBg = searchFocused ? (AppleUiRenderer.lightTheme ? 0xFFDCE4F2 : 0xFF283548) : AppleUiRenderer.bgCard();
         AppleUiRenderer.drawRoundedRect(g, searchX, btnY, searchW, btnH, 7, searchBg);
         String displaySearch = searchQuery.isEmpty()
                 ? (searchFocused ? "|" : "搜索模块...")
                 : (searchQuery + (searchFocused ? "|" : ""));
-        int searchColor = searchQuery.isEmpty() && !searchFocused ? AppleUiRenderer.TEXT_TERTIARY : AppleUiRenderer.TEXT_PRIMARY;
-        g.drawString(this.font, trimToWidth(displaySearch, searchW - 16), searchX + 8, btnY + 8, searchColor, false);
+        int searchColor = searchQuery.isEmpty() && !searchFocused ? AppleUiRenderer.textTertiary() : AppleUiRenderer.textPrimary();
+        AppleUiRenderer.drawText(g, this.font, trimToWidth(displaySearch, searchW - 14), searchX + 8, btnY + 8, searchColor);
         hitAreas.add(new HitArea(searchX, btnY, searchW, btnH, () -> {
             overlayMode = OverlayMode.NONE;
             searchFocused = true;
@@ -221,65 +250,69 @@ public class YeMenuScreen extends Screen {
             state.x = px;
             state.y = py;
 
-            boolean expanded = !state.collapsed && !modules.isEmpty();
-            int bodyH = expanded ? (modules.size() * ROW_H + 6) : 0;
-            int totalH = HEADER_H + bodyH;
+            float targetExpand = (!state.collapsed && !modules.isEmpty()) ? 1.0f : 0.0f;
+            state.expandAnim = AppleUiRenderer.smooth(state.expandAnim, targetExpand, 14.0f, 0.02f);
+
+            int fullBodyH = modules.isEmpty() ? 0 : (modules.size() * ROW_H + 6);
+            int animBodyH = Math.round(fullBodyH * state.expandAnim);
+            int totalH = HEADER_H + animBodyH;
 
             // Panel background
-            AppleUiRenderer.drawRoundedRect(g, px, py, PANEL_W, totalH, 10, AppleUiRenderer.BG_WINDOW);
+            AppleUiRenderer.drawRoundedRect(g, px, py, PANEL_W, totalH, 10, AppleUiRenderer.bgWindow());
 
             // Header bar
-            AppleUiRenderer.drawRoundedRect(g, px, py, PANEL_W, HEADER_H, 10, AppleUiRenderer.BG_SIDEBAR);
-            // Category accent dot
+            AppleUiRenderer.drawRoundedRect(g, px, py, PANEL_W, HEADER_H, 10, AppleUiRenderer.bgSidebar());
             AppleUiRenderer.drawCircle(g, px + 9, py + 10, 8, cat.getAccentColor());
-            g.drawString(this.font, cat.getDisplayName(), px + 22, py + 10, AppleUiRenderer.TEXT_PRIMARY, false);
+            AppleUiRenderer.drawText(g, this.font, cat.getDisplayName(), px + 22, py + 10, AppleUiRenderer.textPrimary());
 
             String countStr = modules.size() + " " + (state.collapsed ? "▸" : "▾");
-            g.drawString(this.font, countStr, px + PANEL_W - 9 - this.font.width(countStr), py + 10, AppleUiRenderer.TEXT_TERTIARY, false);
+            AppleUiRenderer.drawText(g, this.font, countStr, px + PANEL_W - 9 - this.font.width(countStr), py + 10, AppleUiRenderer.textTertiary());
 
-            // Header hit area: left click drags (handled in mouseClicked), right click toggles collapse
             hitAreas.add(new HitArea(px, py, PANEL_W, HEADER_H, null, () -> state.collapsed = !state.collapsed));
 
-            if (expanded) {
+            if (animBodyH > 4) {
+                g.enableScissor(px, py + HEADER_H, px + PANEL_W, py + HEADER_H + animBodyH);
                 int ry = py + HEADER_H + 3;
                 for (Module m : modules) {
                     int rowX = px + 4;
                     int rowW = PANEL_W - 8;
                     boolean hover = inBounds(mouseX, mouseY, rowX, ry, rowW, ROW_H - 2);
-                    if (hover) {
+                    if (hover && !state.collapsed) {
                         hoveredDesc = m.getName() + " — " + m.getDescription() + "  (左键开关 · 右键设置)";
                     }
 
-                    int rowBg;
-                    if (m.isEnabled()) {
-                        rowBg = hover ? 0xCC1E40AF : 0xAA1D4ED8;
-                    } else {
-                        rowBg = hover ? AppleUiRenderer.BG_CARD_HOVER : AppleUiRenderer.BG_CARD;
-                    }
+                    float enAnim = AppleUiRenderer.smooth(MODULE_ENABLE_ANIM.getOrDefault(m.getId(), m.isEnabled() ? 1f : 0f), m.isEnabled() ? 1f : 0f, 14.0f, 0.02f);
+                    float hvAnim = AppleUiRenderer.smooth(MODULE_HOVER_ANIM.getOrDefault(m.getId(), 0f), hover ? 1f : 0f, 14.0f, 0.02f);
+                    MODULE_ENABLE_ANIM.put(m.getId(), enAnim);
+                    MODULE_HOVER_ANIM.put(m.getId(), hvAnim);
+
+                    int offBg = AppleUiRenderer.lerpColor(AppleUiRenderer.bgCard(), AppleUiRenderer.bgCardHover(), hvAnim);
+                    int onBg = AppleUiRenderer.activeRowBg(hover);
+                    int rowBg = AppleUiRenderer.lerpColor(offBg, onBg, enAnim);
                     AppleUiRenderer.drawRoundedRect(g, rowX, ry, rowW, ROW_H - 2, 6, rowBg);
 
-                    // Status dot
-                    int dotColor = m.isEnabled() ? AppleUiRenderer.APPLE_GREEN : 0xFF475569;
+                    int dotColor = AppleUiRenderer.lerpColor(0xFF64748B, AppleUiRenderer.APPLE_GREEN, enAnim);
                     AppleUiRenderer.drawCircle(g, rowX + 7, ry + 8, 6, dotColor);
 
-                    // Module name
                     String name = trimToWidth(m.getName(), rowW - 34);
-                    g.drawString(this.font, name, rowX + 17, ry + 7, AppleUiRenderer.TEXT_PRIMARY, false);
+                    AppleUiRenderer.drawText(g, this.font, name, rowX + 17, ry + 7, AppleUiRenderer.textPrimary());
 
-                    // Settings gear indicator if module has settings
                     if (!m.getSettings().isEmpty()) {
-                        g.drawString(this.font, "⚙", rowX + rowW - 13, ry + 7, AppleUiRenderer.TEXT_TERTIARY, false);
+                        AppleUiRenderer.drawText(g, this.font, "⚙", rowX + rowW - 13, ry + 7, AppleUiRenderer.textTertiary());
                     }
 
-                    hitAreas.add(new HitArea(rowX, ry, rowW, ROW_H - 2,
-                            () -> {
-                                m.toggle();
-                                ConfigManager.saveAsync();
-                            },
-                            () -> Minecraft.getInstance().setScreen(new ModuleSettingsScreen(this, m))));
+                    if (!state.collapsed) {
+                        hitAreas.add(new HitArea(rowX, ry, rowW, ROW_H - 2,
+                                () -> {
+                                    m.toggle();
+                                    ConfigManager.saveAsync();
+                                },
+                                () -> Minecraft.getInstance().setScreen(new ModuleSettingsScreen(this, m))));
+                    }
 
                     ry += ROW_H;
                 }
+                g.disableScissor();
             }
         }
         return hoveredDesc;
@@ -293,8 +326,8 @@ public class YeMenuScreen extends Screen {
         int pw = Math.min(this.width - 24, tw + 20);
         int px = (this.width - pw) / 2;
         int py = this.height - 26;
-        AppleUiRenderer.drawRoundedRect(g, px, py, pw, 18, 9, 0xBB0F172A);
-        g.drawCenteredString(this.font, trimToWidth(text, pw - 14), this.width / 2, py + 5, AppleUiRenderer.TEXT_SECONDARY);
+        AppleUiRenderer.drawRoundedRect(g, px, py, pw, 18, 9, AppleUiRenderer.bgWindow());
+        AppleUiRenderer.drawCenteredText(g, this.font, trimToWidth(text, pw - 14), this.width / 2, py + 5, AppleUiRenderer.textSecondary());
     }
 
     private void renderStatsOverlay(GuiGraphics g, int mouseX, int mouseY) {

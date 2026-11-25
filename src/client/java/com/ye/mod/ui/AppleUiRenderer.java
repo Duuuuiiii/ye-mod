@@ -2,9 +2,11 @@ package com.ye.mod.ui;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
 /**
@@ -26,6 +28,59 @@ public final class AppleUiRenderer {
     public static final int TEXT_SECONDARY = 0xFF98989D;
     public static final int TEXT_TERTIARY = 0xFF636366;
     public static final int TOGGLE_OFF = 0xFF3A3A3C;
+
+    public enum FontStyle {
+        STANDARD("标准"),
+        BOLD("粗体"),
+        ITALIC("斜体"),
+        CLEAN("无影");
+
+        public final String label;
+        FontStyle(String label) { this.label = label; }
+    }
+
+    public static boolean lightTheme = false;
+    public static FontStyle fontStyle = FontStyle.STANDARD;
+
+    public static int bgBackdrop() { return lightTheme ? 0x45E2E8F0 : BG_BACKDROP; }
+    public static int bgWindow() { return lightTheme ? 0xF2F4F6FA : BG_WINDOW; }
+    public static int bgSidebar() { return lightTheme ? 0xF8E8ECF4 : BG_SIDEBAR; }
+    public static int bgCard() { return lightTheme ? 0xFFFFFFFF : BG_CARD; }
+    public static int bgCardHover() { return lightTheme ? 0xFFE5EAF3 : BG_CARD_HOVER; }
+    public static int textPrimary() { return lightTheme ? 0xFF111827 : TEXT_PRIMARY; }
+    public static int textSecondary() { return lightTheme ? 0xFF4B5563 : TEXT_SECONDARY; }
+    public static int textTertiary() { return lightTheme ? 0xFF6B7280 : TEXT_TERTIARY; }
+    public static int activeRowBg(boolean hover) {
+        if (lightTheme) return hover ? 0xFFD6E8FF : 0xFFE6F0FF;
+        return hover ? 0xCC1E40AF : 0xAA1D4ED8;
+    }
+
+    public static void toggleTheme() { lightTheme = !lightTheme; }
+    public static void cycleFontStyle() {
+        FontStyle[] vals = FontStyle.values();
+        fontStyle = vals[(fontStyle.ordinal() + 1) % vals.length];
+    }
+
+    public static void drawText(GuiGraphics g, Font font, String text, int x, int y, int color) {
+        if (text == null) return;
+        boolean shadow = (fontStyle != FontStyle.CLEAN) && !lightTheme;
+        Component comp = switch (fontStyle) {
+            case BOLD -> Component.literal(text).withStyle(s -> s.withBold(true));
+            case ITALIC -> Component.literal(text).withStyle(s -> s.withItalic(true));
+            default -> Component.literal(text);
+        };
+        g.drawString(font, comp, x, y, color, shadow);
+    }
+
+    public static void drawCenteredText(GuiGraphics g, Font font, String text, int cx, int y, int color) {
+        if (text == null) return;
+        int w = font.width(switch (fontStyle) {
+            case BOLD -> Component.literal(text).withStyle(s -> s.withBold(true));
+            case ITALIC -> Component.literal(text).withStyle(s -> s.withItalic(true));
+            default -> Component.literal(text);
+        });
+        drawText(g, font, text, cx - w / 2, y, color);
+    }
 
     private static final int TEX_SIZE = 64;
     private static final int CORNER_PX = 20;

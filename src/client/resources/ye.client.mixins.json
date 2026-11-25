@@ -5,16 +5,20 @@
   "client": [
     "AbstractClientPlayerMixin",
     "AbstractSignRendererMixin",
+    "AvatarRendererMixin",
     "BlockEntityRenderDispatcherMixin",
     "ChatComponentMixin",
     "DebugRendererMixin",
     "EntityRenderDispatcherMixin",
+    "FogRendererMixin",
     "GameRendererMixin",
     "GuiMixin",
     "LocalPlayerMixin",
     "ParticleEngineMixin",
     "ScreenEffectRendererMixin",
-    "SoundEngineMixin"
+    "SkyRendererMixin",
+    "SoundEngineMixin",
+    "WingsLayerMixin"
   ],
   "injectors": {
     "defaultRequire": 1
