@@ -12,6 +12,7 @@ import com.ye.mod.modules.visual.SoulRingsModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.EntityModelSet;
 import net.minecraft.client.model.geom.ModelLayers;
+import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.monster.dragon.EnderDragonModel;
 import net.minecraft.client.model.monster.phantom.PhantomModel;
 import net.minecraft.client.model.player.PlayerModel;
@@ -42,12 +43,22 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
 
     private final EnderDragonModel dragonModel;
     private final PhantomModel phantomModel;
+    private final ModelPart dragonLeftWing;
+    private final ModelPart dragonLeftWingTip;
+    private final ModelPart dragonRightWing;
+    private final ModelPart dragonRightWingTip;
     private final EnderDragonRenderState dragonState = new EnderDragonRenderState();
     private final PhantomRenderState phantomState = new PhantomRenderState();
 
     public YeCosmeticLayer(RenderLayerParent<AvatarRenderState, PlayerModel> parent, EntityModelSet modelSet) {
         super(parent);
-        this.dragonModel = new EnderDragonModel(modelSet.bakeLayer(ModelLayers.ENDER_DRAGON));
+        ModelPart dragonRoot = modelSet.bakeLayer(ModelLayers.ENDER_DRAGON);
+        this.dragonModel = new EnderDragonModel(dragonRoot);
+        ModelPart dragonBody = dragonRoot.getChild("body");
+        this.dragonLeftWing = dragonBody.getChild("left_wing");
+        this.dragonLeftWingTip = this.dragonLeftWing.getChild("left_wing_tip");
+        this.dragonRightWing = dragonBody.getChild("right_wing");
+        this.dragonRightWingTip = this.dragonRightWing.getChild("right_wing_tip");
         this.phantomModel = new PhantomModel(modelSet.bakeLayer(ModelLayers.PHANTOM));
     }
 
@@ -180,51 +191,70 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
                                     AvatarRenderState state, DragonWingsModule wings) {
         long now = System.currentTimeMillis();
         int tint = wings.getTintColor(now);
-        int secondaryTint = darken(tint, 0.80f);
-        float sc = wings.scale.get().floatValue();
+        float sc = wings.scale.get().floatValue() * 0.28f;
         float speed = wings.flapSpeed.get().floatValue();
-        DragonWingsModule.WingStyle style = wings.wingStyle.get();
-        Identifier tex = YeHighResTextures.getWingTexture(style);
 
         float rate = state.isFallFlying ? 6.8f : (state.walkAnimationSpeed > 0.1f ? 4.2f : 2.0f);
         float t = (now % 60000L) / 1000.0f * speed * rate;
-        // Spread outward & gently back (28..42 deg) so wings NEVER collide behind the back or clip arms!
-        float flap = (float) Math.sin(t) * (state.isFallFlying ? 16.0f : 7.5f) + 32.0f;
+        float flapRad = (float) Math.sin(t) * (state.isFallFlying ? 0.42f : 0.20f) - 0.12f;
 
-        for (int side : new int[]{-1, 1}) {
-            poseStack.pushPose();
-            poseStack.translate(side * 0.11f, state.isCrouching ? 0.26f : 0.12f, 0.16f);
-            poseStack.scale(sc, sc, sc);
-            poseStack.mulPose(Axis.YP.rotationDegrees(-side * flap));
-            poseStack.mulPose(Axis.ZP.rotationDegrees(side * -10.0f));
-            poseStack.mulPose(Axis.XP.rotationDegrees(8.0f));
+        float baseY = state.isCrouching ? 0.24f : 0.10f;
 
-            // Primary sculpted 256x256 wing plane (curved in Z for 3D depth)
-            collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(tex), (pose, vc) -> {
-                float w = side * 1.15f;
-                float hTop = -0.35f;
-                float hBot = 0.78f;
-                // Curved 2-segment wing mesh (inner half + outer half angled slightly back)
-                drawDoubleUvQuad(pose, vc, 0xF000F0, tint,
-                        0.0f, hTop, 0.0f, 0.0f, 0.0f,
-                        w * 0.5f, hTop - 0.06f, 0.05f, 0.5f, 0.0f,
-                        w * 0.5f, hBot + 0.04f, 0.08f, 0.5f, 1.0f,
-                        0.0f, hBot, 0.02f, 0.0f, 1.0f);
-                drawDoubleUvQuad(pose, vc, 0xF000F0, tint,
-                        w * 0.5f, hTop - 0.06f, 0.05f, 0.5f, 0.0f,
-                        w, hTop - 0.14f, 0.18f, 1.0f, 0.0f,
-                        w, hBot - 0.08f, 0.20f, 1.0f, 1.0f,
-                        w * 0.5f, hBot + 0.04f, 0.08f, 0.5f, 1.0f);
+        // Left 3D Vanilla EnderDragon Wing (with 2nd articulated wing_tip)
+        poseStack.pushPose();
+        poseStack.translate(0.10f, baseY, 0.16f);
+        poseStack.scale(sc, sc, sc);
+        dragonLeftWing.x = 0.0f;
+        dragonLeftWing.y = 0.0f;
+        dragonLeftWing.z = 0.0f;
+        dragonLeftWing.xRot = 0.10f;
+        dragonLeftWing.yRot = -0.36f;
+        dragonLeftWing.zRot = flapRad;
+        dragonLeftWingTip.xRot = 0.0f;
+        dragonLeftWingTip.yRot = -0.14f;
+        dragonLeftWingTip.zRot = -flapRad * 0.65f - 0.38f;
+        collector.submitModelPart(
+                dragonLeftWing,
+                poseStack,
+                RenderTypes.entityCutoutNoCull(DRAGON_TEX),
+                packedLight,
+                OverlayTexture.NO_OVERLAY,
+                null,
+                false,
+                false,
+                tint,
+                null,
+                state.outlineColor
+        );
+        poseStack.popPose();
 
-                // Secondary layered plumage/depth plane offset slightly behind
-                drawDoubleUvQuad(pose, vc, packedLight, secondaryTint,
-                        0.0f, hTop + 0.12f, 0.05f, 0.0f, 0.0f,
-                        w * 0.85f, hTop + 0.02f, 0.16f, 1.0f, 0.0f,
-                        w * 0.85f, hBot - 0.06f, 0.18f, 1.0f, 1.0f,
-                        0.0f, hBot + 0.06f, 0.07f, 0.0f, 1.0f);
-            });
-            poseStack.popPose();
-        }
+        // Right 3D Vanilla EnderDragon Wing (with 2nd articulated wing_tip)
+        poseStack.pushPose();
+        poseStack.translate(-0.10f, baseY, 0.16f);
+        poseStack.scale(sc, sc, sc);
+        dragonRightWing.x = 0.0f;
+        dragonRightWing.y = 0.0f;
+        dragonRightWing.z = 0.0f;
+        dragonRightWing.xRot = 0.10f;
+        dragonRightWing.yRot = 0.36f;
+        dragonRightWing.zRot = -flapRad;
+        dragonRightWingTip.xRot = 0.0f;
+        dragonRightWingTip.yRot = 0.14f;
+        dragonRightWingTip.zRot = flapRad * 0.65f + 0.38f;
+        collector.submitModelPart(
+                dragonRightWing,
+                poseStack,
+                RenderTypes.entityCutoutNoCull(DRAGON_TEX),
+                packedLight,
+                OverlayTexture.NO_OVERLAY,
+                null,
+                false,
+                false,
+                tint,
+                null,
+                state.outlineColor
+        );
+        poseStack.popPose();
     }
 
     private void renderFlightMount(PoseStack poseStack, SubmitNodeCollector collector, int packedLight,

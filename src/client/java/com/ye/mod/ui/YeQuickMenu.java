@@ -17,6 +17,7 @@ import com.ye.mod.modules.system.PlayerStatsManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.sounds.SoundEvents;
 
@@ -265,15 +266,16 @@ public final class YeQuickMenu {
         g.enableScissor(x, listY, x + w, listY + listH);
         int ry = listY - (int) Math.round(scrollOffset);
 
-        // Quick Cape/Skin gallery rows
+        // Quick Cape/Skin gallery rows with image previews
         if (activeModule instanceof CustomCapeModule cm) {
             for (CapeManager.CapeEntry ce : CapeManager.getAllCapes()) {
-                if (ry + 18 >= listY && ry <= listY + listH) {
+                if (ry + 20 >= listY && ry <= listY + listH) {
                     boolean sel = ce.id().equals(cm.selectedCape.get());
-                    AppleUiRenderer.drawRoundedRect(g, x, ry, w, 17, 5, sel ? accent : AppleUiRenderer.bgCard());
-                    AppleUiRenderer.drawText(g, font, ce.displayName(), x + 6, ry + 5, sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
-                    if (ry >= listY && ry + 17 <= listY + listH) {
-                        HIT_RECTS.add(new HitRect(x, ry, w, 17, () -> {
+                    AppleUiRenderer.drawRoundedRect(g, x, ry, w, 20, 5, sel ? accent : AppleUiRenderer.bgCard());
+                    g.blit(RenderPipelines.GUI_TEXTURED, ce.textureId(), x + 4, ry + 2, 1.0f, 1.0f, 10, 16, 10, 16, 64, 32);
+                    AppleUiRenderer.drawText(g, font, ce.displayName(), x + 20, ry + 6, sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
+                    if (ry >= listY && ry + 20 <= listY + listH) {
+                        HIT_RECTS.add(new HitRect(x, ry, w, 20, () -> {
                             playClick();
                             cm.selectedCape.set(ce.id());
                             cm.setEnabled(true);
@@ -281,16 +283,17 @@ public final class YeQuickMenu {
                         }, null, null));
                     }
                 }
-                ry += 19;
+                ry += 22;
             }
         } else if (activeModule instanceof CustomSkinModule sm) {
             for (SkinManager.SkinEntry se : SkinManager.getAllSkins()) {
-                if (ry + 18 >= listY && ry <= listY + listH) {
+                if (ry + 20 >= listY && ry <= listY + listH) {
                     boolean sel = se.id().equals(sm.selectedSkin.get());
-                    AppleUiRenderer.drawRoundedRect(g, x, ry, w, 17, 5, sel ? accent : AppleUiRenderer.bgCard());
-                    AppleUiRenderer.drawText(g, font, se.displayName(), x + 6, ry + 5, sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
-                    if (ry >= listY && ry + 17 <= listY + listH) {
-                        HIT_RECTS.add(new HitRect(x, ry, w, 17, () -> {
+                    AppleUiRenderer.drawRoundedRect(g, x, ry, w, 20, 5, sel ? accent : AppleUiRenderer.bgCard());
+                    g.blit(RenderPipelines.GUI_TEXTURED, se.textureId(), x + 4, ry + 2, 8.0f, 8.0f, 16, 16, 8, 8, 64, 64);
+                    AppleUiRenderer.drawText(g, font, se.displayName(), x + 24, ry + 6, sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
+                    if (ry >= listY && ry + 20 <= listY + listH) {
+                        HIT_RECTS.add(new HitRect(x, ry, w, 20, () -> {
                             playClick();
                             sm.selectedSkin.set(se.id());
                             sm.setEnabled(true);
@@ -298,7 +301,7 @@ public final class YeQuickMenu {
                         }, null, null));
                     }
                 }
-                ry += 19;
+                ry += 22;
             }
         }
 
