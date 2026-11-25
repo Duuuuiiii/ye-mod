@@ -26,7 +26,15 @@ public class AccessoriesModule extends Module {
     ));
 
     public final DoubleSetting scale = addSetting(new DoubleSetting(
-            "scale", "挂件大小", "缩放头部挂件尺寸", 1.0, 0.6, 1.6, 0.05
+            "scale", "大小", "缩放头部挂件尺寸", 1.0, 0.5, 1.8, 0.05
+    ));
+
+    public final DoubleSetting offsetY = addSetting(new DoubleSetting(
+            "offsetY", "上下位置", "微调挂件上下高度", 0.0, -0.4, 0.4, 0.02
+    ));
+
+    public final DoubleSetting offsetZ = addSetting(new DoubleSetting(
+            "offsetZ", "前后位置", "微调挂件前后偏移", 0.0, -0.4, 0.4, 0.02
     ));
 
     public final BoolSetting onlySelf = addSetting(new BoolSetting(

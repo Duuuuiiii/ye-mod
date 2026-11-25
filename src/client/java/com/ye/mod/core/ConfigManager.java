@@ -31,9 +31,46 @@ public final class ConfigManager {
 
     private static volatile boolean loading = false;
     private static volatile int menuKey = org.lwjgl.glfw.GLFW.GLFW_KEY_F9;
+    private static volatile int mouseUnlockKey = org.lwjgl.glfw.GLFW.GLFW_KEY_F10;
     public static volatile boolean lightTheme = false;
     public static volatile boolean blurBackground = true;
     public static volatile boolean english = false;
+    public static volatile int widgetX = -1;
+    public static volatile int widgetY = -1;
+
+    public enum ThemeAccent {
+        APPLE_BLUE("苹果蓝", "Blue", 0xFF0A84FF),
+        CYBER_PURPLE("赛博紫", "Purple", 0xFFA855F7),
+        GOLD("鎏金色", "Gold", 0xFFF59E0B),
+        CRIMSON("绯红色", "Crimson", 0xFFEF4444),
+        EMERALD("翡翠绿", "Emerald", 0xFF10B981),
+        SAKURA("樱花粉", "Sakura", 0xFFF472B6);
+
+        public final String zh;
+        public final String en;
+        public final int argb;
+
+        ThemeAccent(String zh, String en, int argb) {
+            this.zh = zh;
+            this.en = en;
+            this.argb = argb;
+        }
+    }
+
+    public static volatile ThemeAccent themeAccent = ThemeAccent.APPLE_BLUE;
+
+    public static int getMouseUnlockKey() {
+        return mouseUnlockKey;
+    }
+
+    public static void setMouseUnlockKey(int key) {
+        mouseUnlockKey = key;
+        saveAsync();
+    }
+
+    public static int getAccentColor() {
+        return themeAccent.argb;
+    }
 
     public static final class HudSlot {
         public final String id;
@@ -113,6 +150,21 @@ public final class ConfigManager {
             JsonObject root = parsed.getAsJsonObject();
             if (root.has("menuKey")) {
                 menuKey = root.get("menuKey").getAsInt();
+            }
+            if (root.has("mouseUnlockKey")) {
+                mouseUnlockKey = root.get("mouseUnlockKey").getAsInt();
+            }
+            if (root.has("widgetX")) {
+                widgetX = root.get("widgetX").getAsInt();
+            }
+            if (root.has("widgetY")) {
+                widgetY = root.get("widgetY").getAsInt();
+            }
+            if (root.has("themeAccent")) {
+                try {
+                    themeAccent = ThemeAccent.valueOf(root.get("themeAccent").getAsString());
+                } catch (Exception ignored) {
+                }
             }
             if (root.has("lightTheme")) {
                 lightTheme = root.get("lightTheme").getAsBoolean();
@@ -198,6 +250,10 @@ public final class ConfigManager {
         }
 
         root.addProperty("menuKey", menuKey);
+        root.addProperty("mouseUnlockKey", mouseUnlockKey);
+        root.addProperty("widgetX", widgetX);
+        root.addProperty("widgetY", widgetY);
+        root.addProperty("themeAccent", themeAccent.name());
         root.addProperty("lightTheme", lightTheme);
         root.addProperty("blurBackground", blurBackground);
         root.addProperty("english", english);

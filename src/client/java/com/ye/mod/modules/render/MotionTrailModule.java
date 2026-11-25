@@ -78,7 +78,7 @@ public class MotionTrailModule extends Module {
         if (backOffset.lengthSqr() > 0.001) {
             backOffset = backOffset.normalize().scale(0.35);
         }
-        Vec3 cur = mc.player.position().add(backOffset.x, mc.player.isFallFlying() ? 0.55 : 0.35, backOffset.z);
+        Vec3 cur = mc.player.position().add(backOffset.x, 0.10, backOffset.z);
 
         if (lastAdded == null || cur.distanceToSqr(lastAdded) > 0.05) {
             points.addLast(new TrailPoint(cur, System.currentTimeMillis()));

@@ -28,17 +28,23 @@ import com.ye.mod.modules.system.ChatFilterModule;
 import com.ye.mod.modules.system.PlayerStatsManager;
 import com.ye.mod.modules.visual.HudModule;
 import com.ye.mod.modules.visual.NoFovModule;
-import com.ye.mod.ui.YeMenuScreen;
+import com.ye.mod.ui.YeMouseScreen;
+import com.ye.mod.ui.YeQuickMenu;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import org.lwjgl.glfw.GLFW;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Client entrypoint for the Ye 1.21.11 Fabric utility mod.
  */
 public class YeClient implements ClientModInitializer {
     private static boolean prevMenuKeyDown = false;
+    private static boolean prevMouseKeyDown = false;
+    private static final Map<Integer, Boolean> PREV_NAV_KEYS = new HashMap<>();
 
     @Override
     public void onInitializeClient() {
@@ -51,7 +57,6 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new FlightModelModule());
         ModuleManager.register(new TrajectoryPreviewModule());
         ModuleManager.register(new MotionTrailModule());
-        ModuleManager.register(new AmbienceModule());
         ModuleManager.register(new HitFeedbackModule());
         ModuleManager.register(new SoulRingsModule());
         ModuleManager.register(new PortalFinderModule());
@@ -91,18 +96,56 @@ public class YeClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.screen == null && client.getWindow() != null) {
+                long handle = client.getWindow().handle();
                 int key = ConfigManager.getMenuKey();
                 if (key > 0) {
-                    boolean down = GLFW.glfwGetKey(client.getWindow().handle(), key) == GLFW.GLFW_PRESS;
+                    boolean down = GLFW.glfwGetKey(handle, key) == GLFW.GLFW_PRESS;
                     if (down && !prevMenuKeyDown) {
-                        client.setScreen(new YeMenuScreen());
+                        YeQuickMenu.toggleOpen();
                     }
                     prevMenuKeyDown = down;
                 }
+                int mKey = ConfigManager.getMouseUnlockKey();
+                if (mKey > 0) {
+                    boolean mDown = GLFW.glfwGetKey(handle, mKey) == GLFW.GLFW_PRESS;
+                    if (mDown && !prevMouseKeyDown) {
+                        YeQuickMenu.setOpen(true);
+                        YeQuickMenu.playClick();
+                        client.setScreen(new YeMouseScreen());
+                    }
+                    prevMouseKeyDown = mDown;
+                }
+
+                if (YeQuickMenu.isOpen()) {
+                    pollNav(handle, GLFW.GLFW_KEY_UP, 0);
+                    pollNav(handle, GLFW.GLFW_KEY_KP_8, 0);
+                    pollNav(handle, GLFW.GLFW_KEY_DOWN, 1);
+                    pollNav(handle, GLFW.GLFW_KEY_KP_2, 1);
+                    pollNav(handle, GLFW.GLFW_KEY_LEFT, 2);
+                    pollNav(handle, GLFW.GLFW_KEY_KP_4, 2);
+                    pollNav(handle, GLFW.GLFW_KEY_RIGHT, 3);
+                    pollNav(handle, GLFW.GLFW_KEY_KP_6, 3);
+                    pollNav(handle, GLFW.GLFW_KEY_ENTER, 4);
+                    pollNav(handle, GLFW.GLFW_KEY_KP_ENTER, 4);
+                    pollNav(handle, GLFW.GLFW_KEY_BACKSPACE, 5);
+                } else {
+                    PREV_NAV_KEYS.clear();
+                }
             } else {
                 prevMenuKeyDown = false;
+                prevMouseKeyDown = false;
+                PREV_NAV_KEYS.clear();
             }
             ModuleManager.onClientTick();
         });
+    }
+
+    private static void pollNav(long handle, int glfwKey, int action) {
+        boolean down = GLFW.glfwGetKey(handle, glfwKey) == GLFW.GLFW_PRESS;
+        boolean was = PREV_NAV_KEYS.getOrDefault(glfwKey, false);
+        if (down && !was) {
+            YeQuickMenu.onKeyNav(action);
+        }
+        PREV_NAV_KEYS.put(glfwKey, down);
     }
 }

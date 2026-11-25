@@ -8,6 +8,7 @@ import com.ye.mod.modules.visual.HudModule;
 import com.ye.mod.modules.visual.NoFovModule;
 import com.ye.mod.modules.world.PortalSyncModule;
 import com.ye.mod.modules.world.StashRadarModule;
+import com.ye.mod.ui.YeQuickMenu;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiGraphics;
@@ -85,6 +86,9 @@ public abstract class GuiMixin {
         StashRadarModule stashRadar = ModuleManager.get(StashRadarModule.class);
         if (stashRadar != null) {
             stashRadar.renderHud(guiGraphics);
+        }
+        if (net.minecraft.client.Minecraft.getInstance().screen == null) {
+            YeQuickMenu.render(guiGraphics, -1, -1, false);
         }
     }
 }
