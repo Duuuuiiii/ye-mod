@@ -2,10 +2,8 @@ package com.ye.mod.mixin;
 
 import com.ye.mod.core.ModuleManager;
 import com.ye.mod.modules.render.LavaEspModule;
-import com.ye.mod.modules.render.MotionTrailModule;
 import com.ye.mod.modules.render.TrajectoryPreviewModule;
 import com.ye.mod.modules.visual.HitFeedbackModule;
-import com.ye.mod.modules.visual.SoulRingsModule;
 import com.ye.mod.modules.world.LogoutGhostsModule;
 import com.ye.mod.modules.world.PortalFinderModule;
 import com.ye.mod.modules.world.StashRadarModule;
@@ -27,9 +25,6 @@ public abstract class DebugRendererMixin {
         TrajectoryPreviewModule traj = ModuleManager.get(TrajectoryPreviewModule.class);
         if (traj != null) traj.emitGizmos();
 
-        MotionTrailModule trail = ModuleManager.get(MotionTrailModule.class);
-        if (trail != null) trail.emitGizmos();
-
         StashRadarModule radar = ModuleManager.get(StashRadarModule.class);
         if (radar != null) radar.emitGizmos();
 
@@ -38,9 +33,6 @@ public abstract class DebugRendererMixin {
 
         HitFeedbackModule hit = ModuleManager.get(HitFeedbackModule.class);
         if (hit != null) hit.emitGizmos();
-
-        SoulRingsModule rings = ModuleManager.get(SoulRingsModule.class);
-        if (rings != null) rings.emitGizmos();
 
         PortalFinderModule portal = ModuleManager.get(PortalFinderModule.class);
         if (portal != null) portal.emitGizmos();

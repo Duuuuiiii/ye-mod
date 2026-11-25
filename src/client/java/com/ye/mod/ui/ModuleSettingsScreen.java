@@ -78,17 +78,18 @@ public class ModuleSettingsScreen extends Screen {
     }
 
     @Override
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        if (ConfigManager.blurBackground) {
+            super.renderBackground(g, mouseX, mouseY, partialTick);
+        }
+    }
+
+    @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         hitRects.clear();
         AppleUiRenderer.updateThemeAnim();
         openProgress = AppleUiRenderer.smooth(openProgress, 1.0f, 16.0f, 0.03f);
 
-        if (ConfigManager.blurBackground) {
-            try {
-                this.renderBlurredBackground(g);
-            } catch (Exception ignored) {
-            }
-        }
         g.fill(0, 0, this.width, this.height, AppleUiRenderer.bgBackdrop());
 
         int slideY = Math.round((1.0f - openProgress) * 12.0f);
@@ -197,14 +198,14 @@ public class ModuleSettingsScreen extends Screen {
     }
 
     private int renderCapeGallery(GuiGraphics g, CustomCapeModule capeMod, int x, int y, int w, int clipTop, int clipBottom, int mouseX, int mouseY) {
-        g.drawString(this.font, "披风列表 (点击选择)", x + 2, y + 2, AppleUiRenderer.TEXT_SECONDARY, false);
-        y += 16;
+        AppleUiRenderer.drawText(g, this.font, ConfigManager.tr("披风列表", "Capes"), x + 2, y + 2, AppleUiRenderer.textSecondary());
+        y += 14;
 
         List<CapeManager.CapeEntry> capes = CapeManager.getAllCapes();
         int cols = 3;
-        int gap = 6;
+        int gap = 5;
         int cellW = (w - gap * (cols - 1)) / cols;
-        int cellH = 34;
+        int cellH = 32;
 
         String activeId = capeMod.selectedCape.get();
         for (int i = 0; i < capes.size(); i++) {
@@ -217,18 +218,17 @@ public class ModuleSettingsScreen extends Screen {
             if (cy + cellH >= clipTop && cy <= clipBottom) {
                 boolean selected = entry.id().equals(activeId);
                 boolean hover = inBounds(mouseX, mouseY, cx, cy, cellW, cellH);
-                int bg = selected ? 0xFF1D4ED8 : (hover ? AppleUiRenderer.BG_CARD_HOVER : AppleUiRenderer.BG_CARD);
-                AppleUiRenderer.drawRoundedRect(g, cx, cy, cellW, cellH, 8, bg);
+                int bg = selected ? AppleUiRenderer.activeRowBg(hover) : (hover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
+                AppleUiRenderer.drawPanel(g, cx, cy, cellW, cellH, bg);
 
-                // Tiny cape preview swatch (u=1,v=1,10x16 on 64x32)
                 try {
-                    g.blit(RenderPipelines.GUI_TEXTURED, entry.textureId(), cx + 6, cy + 5, 1.0f, 1.0f, 15, 24, 10, 16, 64, 32);
+                    g.blit(RenderPipelines.GUI_TEXTURED, entry.textureId(), cx + 5, cy + 4, 1.0f, 1.0f, 15, 24, 10, 16, 64, 32);
                 } catch (Exception ignored) {
-                    AppleUiRenderer.drawRoundedRect(g, cx + 6, cy + 5, 15, 24, 3, AppleUiRenderer.APPLE_BLUE);
+                    g.fill(cx + 5, cy + 4, cx + 20, cy + 28, AppleUiRenderer.APPLE_BLUE);
                 }
 
-                String label = trimToWidth(entry.displayName(), cellW - 28);
-                g.drawString(this.font, label, cx + 26, cy + 13, AppleUiRenderer.TEXT_PRIMARY, false);
+                String label = trimToWidth(entry.displayName(), cellW - 26);
+                AppleUiRenderer.drawText(g, this.font, label, cx + 24, cy + 12, AppleUiRenderer.textPrimary());
 
                 if (cy >= clipTop && cy + cellH <= clipBottom) {
                     hitRects.add(new HitRect(cx, cy, cellW, cellH, () -> {
@@ -247,20 +247,20 @@ public class ModuleSettingsScreen extends Screen {
     }
 
     private int renderSkinGallery(GuiGraphics g, CustomSkinModule skinMod, int x, int y, int w, int clipTop, int clipBottom, int mouseX, int mouseY) {
-        g.drawString(this.font, "皮肤列表 (点击选择)", x + 2, y + 2, AppleUiRenderer.TEXT_SECONDARY, false);
-        y += 16;
+        AppleUiRenderer.drawText(g, this.font, ConfigManager.tr("皮肤列表", "Skins"), x + 2, y + 2, AppleUiRenderer.textSecondary());
+        y += 14;
 
         List<SkinManager.SkinEntry> skins = SkinManager.getAllSkins();
         if (skins.isEmpty()) {
-            AppleUiRenderer.drawRoundedRect(g, x, y, w, 30, 8, AppleUiRenderer.BG_CARD);
-            g.drawString(this.font, "暂无本地皮肤，请点击下方「导入本地皮肤 PNG...」", x + 10, y + 11, AppleUiRenderer.TEXT_TERTIARY, false);
-            return y + 38;
+            AppleUiRenderer.drawPanel(g, x, y, w, 28, AppleUiRenderer.bgCard());
+            AppleUiRenderer.drawText(g, this.font, ConfigManager.tr("暂无本地皮肤", "No skins found"), x + 10, y + 10, AppleUiRenderer.textTertiary());
+            return y + 34;
         }
 
         int cols = 3;
-        int gap = 6;
+        int gap = 5;
         int cellW = (w - gap * (cols - 1)) / cols;
-        int cellH = 34;
+        int cellH = 32;
 
         String activeId = skinMod.selectedSkin.get();
         for (int i = 0; i < skins.size(); i++) {
@@ -273,18 +273,17 @@ public class ModuleSettingsScreen extends Screen {
             if (cy + cellH >= clipTop && cy <= clipBottom) {
                 boolean selected = entry.id().equals(activeId);
                 boolean hover = inBounds(mouseX, mouseY, cx, cy, cellW, cellH);
-                int bg = selected ? 0xFF1D4ED8 : (hover ? AppleUiRenderer.BG_CARD_HOVER : AppleUiRenderer.BG_CARD);
-                AppleUiRenderer.drawRoundedRect(g, cx, cy, cellW, cellH, 8, bg);
+                int bg = selected ? AppleUiRenderer.activeRowBg(hover) : (hover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
+                AppleUiRenderer.drawPanel(g, cx, cy, cellW, cellH, bg);
 
-                // Face preview (u=8,v=8,8x8 on 64x64)
                 try {
-                    g.blit(RenderPipelines.GUI_TEXTURED, entry.textureId(), cx + 6, cy + 5, 8.0f, 8.0f, 24, 24, 8, 8, 64, 64);
+                    g.blit(RenderPipelines.GUI_TEXTURED, entry.textureId(), cx + 5, cy + 4, 8.0f, 8.0f, 24, 24, 8, 8, 64, 64);
                 } catch (Exception ignored) {
-                    AppleUiRenderer.drawRoundedRect(g, cx + 6, cy + 5, 24, 24, 4, AppleUiRenderer.APPLE_GREEN);
+                    g.fill(cx + 5, cy + 4, cx + 29, cy + 28, AppleUiRenderer.APPLE_GREEN);
                 }
 
-                String label = trimToWidth(entry.displayName(), cellW - 36);
-                g.drawString(this.font, label, cx + 34, cy + 13, AppleUiRenderer.TEXT_PRIMARY, false);
+                String label = trimToWidth(entry.displayName(), cellW - 34);
+                AppleUiRenderer.drawText(g, this.font, label, cx + 33, cy + 12, AppleUiRenderer.textPrimary());
 
                 if (cy >= clipTop && cy + cellH <= clipBottom) {
                     hitRects.add(new HitRect(cx, cy, cellW, cellH, () -> {
@@ -303,22 +302,22 @@ public class ModuleSettingsScreen extends Screen {
     }
 
     private int renderSettingRow(GuiGraphics g, Setting<?> setting, int x, int y, int w, int clipTop, int clipBottom, int mouseX, int mouseY) {
-        int rowH = (setting instanceof DoubleSetting) ? 46 : 38;
+        int rowH = (setting instanceof DoubleSetting) ? 42 : 34;
         if (y + rowH >= clipTop && y <= clipBottom) {
             boolean hover = inBounds(mouseX, mouseY, x, y, w, rowH);
-            AppleUiRenderer.drawRoundedRect(g, x, y, w, rowH, 8, hover ? AppleUiRenderer.BG_CARD_HOVER : AppleUiRenderer.BG_CARD);
+            AppleUiRenderer.drawPanel(g, x, y, w, rowH, hover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
 
-            g.drawString(this.font, setting.getName(), x + 12, y + 7, AppleUiRenderer.TEXT_PRIMARY, false);
-            String desc = trimToWidth(setting.getDescription(), w - 165);
-            g.drawString(this.font, desc, x + 12, y + 21, AppleUiRenderer.TEXT_TERTIARY, false);
+            AppleUiRenderer.drawText(g, this.font, setting.getName(), x + 10, y + 6, AppleUiRenderer.textPrimary());
+            String desc = trimToWidth(setting.getDescription(), w - 160);
+            AppleUiRenderer.drawText(g, this.font, desc, x + 10, y + 19, AppleUiRenderer.textTertiary());
 
             boolean clickableInClip = y >= clipTop - 4 && y + rowH <= clipBottom + 4;
 
             if (setting instanceof BoolSetting boolSet) {
-                int swW = 34;
-                int swH = 18;
-                int swX = x + w - 12 - swW;
-                int swY = y + 10;
+                int swW = 32;
+                int swH = 16;
+                int swX = x + w - 10 - swW;
+                int swY = y + 9;
                 AppleUiRenderer.drawPillSwitch(g, swX, swY, swW, swH, boolSet.get() ? 1.0f : 0.0f);
                 if (clickableInClip) {
                     hitRects.add(new HitRect(x, y, w, rowH, () -> {
@@ -328,16 +327,16 @@ public class ModuleSettingsScreen extends Screen {
                 }
             } else if (setting instanceof DoubleSetting dblSet) {
                 String valText = formatDouble(dblSet.get());
-                g.drawString(this.font, valText, x + w - 12 - this.font.width(valText), y + 7, AppleUiRenderer.APPLE_BLUE, false);
+                AppleUiRenderer.drawText(g, this.font, valText, x + w - 10 - this.font.width(valText), y + 6, AppleUiRenderer.APPLE_BLUE);
 
-                int barW = Math.min(180, w / 2 - 20);
-                int barH = 6;
-                int barX = x + w - 12 - barW;
-                int barY = y + 32;
+                int barW = Math.min(170, w / 2 - 20);
+                int barH = 5;
+                int barX = x + w - 10 - barW;
+                int barY = y + 29;
                 double pct = (dblSet.get() - dblSet.getMin()) / Math.max(0.0001, dblSet.getMax() - dblSet.getMin());
                 pct = Math.max(0.0, Math.min(1.0, pct));
 
-                AppleUiRenderer.drawRoundedRect(g, barX, barY, barW, barH, 3, 0xFF334155);
+                g.fill(barX, barY, barX + barW, barY + barH, 0xFF334155);
                 int fillW = Math.max(6, (int) Math.round(barW * pct));
                 AppleUiRenderer.drawRoundedRect(g, barX, barY, fillW, barH, 3, AppleUiRenderer.APPLE_BLUE);
                 AppleUiRenderer.drawCircle(g, barX + fillW - 5, barY - 2, 10, 0xFFFFFFFF);

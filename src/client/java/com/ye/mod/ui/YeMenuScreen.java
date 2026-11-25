@@ -63,6 +63,7 @@ public class YeMenuScreen extends Screen {
     private static final Map<Category, PanelState> PANEL_STATES = new EnumMap<>(Category.class);
     private static final Map<String, Float> MODULE_ENABLE_ANIM = new HashMap<>();
     private static final Map<String, Float> MODULE_HOVER_ANIM = new HashMap<>();
+    private static int lastLayoutW = -1;
 
     private static final int PANEL_W = 122;
     private static final int HEADER_H = 21;
@@ -103,8 +104,15 @@ public class YeMenuScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        if (PANEL_STATES.isEmpty()) {
+        if (PANEL_STATES.isEmpty() || lastLayoutW != this.width) {
             resetPanelLayout();
+        }
+    }
+
+    @Override
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        if (ConfigManager.blurBackground) {
+            super.renderBackground(g, mouseX, mouseY, partialTick);
         }
     }
 
@@ -116,8 +124,9 @@ public class YeMenuScreen extends Screen {
 
     private void resetPanelLayout() {
         PANEL_STATES.clear();
+        lastLayoutW = this.width;
         Category[] cats = Category.values();
-        int gap = 8;
+        int gap = 10;
         int maxCols = Math.max(1, (this.width - 24 + gap) / (PANEL_W + gap));
         int cols = Math.min(cats.length, maxCols);
         int totalRowW = cols * PANEL_W + (cols - 1) * gap;
@@ -137,12 +146,6 @@ public class YeMenuScreen extends Screen {
         AppleUiRenderer.updateThemeAnim();
         openProgress = AppleUiRenderer.smooth(openProgress, 1.0f, 16.0f, 0.03f);
 
-        if (ConfigManager.blurBackground) {
-            try {
-                this.renderBlurredBackground(g);
-            } catch (Exception ignored) {
-            }
-        }
         g.fill(0, 0, this.width, this.height, AppleUiRenderer.bgBackdrop());
 
         int slideY = Math.round((1.0f - openProgress) * 10.0f);
@@ -175,7 +178,7 @@ public class YeMenuScreen extends Screen {
         // Brand tag
         int brandW = 54;
         g.fill(bx + 4, by + 4, bx + 4 + brandW, by + 22, AppleUiRenderer.APPLE_BLUE);
-        AppleUiRenderer.drawCenteredText(g, this.font, "Ye 1.3.0", bx + 4 + brandW / 2, by + 9, AppleUiRenderer.TEXT_PRIMARY);
+        AppleUiRenderer.drawCenteredText(g, this.font, "Ye 1.4.0", bx + 4 + brandW / 2, by + 9, AppleUiRenderer.TEXT_PRIMARY);
 
         int btnH = 18;
         int btnY = by + 4;
@@ -187,16 +190,8 @@ public class YeMenuScreen extends Screen {
             resetPanelLayout();
         });
 
-        int hudW = ConfigManager.english ? 42 : 52;
-        int hudX = resetX - 4 - hudW;
-        drawTopBtn(g, hudX, btnY, hudW, btnH, ConfigManager.tr("HUD布局", "HUD"), overlayMode == OverlayMode.HUD_EDITOR, mouseX, mouseY, () -> {
-            overlayMode = (overlayMode == OverlayMode.HUD_EDITOR) ? OverlayMode.NONE : OverlayMode.HUD_EDITOR;
-            searchFocused = false;
-            muteInputFocused = false;
-        });
-
         int uiW = ConfigManager.english ? 36 : 48;
-        int uiX = hudX - 4 - uiW;
+        int uiX = resetX - 4 - uiW;
         drawTopBtn(g, uiX, btnY, uiW, btnH, ConfigManager.tr("UI设置", "UI"), overlayMode == OverlayMode.UI_SETTINGS, mouseX, mouseY, () -> {
             overlayMode = (overlayMode == OverlayMode.UI_SETTINGS) ? OverlayMode.NONE : OverlayMode.UI_SETTINGS;
             searchFocused = false;

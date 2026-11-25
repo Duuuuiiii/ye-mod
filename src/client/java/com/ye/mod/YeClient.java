@@ -3,7 +3,7 @@ package com.ye.mod;
 import com.ye.mod.core.ConfigManager;
 import com.ye.mod.core.ModuleManager;
 import com.ye.mod.modules.render.CapeManager;
-import com.ye.mod.modules.player.SmartAfkModule;
+import com.ye.mod.modules.render.AccessoriesModule;
 import com.ye.mod.modules.render.AntiLagModule;
 import com.ye.mod.modules.render.CustomCapeModule;
 import com.ye.mod.modules.render.DragonWingsModule;
@@ -47,14 +47,13 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new AntiLagModule());
         ModuleManager.register(new LavaEspModule());
         ModuleManager.register(new DragonWingsModule());
+        ModuleManager.register(new AccessoriesModule());
         ModuleManager.register(new FlightModelModule());
         ModuleManager.register(new TrajectoryPreviewModule());
         ModuleManager.register(new MotionTrailModule());
         ModuleManager.register(new AmbienceModule());
         ModuleManager.register(new HitFeedbackModule());
         ModuleManager.register(new SoulRingsModule());
-        ModuleManager.register(new SmartAfkModule());
-        ModuleManager.register(new PortalSyncModule());
         ModuleManager.register(new PortalFinderModule());
         ModuleManager.register(new StashRadarModule());
         ModuleManager.register(new LogoutGhostsModule());
@@ -72,7 +71,6 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new NoFovModule());
         ModuleManager.register(new BorderlessFullscreenModule());
         ModuleManager.register(new ChatFilterModule());
-        ModuleManager.register(new HudModule());
 
         ConfigManager.load();
         PlayerStatsManager.init();

@@ -13,6 +13,7 @@
     "FogRendererMixin",
     "GameRendererMixin",
     "GuiMixin",
+    "HumanoidArmorLayerMixin",
     "LocalPlayerMixin",
     "ParticleEngineMixin",
     "PlayerModelMixin",

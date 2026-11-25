@@ -25,7 +25,7 @@ public abstract class AvatarRendererMixin extends LivingEntityRenderer<net.minec
 
     @Inject(method = "<init>", at = @At("TAIL"))
     private void ye$addCosmeticLayer(EntityRendererProvider.Context context, boolean slim, CallbackInfo ci) {
-        this.addLayer(new YeCosmeticLayer(this));
+        this.addLayer(new YeCosmeticLayer(this, context.getModelSet()));
     }
 
     @Inject(method = "setupRotations(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;FF)V",

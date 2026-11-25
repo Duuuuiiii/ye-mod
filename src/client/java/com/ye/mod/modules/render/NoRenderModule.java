@@ -53,6 +53,10 @@ public class NoRenderModule extends Module {
             "noBossBar", "屏蔽 Boss 血条", "隐藏顶部 Boss 血条显示", false
     ));
 
+    public final BoolSetting noArmor = addSetting(new BoolSetting(
+            "noArmor", "屏蔽玩家盔甲", "不渲染玩家身上穿戴的盔甲模型", false
+    ));
+
     // Particles
     public final BoolSetting noParticles = addSetting(new BoolSetting(
             "noParticles", "屏蔽全部粒子", "禁用所有客户端粒子生成与渲染，提升帧率", false

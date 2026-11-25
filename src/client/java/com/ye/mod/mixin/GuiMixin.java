@@ -74,10 +74,6 @@ public abstract class GuiMixin {
 
     @Inject(method = "render", at = @At("TAIL"))
     private void ye$renderHud(GuiGraphics guiGraphics, DeltaTracker deltaTracker, CallbackInfo ci) {
-        HudModule hud = ModuleManager.get(HudModule.class);
-        if (hud != null) {
-            hud.render(guiGraphics);
-        }
         AntiLagModule antiLag = ModuleManager.get(AntiLagModule.class);
         if (antiLag != null) {
             antiLag.renderHudAlert(guiGraphics);
@@ -85,10 +81,6 @@ public abstract class GuiMixin {
         LavaEspModule lavaEsp = ModuleManager.get(LavaEspModule.class);
         if (lavaEsp != null) {
             lavaEsp.renderHudAlert(guiGraphics);
-        }
-        PortalSyncModule portalSync = ModuleManager.get(PortalSyncModule.class);
-        if (portalSync != null) {
-            portalSync.renderHud(guiGraphics);
         }
         StashRadarModule stashRadar = ModuleManager.get(StashRadarModule.class);
         if (stashRadar != null) {

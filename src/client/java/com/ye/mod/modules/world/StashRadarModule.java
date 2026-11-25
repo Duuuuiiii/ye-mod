@@ -178,6 +178,6 @@ public class StashRadarModule extends Module {
         int hy = slot != null ? slot.y : 36;
         String text = ConfigManager.tr("雷达: ", "Radar: ") + totalCount
                 + (shulkerCount > 0 ? " (" + ConfigManager.tr("潜影盒 ", "Shulker ") + shulkerCount + ")" : "");
-        g.drawString(mc.font, text, hx, hy, 0xFFD946EF, true);
+        g.drawString(mc.font, text, 8, 8, 0x88D946EF, true);
     }
 }

@@ -77,6 +77,7 @@ public class BorderlessFullscreenModule extends Module {
         GLFW.glfwSetWindowAttrib(handle, GLFW.GLFW_DECORATED, GLFW.GLFW_FALSE);
         GLFW.glfwSetWindowPos(handle, mx[0], my[0]);
         GLFW.glfwSetWindowSize(handle, vidMode.width(), vidMode.height());
+        mc.execute(mc::resizeDisplay);
     }
 
     private void restoreWindowed() {
@@ -90,5 +91,6 @@ public class BorderlessFullscreenModule extends Module {
             GLFW.glfwSetWindowPos(handle, savedX, savedY);
             GLFW.glfwSetWindowSize(handle, savedWidth, savedHeight);
         }
+        mc.execute(mc::resizeDisplay);
     }
 }
