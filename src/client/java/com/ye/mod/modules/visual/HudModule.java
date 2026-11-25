@@ -29,27 +29,18 @@ public class HudModule extends Module {
         if (!isEnabled() || mc.options.hideGui) return;
         if (mc.player == null) return;
 
-        // Top-left status pill
-        StringBuilder sb = new StringBuilder("ye");
-        sb.append("  ").append(mc.getFps()).append(" FPS");
+        // Ultra-clean top-left status line (no heavy box/outline)
+        String info = mc.getFps() + " FPS";
         if (showCoords.get()) {
-            sb.append(String.format("  %d, %d, %d",
-                    mc.player.getBlockX(), mc.player.getBlockY(), mc.player.getBlockZ()));
+            info += String.format(" · %d, %d, %d",
+                    mc.player.getBlockX(), mc.player.getBlockY(), mc.player.getBlockZ());
         }
-        String text = sb.toString();
-        int textW = mc.font.width(text);
         int x = 8;
         int y = 8;
-        int padX = 8;
-        int h = 18;
+        g.drawString(mc.font, "Ye ", x, y, 0xFF38BDF8, true);
+        g.drawString(mc.font, info, x + mc.font.width("Ye "), y, 0xFFE2E8F0, true);
 
-        g.fill(x, y, x + textW + padX * 2, y + h, 0xB811131A);
-        g.fill(x, y, x + 2, y + h, 0xFF38BDF8);
-        g.renderOutline(x, y, textW + padX * 2, h, 0x40FFFFFF);
-        g.drawString(mc.font, "ye", x + padX, y + 5, 0xFF38BDF8, false);
-        g.drawString(mc.font, text.substring(2), x + padX + mc.font.width("ye"), y + 5, 0xFFE2E8F0, false);
-
-        // Top-right active modules list
+        // Clean top-right active modules list (text-only with subtle shadow)
         if (showModuleList.get()) {
             int screenW = mc.getWindow().getGuiScaledWidth();
             List<Module> active = ModuleManager.getAll().stream()
@@ -60,12 +51,9 @@ public class HudModule extends Module {
             int ry = 8;
             for (Module m : active) {
                 String name = m.getName();
-                int w = mc.font.width(name) + 10;
-                int rx = screenW - w - 8;
-                g.fill(rx, ry, rx + w, ry + 14, 0x9E11131A);
-                g.fill(rx + w - 2, ry, rx + w, ry + 14, m.getCategory().getAccentColor());
-                g.drawString(mc.font, name, rx + 5, ry + 3, 0xFFF1F5F9, false);
-                ry += 16;
+                int rx = screenW - mc.font.width(name) - 8;
+                g.drawString(mc.font, name, rx, ry, 0xFFE2E8F0, true);
+                ry += 11;
             }
         }
     }
