@@ -31,6 +31,39 @@ public final class ConfigManager {
 
     private static volatile boolean loading = false;
     private static volatile int menuKey = org.lwjgl.glfw.GLFW.GLFW_KEY_F9;
+    public static volatile boolean lightTheme = false;
+    public static volatile boolean blurBackground = true;
+    public static volatile boolean english = false;
+
+    public static final class HudSlot {
+        public final String id;
+        public final String zhName;
+        public final String enName;
+        public boolean enabled;
+        public int x;
+        public int y;
+
+        public HudSlot(String id, String zhName, String enName, boolean enabled, int x, int y) {
+            this.id = id;
+            this.zhName = zhName;
+            this.enName = enName;
+            this.enabled = enabled;
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    public static final java.util.Map<String, HudSlot> HUD_SLOTS = new java.util.LinkedHashMap<>();
+    static {
+        HUD_SLOTS.put("hud_info", new HudSlot("hud_info", "帧率与坐标", "FPS & Coords", true, 8, 8));
+        HUD_SLOTS.put("hud_modules", new HudSlot("hud_modules", "已启用列表", "Active List", true, 8, 52));
+        HUD_SLOTS.put("hud_portal", new HudSlot("hud_portal", "下界坐标", "Portal Coords", true, 8, 22));
+        HUD_SLOTS.put("hud_radar", new HudSlot("hud_radar", "雷达计数", "Radar Count", true, 8, 36));
+    }
+
+    public static String tr(String zh, String en) {
+        return english ? en : zh;
+    }
 
     private ConfigManager() {}
 
@@ -80,6 +113,26 @@ public final class ConfigManager {
             JsonObject root = parsed.getAsJsonObject();
             if (root.has("menuKey")) {
                 menuKey = root.get("menuKey").getAsInt();
+            }
+            if (root.has("lightTheme")) {
+                lightTheme = root.get("lightTheme").getAsBoolean();
+            }
+            if (root.has("blurBackground")) {
+                blurBackground = root.get("blurBackground").getAsBoolean();
+            }
+            if (root.has("english")) {
+                english = root.get("english").getAsBoolean();
+            }
+            if (root.has("hudSlots") && root.get("hudSlots").isJsonObject()) {
+                JsonObject hObj = root.getAsJsonObject("hudSlots");
+                for (HudSlot slot : HUD_SLOTS.values()) {
+                    if (hObj.has(slot.id) && hObj.get(slot.id).isJsonObject()) {
+                        JsonObject s = hObj.getAsJsonObject(slot.id);
+                        if (s.has("enabled")) slot.enabled = s.get("enabled").getAsBoolean();
+                        if (s.has("x")) slot.x = s.get("x").getAsInt();
+                        if (s.has("y")) slot.y = s.get("y").getAsInt();
+                    }
+                }
             }
             JsonObject modulesObj = root.has("modules") && root.get("modules").isJsonObject()
                     ? root.getAsJsonObject("modules")
@@ -145,6 +198,19 @@ public final class ConfigManager {
         }
 
         root.addProperty("menuKey", menuKey);
+        root.addProperty("lightTheme", lightTheme);
+        root.addProperty("blurBackground", blurBackground);
+        root.addProperty("english", english);
+
+        JsonObject hObj = new JsonObject();
+        for (HudSlot slot : HUD_SLOTS.values()) {
+            JsonObject s = new JsonObject();
+            s.addProperty("enabled", slot.enabled);
+            s.addProperty("x", slot.x);
+            s.addProperty("y", slot.y);
+            hObj.add(slot.id, s);
+        }
+        root.add("hudSlots", hObj);
         root.add("modules", modulesObj);
         return root;
     }

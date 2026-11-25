@@ -17,36 +17,40 @@ import org.lwjgl.glfw.GLFW;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 /**
- * Meteor-style multi-panel draggable ClickGUI with Apple rounded-rect aesthetics.
- * Left-click toggles modules, right-click (or gear button) opens ModuleSettingsScreen.
+ * Refined sharp acrylic Meteor-style ClickGUI with synchronized panel collapse,
+ * smooth theme transitions, optional background blur, CN/EN language, and HUD layout editor.
  */
 public class YeMenuScreen extends Screen {
     private enum OverlayMode {
         NONE,
         STATS,
-        KEYBINDS
+        UI_SETTINGS,
+        HUD_EDITOR
     }
 
     private enum StatsTab {
-        MESSAGES("按发言"),
-        KILLS("按击杀"),
-        DEATHS("按死亡"),
-        MUTED("黑名单");
+        MESSAGES("按发言", "Chat"),
+        KILLS("按击杀", "Kills"),
+        DEATHS("按死亡", "Deaths"),
+        MUTED("黑名单", "Muted");
 
-        final String label;
-        StatsTab(String label) { this.label = label; }
+        final String zh;
+        final String en;
+        StatsTab(String zh, String en) { this.zh = zh; this.en = en; }
+        String label() { return ConfigManager.tr(zh, en); }
     }
 
     private static final class PanelState {
         int x;
         int y;
         boolean collapsed;
-        float expandAnim = 1.0f;
+        float expandAnim;
 
         PanelState(int x, int y, boolean collapsed) {
             this.x = x;
@@ -57,20 +61,24 @@ public class YeMenuScreen extends Screen {
     }
 
     private static final Map<Category, PanelState> PANEL_STATES = new EnumMap<>(Category.class);
-    private static final Map<String, Float> MODULE_ENABLE_ANIM = new java.util.HashMap<>();
-    private static final Map<String, Float> MODULE_HOVER_ANIM = new java.util.HashMap<>();
-    private static final int PANEL_W = 128;
-    private static final int HEADER_H = 22;
-    private static final int ROW_H = 19;
+    private static final Map<String, Float> MODULE_ENABLE_ANIM = new HashMap<>();
+    private static final Map<String, Float> MODULE_HOVER_ANIM = new HashMap<>();
+
+    private static final int PANEL_W = 122;
+    private static final int HEADER_H = 21;
+    private static final int ROW_H = 18;
 
     private float openProgress = 0.0f;
-
     private String searchQuery = "";
     private boolean searchFocused = false;
 
     private Category draggingCategory = null;
     private int dragOffsetX = 0;
     private int dragOffsetY = 0;
+
+    private ConfigManager.HudSlot draggingHud = null;
+    private int hudDragOffX = 0;
+    private int hudDragOffY = 0;
 
     private OverlayMode overlayMode = OverlayMode.NONE;
     private StatsTab statsTab = StatsTab.MESSAGES;
@@ -84,7 +92,7 @@ public class YeMenuScreen extends Screen {
     private record HitArea(int x, int y, int w, int h, Runnable leftClick, Runnable rightClick) {}
 
     public YeMenuScreen() {
-        super(Component.literal("Ye Mod ClickGUI"));
+        super(Component.literal("Ye ClickGUI"));
     }
 
     @Override
@@ -109,117 +117,110 @@ public class YeMenuScreen extends Screen {
     private void resetPanelLayout() {
         PANEL_STATES.clear();
         Category[] cats = Category.values();
-        int gap = 10;
-        int maxCols = Math.max(1, (this.width - 28 + gap) / (PANEL_W + gap));
+        int gap = 8;
+        int maxCols = Math.max(1, (this.width - 24 + gap) / (PANEL_W + gap));
         int cols = Math.min(cats.length, maxCols);
         int totalRowW = cols * PANEL_W + (cols - 1) * gap;
-        int startX = Math.max(14, (this.width - totalRowW) / 2);
-        int startY = 58;
+        int startX = Math.max(12, (this.width - totalRowW) / 2);
+        int startY = 48;
 
         for (int i = 0; i < cats.length; i++) {
             int col = i % cols;
             int row = i / cols;
-            int px = startX + col * (PANEL_W + gap);
-            int py = startY + row * 195;
-            PANEL_STATES.put(cats[i], new PanelState(px, py, false));
+            PANEL_STATES.put(cats[i], new PanelState(startX + col * (PANEL_W + gap), startY + row * 190, false));
         }
     }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         hitAreas.clear();
-        openProgress = AppleUiRenderer.smooth(openProgress, 1.0f, 12.0f, 0.02f);
+        AppleUiRenderer.updateThemeAnim();
+        openProgress = AppleUiRenderer.smooth(openProgress, 1.0f, 16.0f, 0.03f);
+
+        if (ConfigManager.blurBackground) {
+            try {
+                this.renderBlurredBackground(g);
+            } catch (Exception ignored) {
+            }
+        }
         g.fill(0, 0, this.width, this.height, AppleUiRenderer.bgBackdrop());
 
-        int slideOffset = Math.round((1.0f - openProgress) * 14.0f);
+        int slideY = Math.round((1.0f - openProgress) * 10.0f);
         g.pose().pushMatrix();
-        g.pose().translate(0.0f, slideOffset);
+        g.pose().translate(0.0f, slideY);
 
-        renderTopBar(g, mouseX, mouseY - slideOffset);
+        renderTopBar(g, mouseX, mouseY - slideY);
 
         if (overlayMode == OverlayMode.NONE) {
-            String hoveredDesc = renderCategoryPanels(g, mouseX, mouseY - slideOffset);
+            String hoveredDesc = renderCategoryPanels(g, mouseX, mouseY - slideY);
             renderBottomHint(g, hoveredDesc);
         } else if (overlayMode == OverlayMode.STATS) {
-            renderStatsOverlay(g, mouseX, mouseY - slideOffset);
-        } else if (overlayMode == OverlayMode.KEYBINDS) {
-            renderKeybindsOverlay(g, mouseX, mouseY - slideOffset);
+            renderStatsOverlay(g, mouseX, mouseY - slideY);
+        } else if (overlayMode == OverlayMode.UI_SETTINGS) {
+            renderUiSettingsOverlay(g, mouseX, mouseY - slideY);
+        } else if (overlayMode == OverlayMode.HUD_EDITOR) {
+            renderHudEditorOverlay(g, mouseX, mouseY - slideY);
         }
 
         g.pose().popMatrix();
     }
 
     private void renderTopBar(GuiGraphics g, int mouseX, int mouseY) {
-        int barW = Math.min(560, this.width - 20);
-        int barH = 28;
+        int barW = Math.min(580, this.width - 20);
+        int barH = 26;
         int bx = (this.width - barW) / 2;
         int by = 10;
-        AppleUiRenderer.drawRoundedRect(g, bx, by, barW, barH, 9, AppleUiRenderer.bgWindow());
+        AppleUiRenderer.drawPanel(g, bx, by, barW, barH, AppleUiRenderer.bgWindow());
 
-        // Brand pill
-        int brandW = 58;
-        AppleUiRenderer.drawRoundedRect(g, bx + 5, by + 4, brandW, 20, 6, AppleUiRenderer.APPLE_BLUE);
-        AppleUiRenderer.drawCenteredText(g, this.font, "Ye 1.2.0", bx + 5 + brandW / 2, by + 10, AppleUiRenderer.TEXT_PRIMARY);
+        // Brand tag
+        int brandW = 54;
+        g.fill(bx + 4, by + 4, bx + 4 + brandW, by + 22, AppleUiRenderer.APPLE_BLUE);
+        AppleUiRenderer.drawCenteredText(g, this.font, "Ye 1.3.0", bx + 4 + brandW / 2, by + 9, AppleUiRenderer.TEXT_PRIMARY);
 
-        // Action buttons on right
-        int btnH = 20;
+        int btnH = 18;
         int btnY = by + 4;
 
-        int resetW = 54;
-        int resetX = bx + barW - 5 - resetW;
-        boolean resetHover = inBounds(mouseX, mouseY, resetX, btnY, resetW, btnH);
-        AppleUiRenderer.drawRoundedRect(g, resetX, btnY, resetW, btnH, 6, resetHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
-        AppleUiRenderer.drawCenteredText(g, this.font, "重置布局", resetX + resetW / 2, btnY + 6, AppleUiRenderer.textPrimary());
-        hitAreas.add(new HitArea(resetX, btnY, resetW, btnH, () -> {
+        int resetW = ConfigManager.english ? 42 : 36;
+        int resetX = bx + barW - 4 - resetW;
+        drawTopBtn(g, resetX, btnY, resetW, btnH, ConfigManager.tr("重置", "Reset"), false, mouseX, mouseY, () -> {
             overlayMode = OverlayMode.NONE;
             resetPanelLayout();
-        }, null));
+        });
 
-        int themeW = 48;
-        int themeX = resetX - 4 - themeW;
-        boolean themeHover = inBounds(mouseX, mouseY, themeX, btnY, themeW, btnH);
-        AppleUiRenderer.drawRoundedRect(g, themeX, btnY, themeW, btnH, 6, themeHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
-        AppleUiRenderer.drawCenteredText(g, this.font, AppleUiRenderer.lightTheme ? "☀ 浅色" : "🌙 深色", themeX + themeW / 2, btnY + 6, AppleUiRenderer.textPrimary());
-        hitAreas.add(new HitArea(themeX, btnY, themeW, btnH, AppleUiRenderer::toggleTheme, null));
-
-        int keyW = 54;
-        int keyX = themeX - 4 - keyW;
-        boolean keyActive = overlayMode == OverlayMode.KEYBINDS;
-        boolean keyHover = inBounds(mouseX, mouseY, keyX, btnY, keyW, btnH);
-        AppleUiRenderer.drawRoundedRect(g, keyX, btnY, keyW, btnH, 6,
-                keyActive ? AppleUiRenderer.APPLE_BLUE : (keyHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard()));
-        AppleUiRenderer.drawCenteredText(g, this.font, "按键设置", keyX + keyW / 2, btnY + 6,
-                keyActive ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
-        hitAreas.add(new HitArea(keyX, btnY, keyW, btnH, () -> {
-            overlayMode = (overlayMode == OverlayMode.KEYBINDS) ? OverlayMode.NONE : OverlayMode.KEYBINDS;
+        int hudW = ConfigManager.english ? 42 : 52;
+        int hudX = resetX - 4 - hudW;
+        drawTopBtn(g, hudX, btnY, hudW, btnH, ConfigManager.tr("HUD布局", "HUD"), overlayMode == OverlayMode.HUD_EDITOR, mouseX, mouseY, () -> {
+            overlayMode = (overlayMode == OverlayMode.HUD_EDITOR) ? OverlayMode.NONE : OverlayMode.HUD_EDITOR;
             searchFocused = false;
             muteInputFocused = false;
-        }, null));
+        });
 
-        int statsW = 54;
-        int statsX = keyX - 4 - statsW;
-        boolean statsActive = overlayMode == OverlayMode.STATS;
-        boolean statsHover = inBounds(mouseX, mouseY, statsX, btnY, statsW, btnH);
-        AppleUiRenderer.drawRoundedRect(g, statsX, btnY, statsW, btnH, 6,
-                statsActive ? AppleUiRenderer.APPLE_BLUE : (statsHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard()));
-        AppleUiRenderer.drawCenteredText(g, this.font, "玩家统计", statsX + statsW / 2, btnY + 6,
-                statsActive ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
-        hitAreas.add(new HitArea(statsX, btnY, statsW, btnH, () -> {
+        int uiW = ConfigManager.english ? 36 : 48;
+        int uiX = hudX - 4 - uiW;
+        drawTopBtn(g, uiX, btnY, uiW, btnH, ConfigManager.tr("UI设置", "UI"), overlayMode == OverlayMode.UI_SETTINGS, mouseX, mouseY, () -> {
+            overlayMode = (overlayMode == OverlayMode.UI_SETTINGS) ? OverlayMode.NONE : OverlayMode.UI_SETTINGS;
+            searchFocused = false;
+            muteInputFocused = false;
+        });
+
+        int statsW = ConfigManager.english ? 42 : 54;
+        int statsX = uiX - 4 - statsW;
+        drawTopBtn(g, statsX, btnY, statsW, btnH, ConfigManager.tr("玩家统计", "Stats"), overlayMode == OverlayMode.STATS, mouseX, mouseY, () -> {
             overlayMode = (overlayMode == OverlayMode.STATS) ? OverlayMode.NONE : OverlayMode.STATS;
             searchFocused = false;
             muteInputFocused = false;
-        }, null));
+        });
 
-        // Search box in remaining center space
-        int searchX = bx + 5 + brandW + 6;
-        int searchW = Math.max(64, statsX - 6 - searchX);
-        int searchBg = searchFocused ? (AppleUiRenderer.lightTheme ? 0xFFDCE4F2 : 0xFF283548) : AppleUiRenderer.bgCard();
-        AppleUiRenderer.drawRoundedRect(g, searchX, btnY, searchW, btnH, 6, searchBg);
-        String displaySearch = searchQuery.isEmpty()
-                ? (searchFocused ? "|" : "搜索...")
+        // Search box
+        int searchX = bx + 4 + brandW + 6;
+        int searchW = Math.max(60, statsX - 6 - searchX);
+        int searchBg = searchFocused ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard();
+        AppleUiRenderer.drawPanel(g, searchX, btnY, searchW, btnH, searchBg);
+        String disp = searchQuery.isEmpty()
+                ? (searchFocused ? "|" : ConfigManager.tr("搜索...", "Search..."))
                 : (searchQuery + (searchFocused ? "|" : ""));
-        int searchColor = searchQuery.isEmpty() && !searchFocused ? AppleUiRenderer.textTertiary() : AppleUiRenderer.textPrimary();
-        AppleUiRenderer.drawText(g, this.font, trimToWidth(displaySearch, searchW - 12), searchX + 6, btnY + 6, searchColor);
+        int sCol = searchQuery.isEmpty() && !searchFocused ? AppleUiRenderer.textTertiary() : AppleUiRenderer.textPrimary();
+        AppleUiRenderer.drawText(g, this.font, trimToWidth(disp, searchW - 10), searchX + 5, btnY + 5, sCol);
         hitAreas.add(new HitArea(searchX, btnY, searchW, btnH, () -> {
             overlayMode = OverlayMode.NONE;
             searchFocused = true;
@@ -230,69 +231,75 @@ public class YeMenuScreen extends Screen {
         }));
     }
 
+    private void drawTopBtn(GuiGraphics g, int x, int y, int w, int h, String label, boolean active, int mx, int my, Runnable action) {
+        boolean hover = inBounds(mx, my, x, y, w, h);
+        int bg = active ? AppleUiRenderer.APPLE_BLUE : (hover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawPanel(g, x, y, w, h, bg);
+        AppleUiRenderer.drawCenteredText(g, this.font, label, x + w / 2, y + 5, active ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
+        hitAreas.add(new HitArea(x, y, w, h, action, null));
+    }
+
     private String renderCategoryPanels(GuiGraphics g, int mouseX, int mouseY) {
         String hoveredDesc = null;
         String q = searchQuery.trim().toLowerCase(Locale.ROOT);
 
         for (Category cat : Category.values()) {
-            PanelState state = PANEL_STATES.computeIfAbsent(cat, c -> new PanelState(20, 58, false));
+            PanelState state = PANEL_STATES.computeIfAbsent(cat, c -> new PanelState(20, 48, false));
             List<Module> modules = filterModules(ModuleManager.getByCategory(cat), q);
 
             int px = Math.max(4, Math.min(this.width - PANEL_W - 4, state.x));
-            int py = Math.max(50, Math.min(this.height - HEADER_H - 4, state.y));
+            int py = Math.max(42, Math.min(this.height - HEADER_H - 4, state.y));
             state.x = px;
             state.y = py;
 
             float targetExpand = (!state.collapsed && !modules.isEmpty()) ? 1.0f : 0.0f;
-            state.expandAnim = AppleUiRenderer.smooth(state.expandAnim, targetExpand, 14.0f, 0.02f);
+            state.expandAnim = AppleUiRenderer.smooth(state.expandAnim, targetExpand, 18.0f, 0.03f);
 
-            int fullBodyH = modules.isEmpty() ? 0 : (modules.size() * ROW_H + 6);
+            int fullBodyH = modules.isEmpty() ? 0 : (modules.size() * ROW_H + 4);
             int animBodyH = Math.round(fullBodyH * state.expandAnim);
             int totalH = HEADER_H + animBodyH;
 
-            // Panel background
-            AppleUiRenderer.drawRoundedRect(g, px, py, PANEL_W, totalH, 10, AppleUiRenderer.bgWindow());
+            // Single synchronized clip for entire panel so header and body never desync/leak!
+            g.enableScissor(px, py, px + PANEL_W, py + totalH);
+            AppleUiRenderer.drawPanel(g, px, py, PANEL_W, totalH, AppleUiRenderer.bgWindow());
 
-            // Header bar
-            AppleUiRenderer.drawRoundedRect(g, px, py, PANEL_W, HEADER_H, 8, AppleUiRenderer.bgSidebar());
-            AppleUiRenderer.drawCircle(g, px + 8, py + 7, 7, cat.getAccentColor());
-            AppleUiRenderer.drawText(g, this.font, cat.getDisplayName(), px + 19, py + 7, AppleUiRenderer.textPrimary());
-
-            String countStr = modules.size() + (state.collapsed ? "▸" : "▾");
-            AppleUiRenderer.drawText(g, this.font, countStr, px + PANEL_W - 7 - this.font.width(countStr), py + 7, AppleUiRenderer.textTertiary());
+            // Header bar with crisp 2px left accent bar
+            g.fill(px + 1, py + 1, px + PANEL_W - 1, py + HEADER_H, AppleUiRenderer.bgSidebar());
+            g.fill(px + 1, py + 1, px + 3, py + HEADER_H, cat.getAccentColor());
+            String catName = ConfigManager.english ? cat.name() : cat.getDisplayName();
+            AppleUiRenderer.drawText(g, this.font, catName, px + 8, py + 7, AppleUiRenderer.textPrimary());
+            String countStr = String.valueOf(modules.size());
+            AppleUiRenderer.drawText(g, this.font, countStr, px + PANEL_W - 6 - this.font.width(countStr), py + 7, AppleUiRenderer.textTertiary());
 
             hitAreas.add(new HitArea(px, py, PANEL_W, HEADER_H, null, () -> state.collapsed = !state.collapsed));
 
-            if (animBodyH > 4) {
-                g.enableScissor(px, py + HEADER_H, px + PANEL_W, py + HEADER_H + animBodyH);
+            if (animBodyH > 2) {
                 int ry = py + HEADER_H + 2;
                 for (Module m : modules) {
                     int rowX = px + 3;
                     int rowW = PANEL_W - 6;
-                    boolean hover = inBounds(mouseX, mouseY, rowX, ry, rowW, ROW_H - 2);
-                    if (hover && !state.collapsed) {
-                        hoveredDesc = m.getName() + " — " + m.getDescription() + "  (左键开关 · 右键设置)";
+                    boolean hover = !state.collapsed && inBounds(mouseX, mouseY, rowX, ry, rowW, ROW_H - 2);
+                    if (hover) {
+                        String mTitle = ConfigManager.english ? m.getSubtitle() : m.getName();
+                        hoveredDesc = mTitle + " — " + m.getDescription();
                     }
 
-                    float enAnim = AppleUiRenderer.smooth(MODULE_ENABLE_ANIM.getOrDefault(m.getId(), m.isEnabled() ? 1f : 0f), m.isEnabled() ? 1f : 0f, 14.0f, 0.02f);
-                    float hvAnim = AppleUiRenderer.smooth(MODULE_HOVER_ANIM.getOrDefault(m.getId(), 0f), hover ? 1f : 0f, 14.0f, 0.02f);
+                    float enAnim = AppleUiRenderer.smooth(MODULE_ENABLE_ANIM.getOrDefault(m.getId(), m.isEnabled() ? 1f : 0f), m.isEnabled() ? 1f : 0f, 16.0f, 0.03f);
+                    float hvAnim = AppleUiRenderer.smooth(MODULE_HOVER_ANIM.getOrDefault(m.getId(), 0f), hover ? 1f : 0f, 16.0f, 0.03f);
                     MODULE_ENABLE_ANIM.put(m.getId(), enAnim);
                     MODULE_HOVER_ANIM.put(m.getId(), hvAnim);
 
                     int offBg = AppleUiRenderer.lerpColor(AppleUiRenderer.bgCard(), AppleUiRenderer.bgCardHover(), hvAnim);
                     int onBg = AppleUiRenderer.activeRowBg(hover);
                     int rowBg = AppleUiRenderer.lerpColor(offBg, onBg, enAnim);
-                    AppleUiRenderer.drawRoundedRect(g, rowX, ry, rowW, ROW_H - 2, 5, rowBg);
+                    g.fill(rowX, ry, rowX + rowW, ry + ROW_H - 2, rowBg);
 
-                    int dotColor = AppleUiRenderer.lerpColor(0xFF64748B, AppleUiRenderer.APPLE_GREEN, enAnim);
-                    AppleUiRenderer.drawCircle(g, rowX + 6, ry + 6, 5, dotColor);
+                    // Left status indicator bar
+                    int barCol = AppleUiRenderer.lerpColor(0x00000000, AppleUiRenderer.APPLE_GREEN, enAnim);
+                    g.fill(rowX, ry, rowX + 2, ry + ROW_H - 2, barCol);
 
-                    String name = trimToWidth(m.getName(), rowW - 28);
-                    AppleUiRenderer.drawText(g, this.font, name, rowX + 14, ry + 5, AppleUiRenderer.textPrimary());
-
-                    if (!m.getSettings().isEmpty()) {
-                        AppleUiRenderer.drawText(g, this.font, "⚙", rowX + rowW - 11, ry + 5, AppleUiRenderer.textTertiary());
-                    }
+                    String mName = ConfigManager.english ? m.getSubtitle() : m.getName();
+                    AppleUiRenderer.drawText(g, this.font, trimToWidth(mName, rowW - 10), rowX + 6, ry + 4, AppleUiRenderer.textPrimary());
 
                     if (!state.collapsed) {
                         hitAreas.add(new HitArea(rowX, ry, rowW, ROW_H - 2,
@@ -302,11 +309,10 @@ public class YeMenuScreen extends Screen {
                                 },
                                 () -> Minecraft.getInstance().setScreen(new ModuleSettingsScreen(this, m))));
                     }
-
                     ry += ROW_H;
                 }
-                g.disableScissor();
             }
+            g.disableScissor();
         }
         return hoveredDesc;
     }
@@ -314,100 +320,194 @@ public class YeMenuScreen extends Screen {
     private void renderBottomHint(GuiGraphics g, String hoveredDesc) {
         String text = hoveredDesc != null
                 ? hoveredDesc
-                : "左键开关模块 · 右键模块打开设置 · 拖拽分类标题移动面板 · 右键标题折叠";
+                : ConfigManager.tr("左键开关 · 右键设置 · 拖拽标题移动 · 右键标题折叠", "LClick Toggle · RClick Settings · Drag Header · RClick Collapse");
         int tw = this.font.width(text);
-        int pw = Math.min(this.width - 24, tw + 20);
+        int pw = Math.min(this.width - 24, tw + 16);
         int px = (this.width - pw) / 2;
-        int py = this.height - 26;
-        AppleUiRenderer.drawRoundedRect(g, px, py, pw, 18, 9, AppleUiRenderer.bgWindow());
-        AppleUiRenderer.drawCenteredText(g, this.font, trimToWidth(text, pw - 14), this.width / 2, py + 5, AppleUiRenderer.textSecondary());
+        int py = this.height - 22;
+        AppleUiRenderer.drawPanel(g, px, py, pw, 16, AppleUiRenderer.bgWindow());
+        AppleUiRenderer.drawCenteredText(g, this.font, trimToWidth(text, pw - 10), this.width / 2, py + 4, AppleUiRenderer.textSecondary());
+    }
+
+    private void renderUiSettingsOverlay(GuiGraphics g, int mouseX, int mouseY) {
+        int mw = Math.min(440, this.width - 36);
+        int mh = Math.min(340, this.height - 64);
+        int mx = (this.width - mw) / 2;
+        int my = 48;
+        AppleUiRenderer.drawPanel(g, mx, my, mw, mh, AppleUiRenderer.bgWindow());
+
+        AppleUiRenderer.drawText(g, this.font, ConfigManager.tr("UI 与全局设置", "UI & Global Settings"), mx + 12, my + 10, AppleUiRenderer.textPrimary());
+
+        int ry = my + 30;
+        int rw = mw - 24;
+
+        // 1. Background blur
+        drawSettingButtonRow(g, mx + 12, ry, rw, ConfigManager.tr("背景模糊", "Background Blur"),
+                ConfigManager.blurBackground ? ConfigManager.tr("开", "ON") : ConfigManager.tr("关", "OFF"),
+                ConfigManager.blurBackground, () -> {
+                    ConfigManager.blurBackground = !ConfigManager.blurBackground;
+                    ConfigManager.saveAsync();
+                });
+        ry += 28;
+
+        // 2. Dark / Light Theme
+        drawSettingButtonRow(g, mx + 12, ry, rw, ConfigManager.tr("界面主题", "Theme"),
+                ConfigManager.lightTheme ? ConfigManager.tr("浅色", "Light") : ConfigManager.tr("深色", "Dark"),
+                !ConfigManager.lightTheme, AppleUiRenderer::toggleTheme);
+        ry += 28;
+
+        // 3. Language
+        drawSettingButtonRow(g, mx + 12, ry, rw, ConfigManager.tr("语言 / Language", "Language"),
+                ConfigManager.english ? "English" : "中文",
+                true, () -> {
+                    ConfigManager.english = !ConfigManager.english;
+                    ConfigManager.saveAsync();
+                });
+        ry += 28;
+
+        // 4. Menu Keybind
+        String menuKeyLabel = listeningMenuKey
+                ? ConfigManager.tr("按下按键...", "Press key...")
+                : ModuleSettingsScreen.getKeyName(ConfigManager.getMenuKey());
+        drawSettingButtonRow(g, mx + 12, ry, rw, ConfigManager.tr("菜单快捷键", "Menu Keybind"),
+                menuKeyLabel, listeningMenuKey, () -> listeningMenuKey = !listeningMenuKey);
+        ry += 34;
+
+        // 5. Bound module keybinds
+        AppleUiRenderer.drawText(g, this.font, ConfigManager.tr("已绑定模块快捷键 (点击修改)", "Bound Module Keys"), mx + 12, ry, AppleUiRenderer.textTertiary());
+        ry += 14;
+        for (Module m : ModuleManager.getAll()) {
+            if (m.getKeybind() > 0 && ry + 22 < my + mh - 8) {
+                AppleUiRenderer.drawPanel(g, mx + 12, ry, rw, 20, AppleUiRenderer.bgCard());
+                String name = ConfigManager.english ? m.getSubtitle() : m.getName();
+                AppleUiRenderer.drawText(g, this.font, name, mx + 20, ry + 6, AppleUiRenderer.textPrimary());
+                String k = ModuleSettingsScreen.getKeyName(m.getKeybind());
+                AppleUiRenderer.drawText(g, this.font, k, mx + mw - 20 - this.font.width(k), ry + 6, AppleUiRenderer.APPLE_BLUE);
+                hitAreas.add(new HitArea(mx + 12, ry, rw, 20,
+                        () -> Minecraft.getInstance().setScreen(new ModuleSettingsScreen(this, m)), null));
+                ry += 22;
+            }
+        }
+    }
+
+    private void drawSettingButtonRow(GuiGraphics g, int x, int y, int w, String label, String val, boolean highlight, Runnable onClick) {
+        AppleUiRenderer.drawPanel(g, x, y, w, 24, AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawText(g, this.font, label, x + 10, y + 8, AppleUiRenderer.textPrimary());
+        int bw = Math.max(54, this.font.width(val) + 14);
+        int bx = x + w - 6 - bw;
+        g.fill(bx, y + 4, bx + bw, y + 20, highlight ? AppleUiRenderer.APPLE_BLUE : AppleUiRenderer.bgCardHover());
+        AppleUiRenderer.drawCenteredText(g, this.font, val, bx + bw / 2, y + 8, AppleUiRenderer.TEXT_PRIMARY);
+        hitAreas.add(new HitArea(x, y, w, 24, onClick, null));
+    }
+
+    private void renderHudEditorOverlay(GuiGraphics g, int mouseX, int mouseY) {
+        String hint = ConfigManager.tr("拖拽方框调整 HUD 位置 · 右键方框单独开关显示", "Drag boxes to move HUD · RClick box to toggle");
+        AppleUiRenderer.drawCenteredText(g, this.font, hint, this.width / 2, 46, AppleUiRenderer.textPrimary());
+
+        for (ConfigManager.HudSlot slot : ConfigManager.HUD_SLOTS.values()) {
+            String title = ConfigManager.english ? slot.enName : slot.zhName;
+            String stateStr = slot.enabled ? ConfigManager.tr("开", "ON") : ConfigManager.tr("关", "OFF");
+            String text = title + " [" + stateStr + "]";
+            int bw = this.font.width(text) + 14;
+            int bh = 18;
+            int sx = Math.max(4, Math.min(this.width - bw - 4, slot.x));
+            int sy = Math.max(60, Math.min(this.height - bh - 4, slot.y));
+            slot.x = sx;
+            slot.y = sy;
+
+            boolean hover = inBounds(mouseX, mouseY, sx, sy, bw, bh);
+            int bg = slot.enabled
+                    ? (hover ? 0xCC1E40AF : 0xAA1D4ED8)
+                    : (hover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
+            AppleUiRenderer.drawPanel(g, sx, sy, bw, bh, bg);
+            AppleUiRenderer.drawText(g, this.font, text, sx + 7, sy + 5, AppleUiRenderer.textPrimary());
+
+            hitAreas.add(new HitArea(sx, sy, bw, bh, null, () -> {
+                slot.enabled = !slot.enabled;
+                ConfigManager.saveAsync();
+            }));
+        }
     }
 
     private void renderStatsOverlay(GuiGraphics g, int mouseX, int mouseY) {
-        int mw = Math.min(600, this.width - 36);
-        int mh = Math.min(390, this.height - 74);
+        int mw = Math.min(560, this.width - 36);
+        int mh = Math.min(360, this.height - 64);
         int mx = (this.width - mw) / 2;
-        int my = 56;
-        AppleUiRenderer.drawRoundedRect(g, mx, my, mw, mh, 14, AppleUiRenderer.BG_WINDOW);
+        int my = 48;
+        AppleUiRenderer.drawPanel(g, mx, my, mw, mh, AppleUiRenderer.bgWindow());
 
-        // Tabs row
-        int tx = mx + 12;
-        int ty = my + 12;
+        int tx = mx + 10;
+        int ty = my + 10;
         for (StatsTab tab : StatsTab.values()) {
-            int tw = 64;
+            int tw = 58;
             boolean active = statsTab == tab;
-            boolean hover = inBounds(mouseX, mouseY, tx, ty, tw, 22);
-            AppleUiRenderer.drawRoundedRect(g, tx, ty, tw, 22, 7,
-                    active ? AppleUiRenderer.APPLE_BLUE : (hover ? AppleUiRenderer.BG_CARD_HOVER : AppleUiRenderer.BG_CARD));
-            g.drawCenteredString(this.font, tab.label, tx + tw / 2, ty + 7, AppleUiRenderer.TEXT_PRIMARY);
-            hitAreas.add(new HitArea(tx, ty, tw, 22, () -> {
+            boolean hover = inBounds(mouseX, mouseY, tx, ty, tw, 20);
+            AppleUiRenderer.drawPanel(g, tx, ty, tw, 20,
+                    active ? AppleUiRenderer.APPLE_BLUE : (hover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard()));
+            AppleUiRenderer.drawCenteredText(g, this.font, tab.label(), tx + tw / 2, ty + 6, AppleUiRenderer.textPrimary());
+            hitAreas.add(new HitArea(tx, ty, tw, 20, () -> {
                 statsTab = tab;
                 statsScroll = 0;
             }, null));
-            tx += tw + 6;
+            tx += tw + 5;
         }
 
-        // Open logs + Clear stats on right
-        int clearW = 62;
-        int clearX = mx + mw - 12 - clearW;
-        AppleUiRenderer.drawRoundedRect(g, clearX, ty, clearW, 22, 7, 0xFF7F1D1D);
-        g.drawCenteredString(this.font, "清空统计", clearX + clearW / 2, ty + 7, AppleUiRenderer.TEXT_PRIMARY);
-        hitAreas.add(new HitArea(clearX, ty, clearW, 22, PlayerStatsManager::clearCurrentStats, null));
+        int clearW = 58;
+        int clearX = mx + mw - 10 - clearW;
+        AppleUiRenderer.drawPanel(g, clearX, ty, clearW, 20, 0xFF7F1D1D);
+        AppleUiRenderer.drawCenteredText(g, this.font, ConfigManager.tr("清空", "Clear"), clearX + clearW / 2, ty + 6, AppleUiRenderer.TEXT_PRIMARY);
+        hitAreas.add(new HitArea(clearX, ty, clearW, 20, PlayerStatsManager::clearCurrentStats, null));
 
-        int logsW = 70;
-        int logsX = clearX - 6 - logsW;
-        AppleUiRenderer.drawRoundedRect(g, logsX, ty, logsW, 22, 7, AppleUiRenderer.BG_CARD);
-        g.drawCenteredString(this.font, "日志文件夹", logsX + logsW / 2, ty + 7, AppleUiRenderer.TEXT_PRIMARY);
-        hitAreas.add(new HitArea(logsX, ty, logsW, 22, PlayerStatsManager::openLogsFolder, null));
+        int logsW = 60;
+        int logsX = clearX - 5 - logsW;
+        AppleUiRenderer.drawPanel(g, logsX, ty, logsW, 20, AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawCenteredText(g, this.font, ConfigManager.tr("日志目录", "Logs"), logsX + logsW / 2, ty + 6, AppleUiRenderer.textPrimary());
+        hitAreas.add(new HitArea(logsX, ty, logsW, 20, PlayerStatsManager::openLogsFolder, null));
 
-        // Manual mute input bar
-        int inpY = ty + 30;
-        int addMuteW = 76;
-        int inpW = mw - 24 - addMuteW - 8;
-        AppleUiRenderer.drawRoundedRect(g, mx + 12, inpY, inpW, 24, 7, muteInputFocused ? 0xFF283548 : AppleUiRenderer.BG_CARD);
+        // Manual mute bar
+        int inpY = ty + 26;
+        int addMuteW = 66;
+        int inpW = mw - 20 - addMuteW - 6;
+        AppleUiRenderer.drawPanel(g, mx + 10, inpY, inpW, 22, muteInputFocused ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
         String inpText = muteInput.isEmpty()
-                ? (muteInputFocused ? "|" : "输入要屏蔽的玩家 ID...")
+                ? (muteInputFocused ? "|" : ConfigManager.tr("输入要屏蔽的玩家 ID...", "Player ID to mute..."))
                 : (muteInput + (muteInputFocused ? "|" : ""));
-        g.drawString(this.font, trimToWidth(inpText, inpW - 14), mx + 20, inpY + 8,
-                muteInput.isEmpty() && !muteInputFocused ? AppleUiRenderer.TEXT_TERTIARY : AppleUiRenderer.TEXT_PRIMARY, false);
-        hitAreas.add(new HitArea(mx + 12, inpY, inpW, 24, () -> {
+        AppleUiRenderer.drawText(g, this.font, trimToWidth(inpText, inpW - 12), mx + 16, inpY + 7,
+                muteInput.isEmpty() && !muteInputFocused ? AppleUiRenderer.textTertiary() : AppleUiRenderer.textPrimary());
+        hitAreas.add(new HitArea(mx + 10, inpY, inpW, 22, () -> {
             muteInputFocused = true;
             searchFocused = false;
         }, null));
 
-        int addBtnX = mx + 12 + inpW + 8;
-        AppleUiRenderer.drawRoundedRect(g, addBtnX, inpY, addMuteW, 24, 7, AppleUiRenderer.APPLE_RED);
-        g.drawCenteredString(this.font, "屏蔽玩家", addBtnX + addMuteW / 2, inpY + 8, AppleUiRenderer.TEXT_PRIMARY);
-        hitAreas.add(new HitArea(addBtnX, inpY, addMuteW, 24, () -> {
+        int addBtnX = mx + 10 + inpW + 6;
+        AppleUiRenderer.drawPanel(g, addBtnX, inpY, addMuteW, 22, AppleUiRenderer.APPLE_RED);
+        AppleUiRenderer.drawCenteredText(g, this.font, ConfigManager.tr("屏蔽", "Mute"), addBtnX + addMuteW / 2, inpY + 7, AppleUiRenderer.TEXT_PRIMARY);
+        hitAreas.add(new HitArea(addBtnX, inpY, addMuteW, 22, () -> {
             if (!muteInput.isBlank()) {
                 PlayerStatsManager.addMute(muteInput.trim());
                 muteInput = "";
             }
         }, null));
 
-        // List area
-        int listY = inpY + 32;
-        int listH = mh - (listY - my) - 12;
-        g.enableScissor(mx + 8, listY, mx + mw - 8, listY + listH);
+        int listY = inpY + 28;
+        int listH = mh - (listY - my) - 10;
+        g.enableScissor(mx + 6, listY, mx + mw - 6, listY + listH);
 
         int ry = (int) Math.round(listY - statsScroll);
         if (statsTab == StatsTab.MUTED) {
             List<String> muted = new ArrayList<>(PlayerStatsManager.getMutedPlayers());
-            if (muted.isEmpty()) {
-                g.drawCenteredString(this.font, "黑名单为空", mx + mw / 2, ry + 20, AppleUiRenderer.TEXT_TERTIARY);
-            }
             for (String id : muted) {
-                if (ry + 28 >= listY && ry <= listY + listH) {
-                    AppleUiRenderer.drawRoundedRect(g, mx + 12, ry, mw - 24, 26, 7, AppleUiRenderer.BG_CARD);
-                    g.drawString(this.font, id, mx + 22, ry + 9, AppleUiRenderer.TEXT_PRIMARY, false);
-                    int btnX = mx + mw - 82;
-                    AppleUiRenderer.drawRoundedRect(g, btnX, ry + 3, 62, 20, 6, AppleUiRenderer.APPLE_GREEN);
-                    g.drawCenteredString(this.font, "解除屏蔽", btnX + 31, ry + 9, AppleUiRenderer.TEXT_PRIMARY);
-                    if (ry >= listY && ry + 26 <= listY + listH) {
-                        hitAreas.add(new HitArea(btnX, ry + 3, 62, 20, () -> PlayerStatsManager.toggleMute(id), null));
+                if (ry + 24 >= listY && ry <= listY + listH) {
+                    AppleUiRenderer.drawPanel(g, mx + 10, ry, mw - 20, 22, AppleUiRenderer.bgCard());
+                    AppleUiRenderer.drawText(g, this.font, id, mx + 18, ry + 7, AppleUiRenderer.textPrimary());
+                    int btnX = mx + mw - 72;
+                    g.fill(btnX, ry + 3, btnX + 54, ry + 19, AppleUiRenderer.APPLE_GREEN);
+                    AppleUiRenderer.drawCenteredText(g, this.font, ConfigManager.tr("解除", "Unmute"), btnX + 27, ry + 7, AppleUiRenderer.TEXT_PRIMARY);
+                    if (ry >= listY && ry + 22 <= listY + listH) {
+                        hitAreas.add(new HitArea(btnX, ry + 3, 54, 16, () -> PlayerStatsManager.toggleMute(id), null));
                     }
                 }
-                ry += 30;
+                ry += 25;
             }
         } else {
             List<PlayerStatsManager.PlayerRecord> records = new ArrayList<>(PlayerStatsManager.getAllRecords());
@@ -419,71 +519,26 @@ public class YeMenuScreen extends Screen {
             };
             records.sort(cmp.thenComparing(r -> r.name));
 
-            if (records.isEmpty()) {
-                g.drawCenteredString(this.font, "暂无玩家统计记录（进服后自动记录真实玩家 ID）", mx + mw / 2, ry + 24, AppleUiRenderer.TEXT_TERTIARY);
-            }
             for (PlayerStatsManager.PlayerRecord rec : records) {
-                if (ry + 28 >= listY && ry <= listY + listH) {
-                    AppleUiRenderer.drawRoundedRect(g, mx + 12, ry, mw - 24, 26, 7, AppleUiRenderer.BG_CARD);
-                    g.drawString(this.font, rec.name, mx + 22, ry + 9, AppleUiRenderer.TEXT_PRIMARY, false);
+                if (ry + 24 >= listY && ry <= listY + listH) {
+                    AppleUiRenderer.drawPanel(g, mx + 10, ry, mw - 20, 22, AppleUiRenderer.bgCard());
+                    AppleUiRenderer.drawText(g, this.font, rec.name, mx + 18, ry + 7, AppleUiRenderer.textPrimary());
 
-                    String statsText = "发言 " + rec.messages + "  ·  击杀 " + rec.kills + "  ·  死亡 " + rec.deaths;
-                    g.drawString(this.font, statsText, mx + mw - 102 - this.font.width(statsText), ry + 9, AppleUiRenderer.TEXT_SECONDARY, false);
+                    String statsText = rec.messages + " / " + rec.kills + " / " + rec.deaths;
+                    AppleUiRenderer.drawText(g, this.font, statsText, mx + mw - 86 - this.font.width(statsText), ry + 7, AppleUiRenderer.textSecondary());
 
                     boolean muted = PlayerStatsManager.isMuted(rec.name);
-                    int btnX = mx + mw - 86;
-                    AppleUiRenderer.drawRoundedRect(g, btnX, ry + 3, 66, 20, 6, muted ? AppleUiRenderer.APPLE_RED : 0xFF334155);
-                    g.drawCenteredString(this.font, muted ? "已屏蔽" : "屏蔽", btnX + 33, ry + 9, AppleUiRenderer.TEXT_PRIMARY);
-                    if (ry >= listY && ry + 26 <= listY + listH) {
-                        hitAreas.add(new HitArea(btnX, ry + 3, 66, 20, () -> PlayerStatsManager.toggleMute(rec.name), null));
+                    int btnX = mx + mw - 72;
+                    g.fill(btnX, ry + 3, btnX + 54, ry + 19, muted ? AppleUiRenderer.APPLE_RED : AppleUiRenderer.bgCardHover());
+                    AppleUiRenderer.drawCenteredText(g, this.font, muted ? ConfigManager.tr("已屏蔽", "Muted") : ConfigManager.tr("屏蔽", "Mute"), btnX + 27, ry + 7, AppleUiRenderer.textPrimary());
+                    if (ry >= listY && ry + 22 <= listY + listH) {
+                        hitAreas.add(new HitArea(btnX, ry + 3, 54, 16, () -> PlayerStatsManager.toggleMute(rec.name), null));
                     }
                 }
-                ry += 30;
+                ry += 25;
             }
         }
         g.disableScissor();
-    }
-
-    private void renderKeybindsOverlay(GuiGraphics g, int mouseX, int mouseY) {
-        int mw = Math.min(480, this.width - 36);
-        int mh = Math.min(360, this.height - 74);
-        int mx = (this.width - mw) / 2;
-        int my = 56;
-        AppleUiRenderer.drawRoundedRect(g, mx, my, mw, mh, 14, AppleUiRenderer.BG_WINDOW);
-
-        g.drawString(this.font, "快捷键设置", mx + 16, my + 14, AppleUiRenderer.TEXT_PRIMARY, false);
-
-        // Menu keybind row
-        int rowY = my + 38;
-        AppleUiRenderer.drawRoundedRect(g, mx + 14, rowY, mw - 28, 34, 8, AppleUiRenderer.BG_CARD);
-        g.drawString(this.font, "打开/关闭 Ye 菜单", mx + 24, rowY + 13, AppleUiRenderer.TEXT_PRIMARY, false);
-        String menuKeyLabel = listeningMenuKey ? "请按下按键..." : ModuleSettingsScreen.getKeyName(ConfigManager.getMenuKey());
-        int keyBtnW = 92;
-        int keyBtnX = mx + mw - 22 - keyBtnW;
-        AppleUiRenderer.drawRoundedRect(g, keyBtnX, rowY + 6, keyBtnW, 22, 6,
-                listeningMenuKey ? AppleUiRenderer.APPLE_BLUE : 0xFF334155);
-        g.drawCenteredString(this.font, menuKeyLabel, keyBtnX + keyBtnW / 2, rowY + 13, AppleUiRenderer.TEXT_PRIMARY);
-        hitAreas.add(new HitArea(keyBtnX, rowY + 6, keyBtnW, 22, () -> listeningMenuKey = !listeningMenuKey, null));
-
-        // Bound module keybinds list
-        g.drawString(this.font, "已绑定快捷键的模块 (右键模块进入设置修改)", mx + 16, rowY + 46, AppleUiRenderer.TEXT_TERTIARY, false);
-        int ly = rowY + 64;
-        int count = 0;
-        for (Module m : ModuleManager.getAll()) {
-            if (m.getKeybind() > 0 && ly + 26 < my + mh - 10) {
-                AppleUiRenderer.drawRoundedRect(g, mx + 14, ly, mw - 28, 24, 6, AppleUiRenderer.BG_CARD);
-                g.drawString(this.font, m.getName(), mx + 24, ly + 8, AppleUiRenderer.TEXT_PRIMARY, false);
-                String k = ModuleSettingsScreen.getKeyName(m.getKeybind());
-                g.drawString(this.font, k, mx + mw - 24 - this.font.width(k), ly + 8, AppleUiRenderer.APPLE_BLUE, false);
-                hitAreas.add(new HitArea(mx + 14, ly, mw - 28, 24,
-                        () -> Minecraft.getInstance().setScreen(new ModuleSettingsScreen(this, m)), null));
-                ly += 28;
-                count++;
-            }
-        }
-        if (count == 0) {
-            g.drawCenteredString(this.font, "暂无模块快捷键 — 右键任意模块可单独绑定", mx + mw / 2, ly + 20, AppleUiRenderer.TEXT_TERTIARY);
-        }
     }
 
     @Override
@@ -491,7 +546,6 @@ public class YeMenuScreen extends Screen {
         double mx = event.x();
         double my = event.y();
 
-        // Check category header drag first when no overlay is open
         if (overlayMode == OverlayMode.NONE && event.button() == 0) {
             Category[] cats = Category.values();
             for (int i = cats.length - 1; i >= 0; i--) {
@@ -502,6 +556,20 @@ public class YeMenuScreen extends Screen {
                     dragOffsetX = (int) mx - state.x;
                     dragOffsetY = (int) my - state.y;
                     searchFocused = false;
+                    return true;
+                }
+            }
+        }
+
+        if (overlayMode == OverlayMode.HUD_EDITOR && event.button() == 0) {
+            for (ConfigManager.HudSlot slot : ConfigManager.HUD_SLOTS.values()) {
+                String title = ConfigManager.english ? slot.enName : slot.zhName;
+                String stateStr = slot.enabled ? ConfigManager.tr("开", "ON") : ConfigManager.tr("关", "OFF");
+                int bw = this.font.width(title + " [" + stateStr + "]") + 14;
+                if (inBounds(mx, my, slot.x, slot.y, bw, 18)) {
+                    draggingHud = slot;
+                    hudDragOffX = (int) mx - slot.x;
+                    hudDragOffY = (int) my - slot.y;
                     return true;
                 }
             }
@@ -532,8 +600,13 @@ public class YeMenuScreen extends Screen {
             PanelState state = PANEL_STATES.get(draggingCategory);
             if (state != null) {
                 state.x = Math.max(4, Math.min(this.width - PANEL_W - 4, (int) event.x() - dragOffsetX));
-                state.y = Math.max(50, Math.min(this.height - HEADER_H - 4, (int) event.y() - dragOffsetY));
+                state.y = Math.max(42, Math.min(this.height - HEADER_H - 4, (int) event.y() - dragOffsetY));
             }
+            return true;
+        }
+        if (draggingHud != null && event.button() == 0) {
+            draggingHud.x = Math.max(4, Math.min(this.width - 80, (int) event.x() - hudDragOffX));
+            draggingHud.y = Math.max(60, Math.min(this.height - 22, (int) event.y() - hudDragOffY));
             return true;
         }
         return super.mouseDragged(event, dx, dy);
@@ -543,6 +616,11 @@ public class YeMenuScreen extends Screen {
     public boolean mouseReleased(MouseButtonEvent event) {
         if (draggingCategory != null) {
             draggingCategory = null;
+            return true;
+        }
+        if (draggingHud != null) {
+            draggingHud = null;
+            ConfigManager.saveAsync();
             return true;
         }
         return super.mouseReleased(event);

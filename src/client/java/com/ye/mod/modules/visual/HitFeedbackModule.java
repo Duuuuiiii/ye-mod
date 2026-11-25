@@ -15,23 +15,22 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Pure client-side visual & audio hit feedback: spawns an expanding 3D pulse ring
- * at the attacked target and optionally plays a crisp hit chime.
+ * Rich multi-layered 3D hit shockwave rings and optional crisp sound feedback.
  */
 public class HitFeedbackModule extends Module {
     public final BoolSetting hitSound = addSetting(new BoolSetting(
-            "hitSound", "清脆命中音效", "攻击命中生物/玩家时播放清脆的提示音", true
+            "hitSound", "命中音效", "攻击命中时播放清脆提示音", true
     ));
 
     public final BoolSetting hitRing = addSetting(new BoolSetting(
-            "hitRing", "3D 命中光环", "在被攻击目标位置生成扩散的 3D 能量光环", true
+            "hitRing", "立体光环", "在命中处生成多层扩散 3D 冲击波", true
     ));
 
     private record HitPulse(Vec3 pos, long startMs) {}
     private final List<HitPulse> pulses = new CopyOnWriteArrayList<>();
 
     public HitFeedbackModule() {
-        super("hit_feedback", "打击光环反馈", "Hit Feedback", "攻击目标时在命中处弹出 3D 扩散光环并播放清脆命中提示音", Category.VISUAL);
+        super("hit_feedback", "打击反馈", "Hit Feedback", "攻击目标时弹出多层厚重 3D 冲击光环与音效", Category.VISUAL);
     }
 
     @Override
@@ -57,15 +56,23 @@ public class HitFeedbackModule extends Module {
         while (it.hasNext()) {
             HitPulse p = it.next();
             long elapsed = now - p.startMs;
-            if (elapsed > 450L) {
+            if (elapsed > 480L) {
                 pulses.remove(p);
                 continue;
             }
-            float t = elapsed / 450.0f;
-            float radius = 0.25f + t * 0.85f;
-            int alpha = Math.max(20, Math.round((1.0f - t) * 230));
-            int color = (alpha << 24) | 0x38BDF8;
-            Gizmos.circle(p.pos, radius, GizmoStyle.stroke(color, 2.5f)).setAlwaysOnTop();
+            float t = elapsed / 480.0f;
+            float rOuter = 0.30f + t * 1.15f;
+            float rMid = 0.20f + t * 0.85f;
+            float rInner = 0.12f + t * 0.55f;
+
+            int aOuter = Math.max(15, Math.round((1.0f - t) * 210));
+            int aMid = Math.max(20, Math.round((1.0f - t) * 240));
+            int aCore = Math.max(25, Math.round((1.0f - t) * 255));
+
+            Gizmos.circle(p.pos, rOuter, GizmoStyle.stroke((aOuter << 24) | 0x38BDF8, 4.0f)).setAlwaysOnTop();
+            Gizmos.circle(p.pos.add(0, 0.06, 0), rMid, GizmoStyle.stroke((aMid << 24) | 0xA855F7, 3.2f)).setAlwaysOnTop();
+            Gizmos.circle(p.pos.add(0, -0.06, 0), rInner, GizmoStyle.stroke((aCore << 24) | 0xFFFFFF, 2.5f)).setAlwaysOnTop();
+            Gizmos.line(p.pos.add(0, -0.35 * (1 - t), 0), p.pos.add(0, 0.45 * (1 - t), 0), (aCore << 24) | 0x7DD3FC, 3.0f).setAlwaysOnTop();
         }
     }
 }

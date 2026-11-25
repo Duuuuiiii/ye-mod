@@ -5,7 +5,9 @@ import com.ye.mod.modules.render.LavaEspModule;
 import com.ye.mod.modules.render.MotionTrailModule;
 import com.ye.mod.modules.render.TrajectoryPreviewModule;
 import com.ye.mod.modules.visual.HitFeedbackModule;
+import com.ye.mod.modules.visual.SoulRingsModule;
 import com.ye.mod.modules.world.LogoutGhostsModule;
+import com.ye.mod.modules.world.PortalFinderModule;
 import com.ye.mod.modules.world.StashRadarModule;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.debug.DebugRenderer;
@@ -36,5 +38,11 @@ public abstract class DebugRendererMixin {
 
         HitFeedbackModule hit = ModuleManager.get(HitFeedbackModule.class);
         if (hit != null) hit.emitGizmos();
+
+        SoulRingsModule rings = ModuleManager.get(SoulRingsModule.class);
+        if (rings != null) rings.emitGizmos();
+
+        PortalFinderModule portal = ModuleManager.get(PortalFinderModule.class);
+        if (portal != null) portal.emitGizmos();
     }
 }

@@ -75,7 +75,11 @@ public class PortalSyncModule extends Module {
             line += String.format("  |  目标: %s %dm", arrow, dist);
         }
 
-        g.drawString(mc.font, line, 8, 20, 0xFFFBBF24, true);
+        com.ye.mod.core.ConfigManager.HudSlot slot = com.ye.mod.core.ConfigManager.HUD_SLOTS.get("hud_portal");
+        if (slot != null && !slot.enabled) return;
+        int hx = slot != null ? slot.x : 8;
+        int hy = slot != null ? slot.y : 22;
+        g.drawString(mc.font, line, hx, hy, 0xFFFBBF24, true);
     }
 
     private static String getRelativeArrow(float yawDeg, double dx, double dz) {

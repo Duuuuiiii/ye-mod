@@ -9,35 +9,38 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.gizmos.Gizmos;
 import net.minecraft.world.phys.Vec3;
 
-import java.awt.Color;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
 /**
- * Leaves a smooth 3D glowing motion trail behind the player while moving or elytra-flying.
+ * Honor-of-Kings inspired 3D motion trail with 4 styled presets,
+ * configurable duration/width, and first-person camera clipping fix.
  */
 public class MotionTrailModule extends Module {
-    public enum TrailColor {
-        CYBER_BLUE(0xFF38BDF8),
-        ENDER_PURPLE(0xFFA855F7),
-        FLAME_GOLD(0xFFFBBF24),
-        CRIMSON_RED(0xFFEF4444),
-        CHROMA(0xFFFFFFFF);
+    public enum TrailPreset {
+        GALAXY_RIBBON("星河光带"),
+        PHOENIX_FLAME("烈焰凤尾"),
+        VOID_LIGHTNING("虚空雷电"),
+        SAKURA_STREAM("樱落流光");
 
-        final int rgb;
-        TrailColor(int rgb) { this.rgb = rgb; }
+        public final String label;
+        TrailPreset(String label) { this.label = label; }
     }
 
-    public final EnumSetting<TrailColor> color = addSetting(new EnumSetting<>(
-            "color", "拖尾配色", "选择运动光带的配色风格（CHROMA 为动态彩虹）", TrailColor.CHROMA
+    public final EnumSetting<TrailPreset> preset = addSetting(new EnumSetting<>(
+            "preset", "拖尾预设", "星河光带 / 烈焰凤尾 / 虚空雷电 / 樱落流光", TrailPreset.GALAXY_RIBBON
     ));
 
-    public final DoubleSetting length = addSetting(new DoubleSetting(
-            "length", "拖尾长度", "保留最近多少个轨迹节点", 40.0, 10.0, 120.0, 5.0
+    public final DoubleSetting durationSec = addSetting(new DoubleSetting(
+            "durationSec", "持续时间(秒)", "拖尾在空中停留消散的时间", 2.2, 0.5, 5.0, 0.1
+    ));
+
+    public final DoubleSetting width = addSetting(new DoubleSetting(
+            "width", "光带宽度", "拖尾光带的粗细与张力", 4.5, 1.5, 9.0, 0.5
     ));
 
     public final BoolSetting onlyWhenFlying = addSetting(new BoolSetting(
-            "onlyWhenFlying", "仅飞行时显示", "只在鞘翅滑翔时渲染光带拖尾", false
+            "onlyWhenFlying", "仅飞行显示", "只在鞘翅滑翔时渲染拖尾", false
     ));
 
     private record TrailPoint(Vec3 pos, long timeMs) {}
@@ -45,7 +48,7 @@ public class MotionTrailModule extends Module {
     private Vec3 lastAdded = null;
 
     public MotionTrailModule() {
-        super("motion_trail", "光影运动拖尾", "Motion Trail", "移动或鞘翅飞行时在身后留下 3D 霓虹光带轨迹", Category.RENDER);
+        super("motion_trail", "炫彩拖尾", "Motion Trail", "王者荣耀风多种宽幅光带拖尾，修复第一人称前遮挡", Category.RENDER);
     }
 
     @Override
@@ -68,37 +71,75 @@ public class MotionTrailModule extends Module {
             return;
         }
 
-        Vec3 cur = mc.player.position().add(0, mc.player.isFallFlying() ? 0.45 : 0.25, 0);
-        if (lastAdded == null || cur.distanceToSqr(lastAdded) > 0.04) {
+        Vec3 cur = mc.player.position().add(0, mc.player.isFallFlying() ? 0.45 : 0.28, 0);
+        if (lastAdded == null || cur.distanceToSqr(lastAdded) > 0.03) {
             points.addLast(new TrailPoint(cur, System.currentTimeMillis()));
             lastAdded = cur;
         }
 
-        int maxPts = Math.max(10, (int) Math.round(length.get()));
-        long cutoff = System.currentTimeMillis() - 2500L;
-        while (points.size() > maxPts || (!points.isEmpty() && points.peekFirst().timeMs < cutoff)) {
+        long maxAgeMs = Math.round(durationSec.get() * 1000.0);
+        long cutoff = System.currentTimeMillis() - maxAgeMs;
+        while (points.size() > 160 || (!points.isEmpty() && points.peekFirst().timeMs < cutoff)) {
             points.pollFirst();
         }
     }
 
     public void emitGizmos() {
         if (!isEnabled() || points.size() < 2) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return;
+
+        boolean firstPerson = mc.options.getCameraType().isFirstPerson();
+        Vec3 eyePos = mc.player.getEyePosition(1.0f);
+        Vec3 lookVec = mc.player.getLookAngle();
+        Vec3 playerPos = mc.player.position();
+
         TrailPoint[] arr = points.toArray(new TrailPoint[0]);
         long now = System.currentTimeMillis();
-        TrailColor tc = color.get();
+        long maxAgeMs = Math.max(300L, Math.round(durationSec.get() * 1000.0));
+        float baseW = width.get().floatValue();
+        TrailPreset p = preset.get();
+
+        int coreRgb;
+        int outerRgb;
+        switch (p) {
+            case PHOENIX_FLAME -> { coreRgb = 0xFDE047; outerRgb = 0xEF4444; }
+            case VOID_LIGHTNING -> { coreRgb = 0xE879F9; outerRgb = 0x7C3AED; }
+            case SAKURA_STREAM -> { coreRgb = 0xFFF1F2; outerRgb = 0xF472B6; }
+            default -> { coreRgb = 0x7DD3FC; outerRgb = 0x6366F1; }
+        }
 
         for (int i = 1; i < arr.length; i++) {
-            float progress = (float) i / (arr.length - 1);
-            int alpha = Math.max(25, Math.min(240, Math.round(progress * 235)));
-            int rgb;
-            if (tc == TrailColor.CHROMA) {
-                float hue = (((now / 15) + i * 8) % 360) / 360.0f;
-                rgb = Color.HSBtoRGB(hue, 0.85f, 1.0f) & 0x00FFFFFF;
-            } else {
-                rgb = tc.rgb & 0x00FFFFFF;
+            Vec3 p0 = arr[i - 1].pos;
+            Vec3 p1 = arr[i].pos;
+
+            // First-person fix: never render segments close to or in front of the player's camera!
+            if (firstPerson) {
+                if (p1.distanceToSqr(playerPos) < 1.35 || p0.distanceToSqr(playerPos) < 1.35) continue;
+                if (p1.subtract(eyePos).dot(lookVec) > -0.15) continue;
             }
-            int argb = (alpha << 24) | rgb;
-            Gizmos.line(arr[i - 1].pos, arr[i].pos, argb, 1.5f + progress * 2.5f);
+
+            float ageFrac = Math.max(0.0f, Math.min(1.0f, 1.0f - (float) (now - arr[i].timeMs) / maxAgeMs));
+            int coreA = Math.max(20, Math.round(ageFrac * 240));
+            int outerA = Math.max(12, Math.round(ageFrac * 135));
+
+            if (p == TrailPreset.VOID_LIGHTNING) {
+                float jx = (float) Math.sin(i * 2.3 + now * 0.01) * 0.14f * ageFrac;
+                float jy = (float) Math.cos(i * 1.9 + now * 0.01) * 0.14f * ageFrac;
+                Vec3 jp0 = p0.add(jx, jy, 0);
+                Vec3 jp1 = p1.add(-jx, -jy, 0);
+                Gizmos.line(jp0, jp1, (outerA << 24) | outerRgb, baseW * 1.6f * ageFrac);
+                Gizmos.line(jp0, jp1, (coreA << 24) | coreRgb, Math.max(1.2f, baseW * 0.55f * ageFrac));
+            } else {
+                // Wide twin-ribbon effect
+                Gizmos.line(p0, p1, (outerA << 24) | outerRgb, baseW * 1.7f * ageFrac);
+                Gizmos.line(p0.add(0, 0.12, 0), p1.add(0, 0.12, 0), (coreA << 24) | coreRgb, Math.max(1.2f, baseW * 0.7f * ageFrac));
+                if ((i % 4 == 0) && (p == TrailPreset.GALAXY_RIBBON || p == TrailPreset.SAKURA_STREAM)) {
+                    double ox = Math.sin(i * 1.7) * 0.25;
+                    double oz = Math.cos(i * 1.7) * 0.25;
+                    Gizmos.point(p1.add(ox, 0.18, oz), (coreA << 24) | coreRgb, 3.0f * ageFrac);
+                }
+            }
         }
     }
 }

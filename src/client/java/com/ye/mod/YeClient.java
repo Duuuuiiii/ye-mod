@@ -13,7 +13,9 @@ import com.ye.mod.modules.render.MotionTrailModule;
 import com.ye.mod.modules.render.TrajectoryPreviewModule;
 import com.ye.mod.modules.visual.AmbienceModule;
 import com.ye.mod.modules.visual.HitFeedbackModule;
+import com.ye.mod.modules.visual.SoulRingsModule;
 import com.ye.mod.modules.world.LogoutGhostsModule;
+import com.ye.mod.modules.world.PortalFinderModule;
 import com.ye.mod.modules.world.PortalSyncModule;
 import com.ye.mod.modules.world.StashRadarModule;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
@@ -50,8 +52,10 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new MotionTrailModule());
         ModuleManager.register(new AmbienceModule());
         ModuleManager.register(new HitFeedbackModule());
+        ModuleManager.register(new SoulRingsModule());
         ModuleManager.register(new SmartAfkModule());
         ModuleManager.register(new PortalSyncModule());
+        ModuleManager.register(new PortalFinderModule());
         ModuleManager.register(new StashRadarModule());
         ModuleManager.register(new LogoutGhostsModule());
 

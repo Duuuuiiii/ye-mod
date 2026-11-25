@@ -34,6 +34,7 @@ public class ModuleSettingsScreen extends Screen {
 
     private double scrollY = 0;
     private double maxScroll = 0;
+    private float openProgress = 0.0f;
     private boolean listeningKeybind = false;
     private DoubleSetting draggingSlider = null;
     private int sliderDragX = 0;
@@ -79,42 +80,55 @@ public class ModuleSettingsScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         hitRects.clear();
+        AppleUiRenderer.updateThemeAnim();
+        openProgress = AppleUiRenderer.smooth(openProgress, 1.0f, 16.0f, 0.03f);
 
-        // Backdrop
-        g.fill(0, 0, this.width, this.height, AppleUiRenderer.BG_BACKDROP);
+        if (ConfigManager.blurBackground) {
+            try {
+                this.renderBlurredBackground(g);
+            } catch (Exception ignored) {
+            }
+        }
+        g.fill(0, 0, this.width, this.height, AppleUiRenderer.bgBackdrop());
+
+        int slideY = Math.round((1.0f - openProgress) * 12.0f);
+        g.pose().pushMatrix();
+        g.pose().translate(0.0f, slideY);
+        mouseY -= slideY;
 
         int mx = modalX();
         int my = modalY();
         int mw = modalW();
         int mh = modalH();
 
-        AppleUiRenderer.drawRoundedRect(g, mx, my, mw, mh, 14, AppleUiRenderer.BG_WINDOW);
+        AppleUiRenderer.drawPanel(g, mx, my, mw, mh, AppleUiRenderer.bgWindow());
 
         // Header
-        int headerH = 50;
-        AppleUiRenderer.drawRoundedRect(g, mx, my, mw, headerH, 14, AppleUiRenderer.BG_SIDEBAR);
-        g.fill(mx, my + headerH - 1, mx + mw, my + headerH, 0x22FFFFFF);
+        int headerH = 44;
+        g.fill(mx + 1, my + 1, mx + mw - 1, my + headerH, AppleUiRenderer.bgSidebar());
+        g.fill(mx, my + headerH - 1, mx + mw, my + headerH, AppleUiRenderer.borderHairline());
 
         // Back button
-        int backX = mx + 12;
-        int backY = my + 13;
-        int backW = 54;
-        int backH = 24;
+        int backX = mx + 10;
+        int backY = my + 11;
+        int backW = 50;
+        int backH = 22;
         boolean backHover = inBounds(mouseX, mouseY, backX, backY, backW, backH);
-        AppleUiRenderer.drawRoundedRect(g, backX, backY, backW, backH, 7, backHover ? AppleUiRenderer.BG_CARD_HOVER : AppleUiRenderer.BG_CARD);
-        g.drawCenteredString(this.font, "← 返回", backX + backW / 2, backY + 8, AppleUiRenderer.TEXT_PRIMARY);
+        AppleUiRenderer.drawPanel(g, backX, backY, backW, backH, backHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawCenteredText(g, this.font, ConfigManager.tr("← 返回", "← Back"), backX + backW / 2, backY + 7, AppleUiRenderer.textPrimary());
         hitRects.add(new HitRect(backX, backY, backW, backH, this::onClose, null));
 
-        // Title + subtitle
-        int titleX = backX + backW + 12;
-        g.drawString(this.font, module.getName(), titleX, my + 11, AppleUiRenderer.TEXT_PRIMARY, false);
-        g.drawString(this.font, module.getSubtitle(), titleX, my + 26, AppleUiRenderer.TEXT_TERTIARY, false);
+        // Title
+        int titleX = backX + backW + 10;
+        String mTitle = ConfigManager.english ? module.getSubtitle() : module.getName();
+        AppleUiRenderer.drawText(g, this.font, mTitle, titleX, my + 10, AppleUiRenderer.textPrimary());
+        AppleUiRenderer.drawText(g, this.font, module.getSubtitle(), titleX, my + 24, AppleUiRenderer.textTertiary());
 
         // Module enable pill switch on top right
-        int swW = 36;
-        int swH = 20;
-        int swX = mx + mw - 14 - swW;
-        int swY = my + 15;
+        int swW = 34;
+        int swH = 18;
+        int swX = mx + mw - 12 - swW;
+        int swY = my + 13;
         AppleUiRenderer.drawPillSwitch(g, swX, swY, swW, swH, module.isEnabled() ? 1.0f : 0.0f);
         hitRects.add(new HitRect(swX, swY, swW, swH, () -> {
             module.toggle();
@@ -122,31 +136,31 @@ public class ModuleSettingsScreen extends Screen {
         }, null));
 
         // Keybind pill next to switch
-        String keyLabel = listeningKeybind ? "按下按键..." : ("绑定: " + getKeyName(module.getKeybind()));
-        int keyW = Math.max(76, this.font.width(keyLabel) + 16);
-        int keyX = swX - 10 - keyW;
-        int keyY = my + 13;
-        int keyH = 24;
+        String keyLabel = listeningKeybind ? ConfigManager.tr("按键...", "Key...") : (ConfigManager.tr("按键:", "Key:") + " " + getKeyName(module.getKeybind()));
+        int keyW = Math.max(72, this.font.width(keyLabel) + 14);
+        int keyX = swX - 8 - keyW;
+        int keyY = my + 11;
+        int keyH = 22;
         boolean keyHover = inBounds(mouseX, mouseY, keyX, keyY, keyW, keyH);
-        int keyBg = listeningKeybind ? AppleUiRenderer.APPLE_BLUE : (keyHover ? AppleUiRenderer.BG_CARD_HOVER : AppleUiRenderer.BG_CARD);
-        AppleUiRenderer.drawRoundedRect(g, keyX, keyY, keyW, keyH, 7, keyBg);
-        g.drawCenteredString(this.font, keyLabel, keyX + keyW / 2, keyY + 8, AppleUiRenderer.TEXT_PRIMARY);
+        int keyBg = listeningKeybind ? AppleUiRenderer.APPLE_BLUE : (keyHover ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawPanel(g, keyX, keyY, keyW, keyH, keyBg);
+        AppleUiRenderer.drawCenteredText(g, this.font, keyLabel, keyX + keyW / 2, keyY + 7, AppleUiRenderer.textPrimary());
         hitRects.add(new HitRect(keyX, keyY, keyW, keyH, () -> listeningKeybind = !listeningKeybind, null));
 
         // Scrollable content area
-        int contentX = mx + 14;
+        int contentX = mx + 12;
         int contentY = my + headerH + 8;
-        int contentW = mw - 28;
-        int contentH = mh - headerH - 18;
+        int contentW = mw - 24;
+        int contentH = mh - headerH - 16;
 
         g.enableScissor(mx, contentY, mx + mw, contentY + contentH);
 
         int curY = (int) Math.round(contentY - scrollY);
 
         // Description card
-        AppleUiRenderer.drawRoundedRect(g, contentX, curY, contentW, 28, 8, AppleUiRenderer.BG_CARD);
-        g.drawString(this.font, module.getDescription(), contentX + 10, curY + 10, AppleUiRenderer.TEXT_SECONDARY, false);
-        curY += 36;
+        AppleUiRenderer.drawPanel(g, contentX, curY, contentW, 24, AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawText(g, this.font, trimToWidth(module.getDescription(), contentW - 16), contentX + 8, curY + 8, AppleUiRenderer.textSecondary());
+        curY += 30;
 
         // Cape gallery
         if (module instanceof CustomCapeModule capeMod) {
@@ -177,8 +191,9 @@ public class ModuleSettingsScreen extends Screen {
         if (maxScroll > 0) {
             int barH = Math.max(24, (int) ((double) contentH * contentH / (contentH + maxScroll)));
             int barY = contentY + (int) ((contentH - barH) * (scrollY / maxScroll));
-            AppleUiRenderer.drawRoundedRect(g, mx + mw - 6, barY, 3, barH, 2, 0x55FFFFFF);
+            g.fill(mx + mw - 5, barY, mx + mw - 2, barY + barH, 0x55FFFFFF);
         }
+        g.pose().popMatrix();
     }
 
     private int renderCapeGallery(GuiGraphics g, CustomCapeModule capeMod, int x, int y, int w, int clipTop, int clipBottom, int mouseX, int mouseY) {

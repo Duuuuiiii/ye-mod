@@ -42,28 +42,44 @@ public final class AppleUiRenderer {
     public static boolean lightTheme = false;
     public static FontStyle fontStyle = FontStyle.STANDARD;
 
-    public static int bgBackdrop() { return lightTheme ? 0x45E2E8F0 : BG_BACKDROP; }
-    public static int bgWindow() { return lightTheme ? 0xF2F4F6FA : BG_WINDOW; }
-    public static int bgSidebar() { return lightTheme ? 0xF8E8ECF4 : BG_SIDEBAR; }
-    public static int bgCard() { return lightTheme ? 0xFFFFFFFF : BG_CARD; }
-    public static int bgCardHover() { return lightTheme ? 0xFFE5EAF3 : BG_CARD_HOVER; }
-    public static int textPrimary() { return lightTheme ? 0xFF111827 : TEXT_PRIMARY; }
-    public static int textSecondary() { return lightTheme ? 0xFF4B5563 : TEXT_SECONDARY; }
-    public static int textTertiary() { return lightTheme ? 0xFF6B7280 : TEXT_TERTIARY; }
-    public static int activeRowBg(boolean hover) {
-        if (lightTheme) return hover ? 0xFFD6E8FF : 0xFFE6F0FF;
-        return hover ? 0xCC1E40AF : 0xAA1D4ED8;
+    public static float themeAnim = 0.0f;
+
+    public static void updateThemeAnim() {
+        float target = com.ye.mod.core.ConfigManager.lightTheme ? 1.0f : 0.0f;
+        themeAnim = smooth(themeAnim, target, 12.0f, 0.025f);
+        lightTheme = com.ye.mod.core.ConfigManager.lightTheme;
     }
 
-    public static void toggleTheme() { lightTheme = !lightTheme; }
-    public static void cycleFontStyle() {
-        FontStyle[] vals = FontStyle.values();
-        fontStyle = vals[(fontStyle.ordinal() + 1) % vals.length];
+    public static int bgBackdrop() { return lerpColor(0x6805070B, 0x45DCE4F0, themeAnim); }
+    public static int bgWindow() { return lerpColor(0xEB10121A, 0xF0F4F6FA, themeAnim); }
+    public static int bgSidebar() { return lerpColor(0xF50B0D14, 0xF8E7ECF4, themeAnim); }
+    public static int bgCard() { return lerpColor(0xFF171A24, 0xFFFFFFFF, themeAnim); }
+    public static int bgCardHover() { return lerpColor(0xFF1F2433, 0xFFE6ECF5, themeAnim); }
+    public static int borderHairline() { return lerpColor(0x28FFFFFF, 0x260F172A, themeAnim); }
+    public static int textPrimary() { return lerpColor(0xFFF5F5F7, 0xFF0F172A, themeAnim); }
+    public static int textSecondary() { return lerpColor(0xFF98989D, 0xFF475569, themeAnim); }
+    public static int textTertiary() { return lerpColor(0xFF636366, 0xFF64748B, themeAnim); }
+    public static int activeRowBg(boolean hover) {
+        int dark = hover ? 0xCC1E40AF : 0xAA1D4ED8;
+        int light = hover ? 0xFFD0E4FF : 0xFFE2EEFF;
+        return lerpColor(dark, light, themeAnim);
+    }
+
+    public static void toggleTheme() {
+        com.ye.mod.core.ConfigManager.lightTheme = !com.ye.mod.core.ConfigManager.lightTheme;
+        lightTheme = com.ye.mod.core.ConfigManager.lightTheme;
+        com.ye.mod.core.ConfigManager.saveAsync();
+    }
+
+    public static void drawPanel(GuiGraphics g, int x, int y, int w, int h, int bg) {
+        if (w <= 0 || h <= 0) return;
+        g.fill(x, y, x + w, y + h, bg);
+        g.renderOutline(x, y, w, h, borderHairline());
     }
 
     public static void drawText(GuiGraphics g, Font font, String text, int x, int y, int color) {
         if (text == null) return;
-        g.drawString(font, text, x, y, color, !lightTheme);
+        g.drawString(font, text, x, y, color, themeAnim < 0.5f);
     }
 
     public static void drawCenteredText(GuiGraphics g, Font font, String text, int cx, int y, int color) {
