@@ -1,6 +1,7 @@
 package com.ye.mod.mixin;
 
 import com.ye.mod.core.ModuleManager;
+import com.ye.mod.modules.render.AntiLagModule;
 import com.ye.mod.modules.render.NoRenderModule;
 import com.ye.mod.modules.visual.HudModule;
 import com.ye.mod.modules.visual.NoFovModule;
@@ -73,6 +74,10 @@ public abstract class GuiMixin {
         HudModule hud = ModuleManager.get(HudModule.class);
         if (hud != null) {
             hud.render(guiGraphics);
+        }
+        AntiLagModule antiLag = ModuleManager.get(AntiLagModule.class);
+        if (antiLag != null) {
+            antiLag.renderHudAlert(guiGraphics);
         }
     }
 }

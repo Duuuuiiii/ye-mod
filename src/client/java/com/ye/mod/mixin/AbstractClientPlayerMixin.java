@@ -40,7 +40,7 @@ public abstract class AbstractClientPlayerMixin {
         if (applySkin && (!skinMod.onlySelf.get() || isSelf)) {
             Identifier skinTex = skinMod.getActiveSkinTexture();
             if (skinTex != null) {
-                bodyAsset = new ClientAsset.ResourceTexture(skinTex);
+                bodyAsset = new ClientAsset.ResourceTexture(skinTex, skinTex);
                 changed = true;
             }
             if (skinMod.modelMode.get() == CustomSkinModule.SkinModelMode.CLASSIC) {
@@ -55,7 +55,7 @@ public abstract class AbstractClientPlayerMixin {
         if (applyCape && (!capeMod.onlySelf.get() || isSelf)) {
             Identifier capeTex = capeMod.getActiveCapeTexture();
             if (capeTex != null) {
-                capeAsset = new ClientAsset.ResourceTexture(capeTex);
+                capeAsset = new ClientAsset.ResourceTexture(capeTex, capeTex);
                 if (capeMod.applyToElytra.get()) {
                     elytraAsset = capeAsset;
                 }

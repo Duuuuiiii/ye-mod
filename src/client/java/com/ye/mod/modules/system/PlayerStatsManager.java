@@ -178,46 +178,53 @@ public final class PlayerStatsManager {
                 return new ParsedMessage(MessageKind.JOIN_LEAVE, tm.p1, null, plain);
             }
             if (tm.key.startsWith("death.")) {
-                if (tm.p1 != null && !tm.p1.isBlank()) {
-                    PlayerRecord victim = getOrCreate(tm.p1);
+                String victimName = resolveRealPlayerId(tm.p1);
+                String killerName = resolveRealPlayerId(tm.p2);
+                if (victimName != null) {
+                    PlayerRecord victim = getOrCreate(victimName);
                     victim.deaths++;
                     victim.lastSeen = now;
                 }
-                if (tm.p2 != null && !tm.p2.isBlank() && isLikelyPlayer(tm.p2)) {
-                    PlayerRecord killer = getOrCreate(tm.p2);
+                if (killerName != null) {
+                    PlayerRecord killer = getOrCreate(killerName);
                     killer.kills++;
                     killer.lastSeen = now;
                 }
-                appendLog("kill_log.txt", "[" + now + "] " + plain);
-                saveStatsAsync();
-                return new ParsedMessage(MessageKind.DEATH, tm.p1, tm.p2, plain);
+                if (victimName != null || killerName != null) {
+                    appendLog("kill_log.txt", "[" + now + "] " + stripFormatting(plain));
+                    saveStatsAsync();
+                }
+                return new ParsedMessage(MessageKind.DEATH, victimName, killerName, plain);
             }
             if (tm.key.equals("chat.type.text") || tm.key.equals("chat.type.announcement")) {
-                if (tm.p1 != null && !tm.p1.isBlank()) {
-                    PlayerRecord rec = getOrCreate(tm.p1);
+                String sender = resolveRealPlayerId(tm.p1);
+                if (sender != null) {
+                    PlayerRecord rec = getOrCreate(sender);
                     rec.messages++;
                     rec.lastSeen = now;
-                    appendLog("chat_log.txt", "[" + now + "] " + plain);
+                    appendLog("chat_log.txt", "[" + now + "] " + stripFormatting(plain));
                     saveStatsAsync();
-                    return new ParsedMessage(MessageKind.PLAYER_CHAT, tm.p1, null, plain);
+                    return new ParsedMessage(MessageKind.PLAYER_CHAT, sender, null, plain);
                 }
             }
         }
 
         // 2. Fallback regex for server-formatted chat (e.g. "<Name> msg" or "[Rank] Name: msg")
-        String trimmed = plain.replaceAll("§.", "").trim();
+        String trimmed = stripFormatting(plain).trim();
         Matcher m1 = ANGLE_CHAT.matcher(trimmed);
         if (m1.matches()) {
-            String sender = m1.group(1);
-            recordChat(sender, now, plain);
-            return new ParsedMessage(MessageKind.PLAYER_CHAT, sender, null, plain);
+            String sender = resolveRealPlayerId(m1.group(1));
+            if (sender != null) {
+                recordChat(sender, now, plain);
+                return new ParsedMessage(MessageKind.PLAYER_CHAT, sender, null, plain);
+            }
         }
         Matcher m2 = PREFIX_CHAT.matcher(trimmed);
         if (m2.matches()) {
-            String candidate = m2.group(1);
-            if (isOnlinePlayer(candidate)) {
-                recordChat(candidate, now, plain);
-                return new ParsedMessage(MessageKind.PLAYER_CHAT, candidate, null, plain);
+            String sender = resolveRealPlayerId(m2.group(1));
+            if (sender != null) {
+                recordChat(sender, now, plain);
+                return new ParsedMessage(MessageKind.PLAYER_CHAT, sender, null, plain);
             }
         }
 
@@ -237,6 +244,26 @@ public final class PlayerStatsManager {
         return STATS.computeIfAbsent(key, k -> new PlayerRecord(name));
     }
 
+    private static String stripFormatting(String s) {
+        return s == null ? "" : s.replaceAll("§.", "");
+    }
+
+    /**
+     * Extracts a clean Minecraft player ID (no head glyphs/prefixes) and verifies it is an actual player.
+     */
+    private static String resolveRealPlayerId(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String clean = stripFormatting(raw).trim();
+        Matcher m = Pattern.compile("([A-Za-z0-9_]{3,16})").matcher(clean);
+        while (m.find()) {
+            String candidate = m.group(1);
+            if (isOnlinePlayer(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
     private static boolean isOnlinePlayer(String name) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.getConnection() == null) return false;
@@ -246,11 +273,6 @@ public final class PlayerStatsManager {
             }
         }
         return false;
-    }
-
-    private static boolean isLikelyPlayer(String name) {
-        if (isOnlinePlayer(name)) return true;
-        return name.matches("^[A-Za-z0-9_]{3,16}$");
     }
 
     private record TranslatableMatch(String key, String p1, String p2) {}

@@ -4,7 +4,10 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "AbstractClientPlayerMixin",
+    "AbstractSignRendererMixin",
+    "BlockEntityRenderDispatcherMixin",
     "ChatComponentMixin",
+    "EntityRenderDispatcherMixin",
     "GameRendererMixin",
     "GuiMixin",
     "LocalPlayerMixin",

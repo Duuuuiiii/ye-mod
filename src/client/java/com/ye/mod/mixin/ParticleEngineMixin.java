@@ -1,6 +1,7 @@
 package com.ye.mod.mixin;
 
 import com.ye.mod.core.ModuleManager;
+import com.ye.mod.modules.render.AntiLagModule;
 import com.ye.mod.modules.render.NoRenderModule;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleEngine;
@@ -18,6 +19,11 @@ public abstract class ParticleEngineMixin {
     @Inject(method = "createParticle", at = @At("HEAD"), cancellable = true)
     private void ye$filterCreateParticle(ParticleOptions options, double x, double y, double z,
                                          double xd, double yd, double zd, CallbackInfoReturnable<Particle> cir) {
+        AntiLagModule antiLag = ModuleManager.get(AntiLagModule.class);
+        if (antiLag != null && antiLag.shouldSkipParticle()) {
+            cir.setReturnValue(null);
+            return;
+        }
         NoRenderModule noRender = ModuleManager.get(NoRenderModule.class);
         if (noRender == null || !noRender.isEnabled()) return;
 
@@ -34,6 +40,11 @@ public abstract class ParticleEngineMixin {
 
     @Inject(method = "add", at = @At("HEAD"), cancellable = true)
     private void ye$filterAddParticle(Particle particle, CallbackInfo ci) {
+        AntiLagModule antiLag = ModuleManager.get(AntiLagModule.class);
+        if (antiLag != null && antiLag.shouldSkipParticle()) {
+            ci.cancel();
+            return;
+        }
         NoRenderModule noRender = ModuleManager.get(NoRenderModule.class);
         if (noRender != null && noRender.isEnabled() && noRender.noParticles.get()) {
             ci.cancel();
