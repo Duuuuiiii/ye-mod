@@ -6,6 +6,8 @@ import com.ye.mod.modules.render.LavaEspModule;
 import com.ye.mod.modules.render.NoRenderModule;
 import com.ye.mod.modules.visual.HudModule;
 import com.ye.mod.modules.visual.NoFovModule;
+import com.ye.mod.modules.world.PortalSyncModule;
+import com.ye.mod.modules.world.StashRadarModule;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiGraphics;
@@ -83,6 +85,14 @@ public abstract class GuiMixin {
         LavaEspModule lavaEsp = ModuleManager.get(LavaEspModule.class);
         if (lavaEsp != null) {
             lavaEsp.renderHudAlert(guiGraphics);
+        }
+        PortalSyncModule portalSync = ModuleManager.get(PortalSyncModule.class);
+        if (portalSync != null) {
+            portalSync.renderHud(guiGraphics);
+        }
+        StashRadarModule stashRadar = ModuleManager.get(StashRadarModule.class);
+        if (stashRadar != null) {
+            stashRadar.renderHud(guiGraphics);
         }
     }
 }

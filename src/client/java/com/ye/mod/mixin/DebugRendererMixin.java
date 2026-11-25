@@ -2,6 +2,11 @@ package com.ye.mod.mixin;
 
 import com.ye.mod.core.ModuleManager;
 import com.ye.mod.modules.render.LavaEspModule;
+import com.ye.mod.modules.render.MotionTrailModule;
+import com.ye.mod.modules.render.TrajectoryPreviewModule;
+import com.ye.mod.modules.visual.HitFeedbackModule;
+import com.ye.mod.modules.world.LogoutGhostsModule;
+import com.ye.mod.modules.world.StashRadarModule;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.debug.DebugRenderer;
 import org.spongepowered.asm.mixin.Mixin;
@@ -13,10 +18,23 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class DebugRendererMixin {
 
     @Inject(method = "emitGizmos", at = @At("TAIL"))
-    private void ye$emitLavaEspGizmos(Frustum frustum, double camX, double camY, double camZ, float partialTick, CallbackInfo ci) {
+    private void ye$emitWorldGizmos(Frustum frustum, double camX, double camY, double camZ, float partialTick, CallbackInfo ci) {
         LavaEspModule lavaEsp = ModuleManager.get(LavaEspModule.class);
-        if (lavaEsp != null) {
-            lavaEsp.emitGizmos();
-        }
+        if (lavaEsp != null) lavaEsp.emitGizmos();
+
+        TrajectoryPreviewModule traj = ModuleManager.get(TrajectoryPreviewModule.class);
+        if (traj != null) traj.emitGizmos();
+
+        MotionTrailModule trail = ModuleManager.get(MotionTrailModule.class);
+        if (trail != null) trail.emitGizmos();
+
+        StashRadarModule radar = ModuleManager.get(StashRadarModule.class);
+        if (radar != null) radar.emitGizmos();
+
+        LogoutGhostsModule ghosts = ModuleManager.get(LogoutGhostsModule.class);
+        if (ghosts != null) ghosts.emitGizmos();
+
+        HitFeedbackModule hit = ModuleManager.get(HitFeedbackModule.class);
+        if (hit != null) hit.emitGizmos();
     }
 }

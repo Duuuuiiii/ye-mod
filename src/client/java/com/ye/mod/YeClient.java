@@ -3,12 +3,21 @@ package com.ye.mod;
 import com.ye.mod.core.ConfigManager;
 import com.ye.mod.core.ModuleManager;
 import com.ye.mod.modules.render.CapeManager;
+import com.ye.mod.modules.player.SmartAfkModule;
 import com.ye.mod.modules.render.AntiLagModule;
 import com.ye.mod.modules.render.CustomCapeModule;
 import com.ye.mod.modules.render.DragonWingsModule;
 import com.ye.mod.modules.render.FlightModelModule;
 import com.ye.mod.modules.render.LavaEspModule;
+import com.ye.mod.modules.render.MotionTrailModule;
+import com.ye.mod.modules.render.TrajectoryPreviewModule;
 import com.ye.mod.modules.visual.AmbienceModule;
+import com.ye.mod.modules.visual.HitFeedbackModule;
+import com.ye.mod.modules.world.LogoutGhostsModule;
+import com.ye.mod.modules.world.PortalSyncModule;
+import com.ye.mod.modules.world.StashRadarModule;
+import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
+import net.minecraft.world.InteractionResult;
 import com.ye.mod.modules.render.CustomSkinModule;
 import com.ye.mod.modules.render.NoRenderModule;
 import com.ye.mod.modules.render.SkinManager;
@@ -37,7 +46,24 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new LavaEspModule());
         ModuleManager.register(new DragonWingsModule());
         ModuleManager.register(new FlightModelModule());
+        ModuleManager.register(new TrajectoryPreviewModule());
+        ModuleManager.register(new MotionTrailModule());
         ModuleManager.register(new AmbienceModule());
+        ModuleManager.register(new HitFeedbackModule());
+        ModuleManager.register(new SmartAfkModule());
+        ModuleManager.register(new PortalSyncModule());
+        ModuleManager.register(new StashRadarModule());
+        ModuleManager.register(new LogoutGhostsModule());
+
+        AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
+            if (world.isClientSide()) {
+                HitFeedbackModule hit = ModuleManager.get(HitFeedbackModule.class);
+                if (hit != null) {
+                    hit.onAttackEntity(entity);
+                }
+            }
+            return InteractionResult.PASS;
+        });
         ModuleManager.register(new NoRenderModule());
         ModuleManager.register(new NoFovModule());
         ModuleManager.register(new BorderlessFullscreenModule());
