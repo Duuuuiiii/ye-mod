@@ -13,6 +13,7 @@ import com.ye.mod.modules.visual.HitCrosshairModule;
 import com.ye.mod.modules.visual.HudModule;
 import com.ye.mod.modules.visual.LowHpVignetteModule;
 import com.ye.mod.modules.visual.NoFovModule;
+import com.ye.mod.modules.visual.SpeedLinesModule;
 import com.ye.mod.modules.world.PortalSyncModule;
 import com.ye.mod.modules.world.StashRadarModule;
 import com.ye.mod.ui.YeQuickMenu;
@@ -114,6 +115,10 @@ public abstract class GuiMixin {
         CinematicBarsModule bars = ModuleManager.get(CinematicBarsModule.class);
         if (bars != null) {
             bars.render(guiGraphics);
+        }
+        SpeedLinesModule speedLines = ModuleManager.get(SpeedLinesModule.class);
+        if (speedLines != null) {
+            speedLines.render(guiGraphics);
         }
         AntiLagModule antiLag = ModuleManager.get(AntiLagModule.class);
         if (antiLag != null) {

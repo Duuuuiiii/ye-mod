@@ -7,6 +7,7 @@ import com.ye.mod.core.ModuleManager;
 import com.ye.mod.modules.render.AccessoriesModule;
 import com.ye.mod.modules.render.DragonWingsModule;
 import com.ye.mod.modules.render.FlightModelModule;
+import com.ye.mod.modules.render.StandBuddyModule;
 import com.ye.mod.modules.visual.SoulRingsModule;
 import com.ye.mod.render.wings.YeAvianWingsModel;
 import net.minecraft.client.Minecraft;
@@ -43,6 +44,7 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
 
     private final EnderDragonModel dragonModel;
     private final PhantomModel phantomModel;
+    private final PlayerModel standModel;
     private final YeAvianWingsModel avianWings = new YeAvianWingsModel();
     private final EnderDragonRenderState dragonState = new EnderDragonRenderState();
     private final PhantomRenderState phantomState = new PhantomRenderState();
@@ -51,6 +53,7 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
         super(parent);
         this.dragonModel = new EnderDragonModel(modelSet.bakeLayer(ModelLayers.ENDER_DRAGON));
         this.phantomModel = new PhantomModel(modelSet.bakeLayer(ModelLayers.PHANTOM));
+        this.standModel = new PlayerModel(modelSet.bakeLayer(ModelLayers.PLAYER), false);
     }
 
     @Override
@@ -87,6 +90,47 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
                 renderSoulRings(poseStack, collector, rings);
             }
         }
+
+        StandBuddyModule stand = ModuleManager.get(StandBuddyModule.class);
+        if (stand != null && stand.isEnabled() && (!stand.onlySelf.get() || isSelf)
+                && !(isSelf && mc.options.getCameraType().isFirstPerson())) {
+            renderStandBuddy(poseStack, collector, state, stand);
+        }
+    }
+
+    private void renderStandBuddy(PoseStack poseStack, SubmitNodeCollector collector,
+                                  AvatarRenderState state, StandBuddyModule stand) {
+        long now = System.currentTimeMillis();
+        float bob = (float) Math.sin(now / 360.0) * 0.08f;
+        float sc = stand.scale.get().floatValue();
+
+        standModel.setupAnim(state);
+        if (state.attackTime > 0.0f) {
+            float rush = (float) Math.sin(now / 35.0) * 0.9f;
+            standModel.rightArm.xRot = -1.65f + rush;
+            standModel.leftArm.xRot = -1.65f - rush;
+        } else {
+            standModel.rightArm.xRot = -0.35f;
+            standModel.leftArm.xRot = -0.35f;
+        }
+
+        poseStack.pushPose();
+        poseStack.translate(-0.72f, -0.32f + bob, 0.72f);
+        poseStack.scale(sc, sc, sc);
+        collector.submitModelPart(
+                standModel.root(),
+                poseStack,
+                RenderTypes.entityTranslucent(state.skin.body().texturePath()),
+                0xF000F0,
+                OverlayTexture.NO_OVERLAY,
+                null,
+                false,
+                false,
+                stand.style.get().tintArgb,
+                null,
+                state.outlineColor
+        );
+        poseStack.popPose();
     }
 
     private void renderHeadAccessory(PoseStack poseStack, SubmitNodeCollector collector, int light, AccessoriesModule acc) {
