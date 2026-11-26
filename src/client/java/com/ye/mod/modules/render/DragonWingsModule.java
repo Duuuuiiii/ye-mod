@@ -68,7 +68,7 @@ public class DragonWingsModule extends Module {
     ));
 
     public final BoolSetting hideArmor = addSetting(new BoolSetting(
-            "hideArmor", "不渲染盔甲", "隐藏玩家盔甲", false
+            "hideArmor", "不渲染盔甲", "隐藏玩家盔甲", true
     ));
 
     public final BoolSetting onlySelf = addSetting(new BoolSetting(
@@ -77,6 +77,7 @@ public class DragonWingsModule extends Module {
 
     public DragonWingsModule() {
         super("dragon_wings", "炫酷翅膀", "Wings", "高精度纹理立体翅膀，6种样式，支持隐藏鞘翅/披风/盔甲", Category.RENDER);
+        setEnabled(true, true);
     }
 
     public int getTintColor(long timeMs) {

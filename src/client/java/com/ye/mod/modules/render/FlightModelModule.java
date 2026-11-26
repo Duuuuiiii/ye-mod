@@ -45,5 +45,6 @@ public class FlightModelModule extends Module {
 
     public FlightModelModule() {
         super("flight_model", "飞行模型替换", "Flight Model", "仅本地渲染：鞘翅飞行时替换为骑小末影龙、直立、御剑等模型，实际飞行不变", Category.RENDER);
+        setEnabled(true, true);
     }
 }

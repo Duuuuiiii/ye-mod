@@ -48,6 +48,7 @@ public class SoulRingsModule extends Module {
 
     public SoulRingsModule() {
         super("soul_rings", "炫酷魂环", "Soul Rings", "绑定玩家身上 0 延迟跟随的多层质感符文魂环", Category.VISUAL);
+        setEnabled(true, true);
     }
 
     public int pickRingRgb(int idx) {

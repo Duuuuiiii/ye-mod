@@ -61,6 +61,7 @@ public class AccessoriesModule extends Module {
 
     public AccessoriesModule() {
         super("accessories", "头面挂件", "Accessories", "头部/面部各选 1 个挂件，每个挂件位置大小独立保存", Category.RENDER);
+        setEnabled(true, true);
 
         for (HeadItem item : HeadItem.values()) {
             if (item == HeadItem.NONE) continue;
