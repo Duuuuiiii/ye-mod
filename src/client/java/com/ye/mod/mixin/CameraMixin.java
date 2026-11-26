@@ -27,7 +27,7 @@ public abstract class CameraMixin {
         if (flight == null || !flight.isEnabled()) return;
         if (flight.preset.get() == FlightModelModule.FlightPreset.SUPERMAN) return;
 
-        // Vanilla fall-flying drops eyeHeight to 0.40 (on the dragon mount); raise camera pivot back onto the player!
-        this.setPosition(this.position.x, this.position.y + 0.95, this.position.z);
+        // Vanilla fall-flying drops eyeHeight to 0.40 (on the dragon mount); raise camera pivot back onto the player's head!
+        this.setPosition(this.position.x, this.position.y + 1.25, this.position.z);
     }
 }
