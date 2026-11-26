@@ -281,6 +281,9 @@ public final class YeQuickMenu {
         g.enableScissor(x, listY, x + w, listY + listH);
         int ry = listY - (int) Math.round(scrollOffset);
 
+        int prevH = YePreviewRenderer.renderModulePreviewCard(g, font, activeModule, x, ry, w);
+        ry += prevH;
+
         // Quick Cape/Skin gallery rows with image previews
         if (activeModule instanceof CustomCapeModule cm) {
             for (CapeManager.CapeEntry ce : CapeManager.getAllCapes()) {
@@ -411,7 +414,8 @@ public final class YeQuickMenu {
             boolean hov = inBounds(mx, my, dropX + 2, iy, dropW - 4, itemH);
             int bg = sel ? accent : (hov ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
             g.fill(dropX + 2, iy, dropX + dropW - 2, iy + itemH - 1, bg);
-            AppleUiRenderer.drawText(g, font, opt.name(), dropX + 5, iy + 4,
+            int swOff = YePreviewRenderer.renderOptionSwatch(g, opt, dropX + 5, iy + 2, 11);
+            AppleUiRenderer.drawText(g, font, opt.name(), dropX + 5 + swOff, iy + 4,
                     sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
             HIT_RECTS.add(new HitRect(dropX + 2, iy, dropW - 4, itemH, () -> {
                 playClick();

@@ -21,9 +21,10 @@ public class BlackHoleSkyModule extends Module {
         BLOOD_ECLIPSE("猩红日蚀", 0xFFFECACA, 0xFFEF4444, 0xFF7F1D1D);
 
         public final String label;
-        final int innerCol;
-        final int midCol;
+        public final int innerCol;
+        public final int midCol;
         final int outerCol;
+        public int getMidCol() { return midCol; }
         Theme(String label, int innerCol, int midCol, int outerCol) {
             this.label = label;
             this.innerCol = innerCol;

@@ -26,6 +26,8 @@ public class AmbienceModule extends Module {
         final float fogG;
         final float fogB;
 
+        public int getSkyArgb() { return skyArgb; }
+
         Theme(String label, int skyArgb, float fogR, float fogG, float fogB) {
             this.label = label;
             this.skyArgb = skyArgb;
