@@ -14,7 +14,6 @@ import com.ye.mod.modules.render.CapeManager;
 import com.ye.mod.modules.render.CustomCapeModule;
 import com.ye.mod.modules.render.CustomSkinModule;
 import com.ye.mod.modules.render.SkinManager;
-import com.ye.mod.modules.system.PlayerStatsManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -33,8 +32,7 @@ import java.util.List;
 public final class YeQuickMenu {
     private enum TopTab {
         MODULES("模块", "Mods"),
-        STATS("统计", "Stats"),
-        THEME("外观", "Theme");
+        THEME("设置", "Settings");
 
         final String zh;
         final String en;
@@ -50,6 +48,7 @@ public final class YeQuickMenu {
     private static float openAnim = 0.0f;
     private static float pageSlide = 0.0f;
     private static float smoothSelY = -1.0f;
+    public static int listeningKeySlot = 0; // 0=none, 1=menuKey, 2=mouseUnlockKey
 
     private static TopTab activeTab = TopTab.MODULES;
     private static Category activeCategory = Category.RENDER;
@@ -166,8 +165,6 @@ public final class YeQuickMenu {
             } else {
                 renderModuleDetail(g, font, bodyX, bodyY, bodyW, bodyH, mouseX, mouseY, mouseUnlocked, accent);
             }
-        } else if (activeTab == TopTab.STATS) {
-            renderStatsTab(g, font, bodyX, bodyY, bodyW, bodyH, accent);
         } else {
             renderThemeTab(g, font, bodyX, bodyY, bodyW, bodyH, mouseX, mouseY, accent);
         }
@@ -432,96 +429,115 @@ public final class YeQuickMenu {
         }
     }
 
-    private static void renderStatsTab(GuiGraphics g, Font font, int x, int y, int w, int h, int accent) {
-        List<PlayerStatsManager.PlayerRecord> recs = new ArrayList<>(PlayerStatsManager.getAllRecords());
-        recs.sort((a, b) -> Integer.compare(b.messages, a.messages));
+    private static void renderThemeTab(GuiGraphics g, Font font, int x, int y, int w, int h, int mx, int my, int accent) {
         g.enableScissor(x, y, x + w, y + h);
         int ry = y - (int) Math.round(scrollOffset);
-        if (recs.isEmpty()) {
-            AppleUiRenderer.drawCenteredText(g, font, ConfigManager.tr("暂无统计记录", "No stats yet"), x + w / 2, y + 30, AppleUiRenderer.textTertiary());
-        }
-        for (PlayerStatsManager.PlayerRecord r : recs) {
-            if (ry + 18 >= y && ry <= y + h) {
-                AppleUiRenderer.drawRoundedRect(g, x, ry, w, 18, 5, AppleUiRenderer.bgCard());
-                AppleUiRenderer.drawText(g, font, r.name, x + 6, ry + 5, AppleUiRenderer.textPrimary());
-                String st = r.messages + " / " + r.kills + " / " + r.deaths;
-                AppleUiRenderer.drawText(g, font, st, x + w - 48 - font.width(st), ry + 5, AppleUiRenderer.textSecondary());
-                boolean muted = PlayerStatsManager.isMuted(r.name);
-                int bx = x + w - 42;
-                AppleUiRenderer.drawRoundedRect(g, bx, ry + 2, 38, 14, 4, muted ? AppleUiRenderer.APPLE_RED : AppleUiRenderer.bgCardHover());
-                AppleUiRenderer.drawCenteredText(g, font, muted ? "已屏蔽" : "屏蔽", bx + 19, ry + 5,
-                        muted ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
-                if (ry >= y && ry + 18 <= y + h) {
-                    HIT_RECTS.add(new HitRect(bx, ry + 2, 38, 14, () -> {
-                        playClick();
-                        PlayerStatsManager.toggleMute(r.name);
-                    }, null, null));
-                }
-            }
-            ry += 20;
-        }
-        g.disableScissor();
-    }
-
-    private static void renderThemeTab(GuiGraphics g, Font font, int x, int y, int w, int h, int mx, int my, int accent) {
-        int ry = y;
         // Dark/Light
-        AppleUiRenderer.drawRoundedRect(g, x, ry, w, 20, 5, AppleUiRenderer.bgCard());
-        AppleUiRenderer.drawText(g, font, ConfigManager.tr("深浅色", "Theme"), x + 6, ry + 6, AppleUiRenderer.textPrimary());
+        AppleUiRenderer.drawRoundedRect(g, x, ry, w, 18, 5, AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawText(g, font, ConfigManager.tr("深浅色", "Theme"), x + 6, ry + 5, AppleUiRenderer.textPrimary());
         String tVal = ConfigManager.lightTheme ? ConfigManager.tr("浅色", "Light") : ConfigManager.tr("深色", "Dark");
-        AppleUiRenderer.drawRoundedRect(g, x + w - 48, ry + 3, 44, 14, 4, accent);
-        AppleUiRenderer.drawCenteredText(g, font, tVal, x + w - 26, ry + 6, AppleUiRenderer.TEXT_PRIMARY);
-        HIT_RECTS.add(new HitRect(x, ry, w, 20, () -> {
-            playClick();
-            AppleUiRenderer.toggleTheme();
-        }, null, null));
-        ry += 24;
+        AppleUiRenderer.drawRoundedRect(g, x + w - 48, ry + 2, 44, 14, 4, accent);
+        AppleUiRenderer.drawCenteredText(g, font, tVal, x + w - 26, ry + 5, AppleUiRenderer.TEXT_PRIMARY);
+        if (ry >= y && ry + 18 <= y + h) {
+            HIT_RECTS.add(new HitRect(x, ry, w, 18, () -> {
+                playClick();
+                AppleUiRenderer.toggleTheme();
+            }, null, null));
+        }
+        ry += 21;
 
         // Language
-        AppleUiRenderer.drawRoundedRect(g, x, ry, w, 20, 5, AppleUiRenderer.bgCard());
-        AppleUiRenderer.drawText(g, font, ConfigManager.tr("语言", "Language"), x + 6, ry + 6, AppleUiRenderer.textPrimary());
+        AppleUiRenderer.drawRoundedRect(g, x, ry, w, 18, 5, AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawText(g, font, ConfigManager.tr("语言", "Language"), x + 6, ry + 5, AppleUiRenderer.textPrimary());
         String lVal = ConfigManager.english ? "EN" : "中文";
-        AppleUiRenderer.drawRoundedRect(g, x + w - 48, ry + 3, 44, 14, 4, accent);
-        AppleUiRenderer.drawCenteredText(g, font, lVal, x + w - 26, ry + 6, AppleUiRenderer.TEXT_PRIMARY);
-        HIT_RECTS.add(new HitRect(x, ry, w, 20, () -> {
-            playClick();
-            ConfigManager.english = !ConfigManager.english;
-            ConfigManager.saveAsync();
-        }, null, null));
-        ry += 24;
+        AppleUiRenderer.drawRoundedRect(g, x + w - 48, ry + 2, 44, 14, 4, accent);
+        AppleUiRenderer.drawCenteredText(g, font, lVal, x + w - 26, ry + 5, AppleUiRenderer.TEXT_PRIMARY);
+        if (ry >= y && ry + 18 <= y + h) {
+            HIT_RECTS.add(new HitRect(x, ry, w, 18, () -> {
+                playClick();
+                ConfigManager.english = !ConfigManager.english;
+                ConfigManager.saveAsync();
+            }, null, null));
+        }
+        ry += 21;
+
+        // Menu Hotkey
+        AppleUiRenderer.drawRoundedRect(g, x, ry, w, 18, 5, AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawText(g, font, ConfigManager.tr("打开UI按键", "Menu Key"), x + 6, ry + 5, AppleUiRenderer.textPrimary());
+        String mkVal = listeningKeySlot == 1 ? ConfigManager.tr("请按键...", "Press...") : keyName(ConfigManager.getMenuKey());
+        AppleUiRenderer.drawRoundedRect(g, x + w - 58, ry + 2, 54, 14, 4, listeningKeySlot == 1 ? 0xFFEF4444 : accent);
+        AppleUiRenderer.drawCenteredText(g, font, mkVal, x + w - 31, ry + 5, AppleUiRenderer.TEXT_PRIMARY);
+        if (ry >= y && ry + 18 <= y + h) {
+            HIT_RECTS.add(new HitRect(x, ry, w, 18, () -> {
+                playClick();
+                listeningKeySlot = (listeningKeySlot == 1) ? 0 : 1;
+            }, null, null));
+        }
+        ry += 21;
+
+        // Mouse Unlock Hotkey
+        AppleUiRenderer.drawRoundedRect(g, x, ry, w, 18, 5, AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawText(g, font, ConfigManager.tr("鼠标解锁键", "Mouse Key"), x + 6, ry + 5, AppleUiRenderer.textPrimary());
+        String umVal = listeningKeySlot == 2 ? ConfigManager.tr("请按键...", "Press...") : keyName(ConfigManager.getMouseUnlockKey());
+        AppleUiRenderer.drawRoundedRect(g, x + w - 58, ry + 2, 54, 14, 4, listeningKeySlot == 2 ? 0xFFEF4444 : accent);
+        AppleUiRenderer.drawCenteredText(g, font, umVal, x + w - 31, ry + 5, AppleUiRenderer.TEXT_PRIMARY);
+        if (ry >= y && ry + 18 <= y + h) {
+            HIT_RECTS.add(new HitRect(x, ry, w, 18, () -> {
+                playClick();
+                listeningKeySlot = (listeningKeySlot == 2) ? 0 : 2;
+            }, null, null));
+        }
+        ry += 22;
 
         // Accent color swatches
         AppleUiRenderer.drawText(g, font, ConfigManager.tr("UI 主题色", "Accent Color"), x + 2, ry, AppleUiRenderer.textSecondary());
-        ry += 14;
+        ry += 13;
         ConfigManager.ThemeAccent[] accents = ConfigManager.ThemeAccent.values();
         int cw = (w - 10) / 3;
         for (int i = 0; i < accents.length; i++) {
             ConfigManager.ThemeAccent ta = accents[i];
             int cx = x + (i % 3) * (cw + 5);
-            int cy = ry + (i / 3) * 22;
+            int cy = ry + (i / 3) * 20;
             boolean sel = ConfigManager.themeAccent == ta;
-            AppleUiRenderer.drawRoundedRect(g, cx, cy, cw, 18, 5, sel ? ta.argb : AppleUiRenderer.bgCard());
-            if (!sel) g.fill(cx + 4, cy + 4, cx + 10, cy + 14, ta.argb);
+            AppleUiRenderer.drawRoundedRect(g, cx, cy, cw, 17, 5, sel ? ta.argb : AppleUiRenderer.bgCard());
+            if (!sel) g.fill(cx + 4, cy + 4, cx + 10, cy + 13, ta.argb);
             String label = ConfigManager.english ? ta.en : ta.zh;
             AppleUiRenderer.drawCenteredText(g, font, label, cx + cw / 2 + (sel ? 0 : 4), cy + 5,
                     sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
-            HIT_RECTS.add(new HitRect(cx, cy, cw, 18, () -> {
+            if (cy >= y && cy + 17 <= y + h) {
+                HIT_RECTS.add(new HitRect(cx, cy, cw, 17, () -> {
+                    playClick();
+                    ConfigManager.themeAccent = ta;
+                    ConfigManager.saveAsync();
+                }, null, null));
+            }
+        }
+        ry += 44;
+
+        // Reset position
+        AppleUiRenderer.drawRoundedRect(g, x, ry, w, 18, 5, AppleUiRenderer.bgCard());
+        AppleUiRenderer.drawCenteredText(g, font, ConfigManager.tr("重置窗口到右下角", "Reset Position"), x + w / 2, ry + 5, AppleUiRenderer.textPrimary());
+        if (ry >= y && ry + 18 <= y + h) {
+            HIT_RECTS.add(new HitRect(x, ry, w, 18, () -> {
                 playClick();
-                ConfigManager.themeAccent = ta;
+                ConfigManager.widgetX = -1;
+                ConfigManager.widgetY = -1;
                 ConfigManager.saveAsync();
             }, null, null));
         }
-        ry += 50;
+        g.disableScissor();
+    }
 
-        // Reset position
-        AppleUiRenderer.drawRoundedRect(g, x, ry, w, 20, 5, AppleUiRenderer.bgCard());
-        AppleUiRenderer.drawCenteredText(g, font, ConfigManager.tr("重置窗口到右下角", "Reset Position"), x + w / 2, ry + 6, AppleUiRenderer.textPrimary());
-        HIT_RECTS.add(new HitRect(x, ry, w, 20, () -> {
-            playClick();
-            ConfigManager.widgetX = -1;
-            ConfigManager.widgetY = -1;
-            ConfigManager.saveAsync();
-        }, null, null));
+    private static String keyName(int key) {
+        if (key <= 0) return "None";
+        if (key >= org.lwjgl.glfw.GLFW.GLFW_KEY_F1 && key <= org.lwjgl.glfw.GLFW.GLFW_KEY_F25) {
+            return "F" + (key - org.lwjgl.glfw.GLFW.GLFW_KEY_F1 + 1);
+        }
+        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT_SHIFT) return "RShift";
+        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_SHIFT) return "LShift";
+        if (key == org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT_CONTROL) return "RCtrl";
+        String n = org.lwjgl.glfw.GLFW.glfwGetKeyName(key, 0);
+        return n != null ? n.toUpperCase(java.util.Locale.ROOT) : ("K" + key);
     }
 
     public static boolean handleEsc() {

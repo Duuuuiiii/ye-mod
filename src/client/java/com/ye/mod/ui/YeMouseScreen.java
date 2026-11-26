@@ -122,6 +122,15 @@ public class YeMouseScreen extends Screen {
     @Override
     public boolean keyPressed(KeyEvent event) {
         int key = event.key();
+        if (YeQuickMenu.listeningKeySlot != 0) {
+            YeQuickMenu.playClick();
+            if (key != GLFW.GLFW_KEY_ESCAPE) {
+                if (YeQuickMenu.listeningKeySlot == 1) ConfigManager.setMenuKey(key);
+                else if (YeQuickMenu.listeningKeySlot == 2) ConfigManager.setMouseUnlockKey(key);
+            }
+            YeQuickMenu.listeningKeySlot = 0;
+            return true;
+        }
         if (key == ConfigManager.getMouseUnlockKey()) {
             onClose();
             return true;
