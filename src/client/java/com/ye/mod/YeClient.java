@@ -5,14 +5,23 @@ import com.ye.mod.core.ModuleManager;
 import com.ye.mod.modules.render.CapeManager;
 import com.ye.mod.modules.render.AccessoriesModule;
 import com.ye.mod.modules.render.AntiLagModule;
+import com.ye.mod.modules.render.BodyScaleModule;
 import com.ye.mod.modules.render.CustomCapeModule;
 import com.ye.mod.modules.render.DragonWingsModule;
 import com.ye.mod.modules.render.FlightModelModule;
 import com.ye.mod.modules.render.LavaEspModule;
+import com.ye.mod.modules.render.SwingSpeedModule;
 import com.ye.mod.modules.render.TrajectoryPreviewModule;
 import com.ye.mod.modules.visual.AmbienceModule;
+import com.ye.mod.modules.visual.CinematicBarsModule;
+import com.ye.mod.modules.visual.CrosshairModule;
+import com.ye.mod.modules.visual.DamagePopupsModule;
+import com.ye.mod.modules.visual.HealthPlatesModule;
+import com.ye.mod.modules.visual.HitCrosshairModule;
 import com.ye.mod.modules.visual.HitFeedbackModule;
+import com.ye.mod.modules.visual.LowHpVignetteModule;
 import com.ye.mod.modules.visual.SoulRingsModule;
+import com.ye.mod.modules.visual.ZoomModule;
 import com.ye.mod.modules.world.LogoutGhostsModule;
 import com.ye.mod.modules.world.PortalFinderModule;
 import com.ye.mod.modules.world.PortalSyncModule;
@@ -54,9 +63,19 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new DragonWingsModule());
         ModuleManager.register(new AccessoriesModule());
         ModuleManager.register(new FlightModelModule());
+        ModuleManager.register(new BodyScaleModule());
+        ModuleManager.register(new SwingSpeedModule());
         ModuleManager.register(new TrajectoryPreviewModule());
         ModuleManager.register(new HitFeedbackModule());
+        ModuleManager.register(new HitCrosshairModule());
+        ModuleManager.register(new DamagePopupsModule());
+        ModuleManager.register(new HealthPlatesModule());
         ModuleManager.register(new SoulRingsModule());
+        ModuleManager.register(new AmbienceModule());
+        ModuleManager.register(new CrosshairModule());
+        ModuleManager.register(new ZoomModule());
+        ModuleManager.register(new CinematicBarsModule());
+        ModuleManager.register(new LowHpVignetteModule());
         ModuleManager.register(new PortalFinderModule());
         ModuleManager.register(new StashRadarModule());
         ModuleManager.register(new LogoutGhostsModule());
@@ -67,6 +86,12 @@ public class YeClient implements ClientModInitializer {
                 if (hit != null) {
                     hit.onAttackEntity(entity);
                 }
+                HitCrosshairModule hc = ModuleManager.get(HitCrosshairModule.class);
+                if (hc != null) hc.triggerHit();
+                DamagePopupsModule dp = ModuleManager.get(DamagePopupsModule.class);
+                if (dp != null) dp.onAttack(entity);
+                HealthPlatesModule hp = ModuleManager.get(HealthPlatesModule.class);
+                if (hp != null) hp.onAttack(entity);
             }
             return InteractionResult.PASS;
         });
@@ -126,6 +151,8 @@ public class YeClient implements ClientModInitializer {
                     pollNav(handle, GLFW.GLFW_KEY_ENTER, 4);
                     pollNav(handle, GLFW.GLFW_KEY_KP_ENTER, 4);
                     pollNav(handle, GLFW.GLFW_KEY_BACKSPACE, 5);
+                    pollNav(handle, GLFW.GLFW_KEY_SPACE, 6);
+                    pollNav(handle, GLFW.GLFW_KEY_KP_ADD, 6);
                 } else {
                     PREV_NAV_KEYS.clear();
                 }

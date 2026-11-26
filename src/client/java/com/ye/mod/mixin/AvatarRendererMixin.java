@@ -3,6 +3,7 @@ package com.ye.mod.mixin;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.ye.mod.core.ModuleManager;
+import com.ye.mod.modules.render.BodyScaleModule;
 import com.ye.mod.modules.render.FlightModelModule;
 import com.ye.mod.render.YeCosmeticLayer;
 import net.minecraft.client.Minecraft;
@@ -29,6 +30,20 @@ public abstract class AvatarRendererMixin extends LivingEntityRenderer<net.minec
     }
 
     @Inject(method = "setupRotations(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;FF)V",
+            at = @At("TAIL"))
+    private void ye$applyBodyScale(AvatarRenderState state, PoseStack poseStack, float bodyRot, float scale, CallbackInfo ci) {
+        BodyScaleModule bs = ModuleManager.get(BodyScaleModule.class);
+        if (bs == null || !bs.isEnabled()) return;
+        Minecraft mc = Minecraft.getInstance();
+        boolean isSelf = mc.player != null && state.id == mc.player.getId();
+        if (bs.onlySelf.get() && !isSelf) return;
+        float s = bs.getEffectiveBodyScale();
+        if (Math.abs(s - 1.0f) > 0.01f) {
+            poseStack.scale(s, s, s);
+        }
+    }
+
+    @Inject(method = "setupRotations(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;FF)V",
             at = @At("HEAD"), cancellable = true)
     private void ye$overrideFlightRotations(AvatarRenderState state, PoseStack poseStack, float bodyRot, float scale, CallbackInfo ci) {
         if (!state.isFallFlying) return;
@@ -47,6 +62,7 @@ public abstract class AvatarRendererMixin extends LivingEntityRenderer<net.minec
         // Keep upright rotation instead of vanilla horizontal elytra pitch
         poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - bodyRot));
         if (preset == FlightModelModule.FlightPreset.MINI_DRAGON
+                || preset == FlightModelModule.FlightPreset.MAGIC_BROOM
                 || preset == FlightModelModule.FlightPreset.MINI_PHANTOM
                 || preset == FlightModelModule.FlightPreset.SWORD_SURF) {
             poseStack.translate(0.0F, 0.25F, 0.0F);

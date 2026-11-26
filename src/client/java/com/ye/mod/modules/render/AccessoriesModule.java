@@ -23,8 +23,11 @@ public class AccessoriesModule extends Module {
         TOP_HAT("绅士礼帽"),
         HALO("天使光环"),
         CAT_EARS("猫耳发箍"),
+        BUNNY_EARS("垂耳兔耳"),
+        ANTLERS("麋鹿角"),
         DEVIL_HORNS("恶魔双角"),
         DRAGON_HORNS("末影龙角"),
+        GHOST_BUDDY("头顶小幽灵"),
         SPROUT("头顶嫩芽");
 
         public final String label;
@@ -36,10 +39,22 @@ public class AccessoriesModule extends Module {
         SUNGLASSES("酷炫墨镜"),
         CYBER_VISOR("赛博护目镜"),
         FOX_MASK("和风狐面"),
+        ROSE_MOUTH("叼玫瑰"),
+        CLOWN_NOSE("小丑红鼻"),
         EYEPATCH("单边眼罩");
 
         public final String label;
         FaceItem(String label) { this.label = label; }
+    }
+
+    public enum TailItem {
+        NONE("无"),
+        NINE_TAILS("九尾狐尾"),
+        DEVIL_TAIL("恶魔尖尾"),
+        DRAGON_TAIL("末影龙尾");
+
+        public final String label;
+        TailItem(String label) { this.label = label; }
     }
 
     public record ItemTransform(DoubleSetting scale, DoubleSetting y, DoubleSetting z) {}
@@ -50,6 +65,14 @@ public class AccessoriesModule extends Module {
 
     public final EnumSetting<FaceItem> faceItem = addSetting(new EnumSetting<>(
             "faceItem", "面部挂件", "面部同时只能佩戴 1 个", FaceItem.SUNGLASSES
+    ));
+
+    public final EnumSetting<TailItem> tailItem = addSetting(new EnumSetting<>(
+            "tailItem", "尾巴挂件", "九尾狐尾 / 恶魔尖尾 / 末影龙尾", TailItem.NONE
+    ));
+
+    public final DoubleSetting tailScale = addSetting(new DoubleSetting(
+            "tailScale", "尾巴大小", "缩放尾巴尺寸", 1.0, 0.5, 1.8, 0.05
     ));
 
     public final BoolSetting onlySelf = addSetting(new BoolSetting(
@@ -108,6 +131,10 @@ public class AccessoriesModule extends Module {
             out.add(ft.scale());
             out.add(ft.y());
             out.add(ft.z());
+        }
+        out.add(tailItem);
+        if (tailItem.get() != TailItem.NONE) {
+            out.add(tailScale);
         }
         out.add(onlySelf);
         return out;

@@ -13,6 +13,7 @@ import com.ye.mod.core.setting.EnumSetting;
 public class FlightModelModule extends Module {
     public enum FlightPreset {
         MINI_DRAGON("骑乘小末影龙"),
+        MAGIC_BROOM("魔法飞天扫帚"),
         UPRIGHT("直立御风"),
         SWORD_SURF("御剑飞行"),
         MINI_PHANTOM("骑乘幻翼"),

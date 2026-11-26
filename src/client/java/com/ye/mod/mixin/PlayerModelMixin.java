@@ -1,6 +1,7 @@
 package com.ye.mod.mixin;
 
 import com.ye.mod.core.ModuleManager;
+import com.ye.mod.modules.render.BodyScaleModule;
 import com.ye.mod.modules.render.FlightModelModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
@@ -43,6 +44,26 @@ public abstract class PlayerModelMixin extends HumanoidModel<AvatarRenderState> 
 
     @Inject(method = "setupAnim(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;)V", at = @At("TAIL"))
     private void ye$afterSetupAnim(AvatarRenderState state, CallbackInfo ci) {
+        BodyScaleModule bs = ModuleManager.get(BodyScaleModule.class);
+        if (bs != null && bs.isEnabled()) {
+            Minecraft mc = Minecraft.getInstance();
+            boolean isSelf = mc.player != null && state.id == mc.player.getId();
+            if (!bs.onlySelf.get() || isSelf) {
+                float hs = bs.getEffectiveHeadScale();
+                this.head.xScale = hs;
+                this.head.yScale = hs;
+                this.head.zScale = hs;
+            } else {
+                this.head.xScale = 1.0f;
+                this.head.yScale = 1.0f;
+                this.head.zScale = 1.0f;
+            }
+        } else {
+            this.head.xScale = 1.0f;
+            this.head.yScale = 1.0f;
+            this.head.zScale = 1.0f;
+        }
+
         if (!ye$wasFallFlying) return;
         state.isFallFlying = true;
         ye$wasFallFlying = false;
@@ -52,6 +73,7 @@ public abstract class PlayerModelMixin extends HumanoidModel<AvatarRenderState> 
 
         FlightModelModule.FlightPreset preset = flight.preset.get();
         if (preset == FlightModelModule.FlightPreset.MINI_DRAGON
+                || preset == FlightModelModule.FlightPreset.MAGIC_BROOM
                 || preset == FlightModelModule.FlightPreset.MINI_PHANTOM) {
             // Proper sitting pose straddling the mount
             this.rightLeg.xRot = -1.35F;

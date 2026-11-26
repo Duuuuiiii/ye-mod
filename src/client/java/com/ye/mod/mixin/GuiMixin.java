@@ -4,7 +4,14 @@ import com.ye.mod.core.ModuleManager;
 import com.ye.mod.modules.render.AntiLagModule;
 import com.ye.mod.modules.render.LavaEspModule;
 import com.ye.mod.modules.render.NoRenderModule;
+import com.ye.mod.modules.visual.AmbienceModule;
+import com.ye.mod.modules.visual.CinematicBarsModule;
+import com.ye.mod.modules.visual.CrosshairModule;
+import com.ye.mod.modules.visual.DamagePopupsModule;
+import com.ye.mod.modules.visual.HealthPlatesModule;
+import com.ye.mod.modules.visual.HitCrosshairModule;
 import com.ye.mod.modules.visual.HudModule;
+import com.ye.mod.modules.visual.LowHpVignetteModule;
 import com.ye.mod.modules.visual.NoFovModule;
 import com.ye.mod.modules.world.PortalSyncModule;
 import com.ye.mod.modules.world.StashRadarModule;
@@ -73,8 +80,41 @@ public abstract class GuiMixin {
         }
     }
 
+    @Inject(method = "renderCrosshair", at = @At("HEAD"), cancellable = true)
+    private void ye$customCrosshair(GuiGraphics guiGraphics, DeltaTracker deltaTracker, CallbackInfo ci) {
+        HitCrosshairModule hit = ModuleManager.get(HitCrosshairModule.class);
+        if (hit != null) {
+            hit.render(guiGraphics);
+        }
+        CrosshairModule ch = ModuleManager.get(CrosshairModule.class);
+        if (ch != null && ch.isEnabled()) {
+            ch.render(guiGraphics);
+            ci.cancel();
+        }
+    }
+
     @Inject(method = "render", at = @At("TAIL"))
     private void ye$renderHud(GuiGraphics guiGraphics, DeltaTracker deltaTracker, CallbackInfo ci) {
+        AmbienceModule amb = ModuleManager.get(AmbienceModule.class);
+        if (amb != null) {
+            amb.renderOverlay(guiGraphics);
+        }
+        LowHpVignetteModule lowHp = ModuleManager.get(LowHpVignetteModule.class);
+        if (lowHp != null) {
+            lowHp.render(guiGraphics);
+        }
+        DamagePopupsModule dmg = ModuleManager.get(DamagePopupsModule.class);
+        if (dmg != null) {
+            dmg.render(guiGraphics);
+        }
+        HealthPlatesModule hpBar = ModuleManager.get(HealthPlatesModule.class);
+        if (hpBar != null) {
+            hpBar.render(guiGraphics);
+        }
+        CinematicBarsModule bars = ModuleManager.get(CinematicBarsModule.class);
+        if (bars != null) {
+            bars.render(guiGraphics);
+        }
         AntiLagModule antiLag = ModuleManager.get(AntiLagModule.class);
         if (antiLag != null) {
             antiLag.renderHudAlert(guiGraphics);

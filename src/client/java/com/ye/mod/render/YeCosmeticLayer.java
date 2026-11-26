@@ -128,6 +128,28 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
                             drawBox(pose, vc, 0xF000F0, 0xFFF472B6, s * 0.11f - 0.03f, -0.61f, -0.07f, s * 0.11f + 0.03f, -0.52f, -0.05f);
                         }
                     }
+                    case BUNNY_EARS -> {
+                        for (int s : new int[]{-1, 1}) {
+                            drawBox(pose, vc, light, 0xFFF8FAFC, s * 0.12f - 0.045f, -0.82f, -0.04f, s * 0.12f + 0.045f, -0.50f, 0.04f);
+                            drawBox(pose, vc, 0xF000F0, 0xFFF9A8D4, s * 0.12f - 0.025f, -0.78f, -0.046f, s * 0.12f + 0.025f, -0.53f, -0.035f);
+                            drawBox(pose, vc, light, 0xFFF1F5F9, s * 0.13f - 0.04f, -0.86f, 0.02f, s * 0.13f + 0.04f, -0.76f, 0.10f);
+                        }
+                    }
+                    case ANTLERS -> {
+                        for (int s : new int[]{-1, 1}) {
+                            drawBox(pose, vc, light, 0xFF78350F, s * 0.14f - 0.025f, -0.74f, -0.025f, s * 0.14f + 0.025f, -0.49f, 0.025f);
+                            drawBox(pose, vc, light, 0xFF92400E, s * 0.22f - 0.02f, -0.86f, -0.04f, s * 0.22f + 0.02f, -0.68f, 0.02f);
+                            drawBox(pose, vc, light, 0xFFB45309, s * 0.10f - 0.018f, -0.82f, -0.06f, s * 0.10f + 0.018f, -0.66f, -0.01f);
+                        }
+                    }
+                    case GHOST_BUDDY -> {
+                        float bob = (float) Math.sin(System.currentTimeMillis() / 320.0) * 0.03f;
+                        drawBox(pose, vc, 0xF000F0, 0xEEF8FAFC, -0.11f, -0.84f + bob, -0.11f, 0.11f, -0.62f + bob, 0.11f);
+                        drawBox(pose, vc, 0xF000F0, 0xFF0F172A, -0.07f, -0.77f + bob, -0.115f, -0.02f, -0.71f + bob, -0.105f);
+                        drawBox(pose, vc, 0xF000F0, 0xFF0F172A, 0.02f, -0.77f + bob, -0.115f, 0.07f, -0.71f + bob, -0.105f);
+                        drawBox(pose, vc, 0xF000F0, 0xCCBFEFFF, -0.15f, -0.74f + bob, -0.03f, -0.11f, -0.68f + bob, 0.03f);
+                        drawBox(pose, vc, 0xF000F0, 0xCCBFEFFF, 0.11f, -0.74f + bob, -0.03f, 0.15f, -0.68f + bob, 0.03f);
+                    }
                     case DEVIL_HORNS -> {
                         for (int s : new int[]{-1, 1}) {
                             drawBox(pose, vc, light, 0xFF7F1D1D, s * 0.16f - 0.045f, -0.62f, -0.10f, s * 0.16f + 0.045f, -0.49f, -0.02f);
@@ -188,9 +210,50 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
                         drawBox(pose, vc, light, 0xFFF8FAFC, -0.21f, -0.58f, -0.28f, -0.09f, -0.46f, -0.23f);
                         drawBox(pose, vc, light, 0xFFF8FAFC, 0.09f, -0.58f, -0.28f, 0.21f, -0.46f, -0.23f);
                     }
+                    case ROSE_MOUTH -> {
+                        drawBox(pose, vc, light, 0xFF15803D, 0.04f, -0.10f, -0.42f, 0.07f, -0.07f, -0.24f);
+                        drawBox(pose, vc, 0xF000F0, 0xFFE11D48, 0.01f, -0.13f, -0.48f, 0.10f, -0.05f, -0.41f);
+                    }
+                    case CLOWN_NOSE -> {
+                        drawBox(pose, vc, 0xF000F0, 0xFFEF4444, -0.055f, -0.21f, -0.34f, 0.055f, -0.11f, -0.25f);
+                    }
                     case EYEPATCH -> {
                         drawBox(pose, vc, light, 0xFF0F172A, 0.04f, -0.28f, -0.282f, 0.21f, -0.16f, -0.255f);
                         drawBox(pose, vc, light, 0xFF1E293B, -0.26f, -0.26f, -0.265f, 0.26f, -0.23f, 0.26f);
+                    }
+                    default -> {}
+                }
+            });
+            poseStack.popPose();
+        }
+
+        AccessoriesModule.TailItem tail = acc.tailItem.get();
+        if (tail != AccessoriesModule.TailItem.NONE) {
+            poseStack.pushPose();
+            this.getParentModel().body.translateAndRotate(poseStack);
+            poseStack.translate(0.0f, 0.62f, 0.14f);
+            float ts = acc.tailScale.get().floatValue();
+            poseStack.scale(ts, ts, ts);
+            float wag = (float) Math.sin(System.currentTimeMillis() / 240.0) * 14.0f;
+            poseStack.mulPose(Axis.YP.rotationDegrees(wag));
+            collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
+                switch (tail) {
+                    case NINE_TAILS -> {
+                        for (int i = -2; i <= 2; i++) {
+                            float ox = i * 0.12f;
+                            float oz = 0.20f + Math.abs(i) * 0.04f;
+                            drawBox(pose, vc, light, 0xFFF8FAFC, ox - 0.05f, -0.08f, 0.0f, ox + 0.05f, 0.06f, oz + 0.18f);
+                            drawBox(pose, vc, 0xF000F0, 0xFFF472B6, ox - 0.04f, -0.14f, oz + 0.14f, ox + 0.04f, -0.02f, oz + 0.30f);
+                        }
+                    }
+                    case DEVIL_TAIL -> {
+                        drawBox(pose, vc, light, 0xFF7F1D1D, -0.03f, -0.04f, 0.0f, 0.03f, 0.02f, 0.34f);
+                        drawBox(pose, vc, 0xF000F0, 0xFFEF4444, -0.07f, -0.07f, 0.32f, 0.07f, 0.05f, 0.44f);
+                    }
+                    case DRAGON_TAIL -> {
+                        drawBox(pose, vc, light, 0xFF1E1B2E, -0.05f, -0.05f, 0.0f, 0.05f, 0.05f, 0.42f);
+                        drawBox(pose, vc, 0xF000F0, 0xFFA855F7, -0.03f, -0.09f, 0.16f, 0.03f, -0.04f, 0.24f);
+                        drawBox(pose, vc, 0xF000F0, 0xFFA855F7, -0.03f, -0.09f, 0.32f, 0.03f, -0.04f, 0.40f);
                     }
                     default -> {}
                 }
@@ -230,6 +293,27 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
         float sc = flight.modelScale.get().floatValue();
         float wSpeed = flight.wingSpeed.get().floatValue();
         long now = System.currentTimeMillis();
+
+        if (preset == FlightModelModule.FlightPreset.MAGIC_BROOM) {
+            poseStack.pushPose();
+            poseStack.translate(0.0f, 1.38f, 0.0f);
+            poseStack.scale(sc, sc, sc);
+            float hover = (float) Math.sin((now % 3000L) / 3000.0 * Math.PI * 2.0) * 0.03f;
+            poseStack.translate(0.0f, hover, 0.0f);
+            collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
+                // Multi-segment dark oak broomstick shaft
+                drawBox(pose, vc, packedLight, 0xFF5C3A21, -0.045f, -0.045f, -1.05f, 0.045f, 0.045f, 0.62f);
+                drawBox(pose, vc, packedLight, 0xFF78350F, -0.035f, -0.085f, -1.18f, 0.035f, -0.015f, -1.02f);
+                // Ornate gold binding collar
+                drawBox(pose, vc, 0xF000F0, 0xFFFACC15, -0.075f, -0.075f, 0.54f, 0.075f, 0.075f, 0.64f);
+                // Layered straw bristles tail
+                drawBox(pose, vc, packedLight, 0xFFD97706, -0.14f, -0.12f, 0.64f, 0.14f, 0.12f, 1.04f);
+                drawBox(pose, vc, packedLight, 0xFFF59E0B, -0.18f, -0.15f, 0.80f, 0.18f, 0.15f, 1.24f);
+                drawBox(pose, vc, packedLight, 0xFFB45309, -0.11f, -0.09f, 1.18f, 0.11f, 0.09f, 1.34f);
+            });
+            poseStack.popPose();
+            return;
+        }
 
         if (preset == FlightModelModule.FlightPreset.MINI_DRAGON) {
             // Fixed orientation: face FORWARD (-Z), NOT 180 deg backward!

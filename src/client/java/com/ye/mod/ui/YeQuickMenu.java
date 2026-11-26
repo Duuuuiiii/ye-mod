@@ -40,9 +40,10 @@ public final class YeQuickMenu {
         String label() { return ConfigManager.tr(zh, en); }
     }
 
-    public static final int WIN_W = 228;
+    public static final int WIN_W = 360;
     public static final int WIN_H = 264;
-    private static final int EDGE_MARGIN = 18;
+    private static final int EDGE_MARGIN = 16;
+    private static final int GRID_COLS = 5;
 
     private static boolean open = false;
     private static float openAnim = 0.0f;
@@ -150,7 +151,7 @@ public final class YeQuickMenu {
             tx += tw + 4;
         }
 
-        String hint = mouseUnlocked ? "ESC" : "F10鼠标";
+        String hint = mouseUnlocked ? "左键开关 · 右键设置 · ESC" : "F10鼠标 · 空格设置";
         AppleUiRenderer.drawText(g, font, hint, wx + WIN_W - 8 - font.width(hint), wy + 8, AppleUiRenderer.textTertiary());
 
         int bodyX = wx + 8 + Math.round(pageSlide);
@@ -177,80 +178,72 @@ public final class YeQuickMenu {
 
     private static void renderModulesTab(GuiGraphics g, Font font, int x, int y, int w, int h,
                                          int mx, int my, boolean mouseUnlocked, int accent) {
-        // Category pills
-        Category[] cats = Category.values();
-        int cw = (w - (cats.length - 1) * 3) / cats.length;
-        for (int i = 0; i < cats.length; i++) {
-            Category c = cats[i];
-            int cx = x + i * (cw + 3);
-            boolean sel = activeCategory == c;
-            AppleUiRenderer.drawRoundedRect(g, cx, y, cw, 16, 5, sel ? accent : AppleUiRenderer.bgCard());
-            String label = ConfigManager.english ? c.name().substring(0, Math.min(3, c.name().length())) : c.getDisplayName();
-            AppleUiRenderer.drawCenteredText(g, font, label, cx + cw / 2, y + 4,
-                    sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
-            HIT_RECTS.add(new HitRect(cx, y, cw, 16, () -> {
-                playClick();
-                if (activeCategory != c) pageSlide = (c.ordinal() > activeCategory.ordinal() ? 18.0f : -18.0f);
-                activeCategory = c;
-                selectedIndex = 0;
-                scrollOffset = 0;
-                targetScroll = 0;
-                smoothSelY = -1.0f;
-            }, null, null));
-        }
-
-        int listY = y + 20;
-        int listH = h - 20;
-        List<Module> mods = ModuleManager.getByCategory(activeCategory);
+        List<Module> mods = ModuleManager.getAll();
         if (selectedIndex >= mods.size()) selectedIndex = Math.max(0, mods.size() - 1);
 
-        g.enableScissor(x, listY, x + w, listY + listH);
-        int ry = listY - (int) Math.round(scrollOffset);
+        int gap = 4;
+        int cellW = (w - (GRID_COLS - 1) * gap) / GRID_COLS;
+        int cellH = 30;
+        int rowStep = cellH + gap;
+
+        g.enableScissor(x, y, x + w, y + h);
+        int baseY = y - (int) Math.round(scrollOffset);
+        int selX = -1, selY = -1;
+
         for (int i = 0; i < mods.size(); i++) {
             Module m = mods.get(i);
-            boolean hovered = mouseUnlocked && inBounds(mx, my, x, ry, w, 18);
-            boolean keySel = !mouseUnlocked && i == selectedIndex;
-            int bg = m.isEnabled() ? accent : ((hovered || keySel) ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
+            int col = i % GRID_COLS;
+            int row = i / GRID_COLS;
+            int cx = x + col * (cellW + gap);
+            int cy = baseY + row * rowStep;
 
+            boolean hovered = mouseUnlocked && inBounds(mx, my, cx, cy, cellW, cellH);
+            boolean keySel = !mouseUnlocked && i == selectedIndex;
             if (keySel) {
-                if (smoothSelY < 0) smoothSelY = ry;
-                else smoothSelY = AppleUiRenderer.smooth(smoothSelY, ry, 20.0f, 0.02f);
+                selX = cx;
+                selY = cy;
             }
 
-            if (ry + 18 >= listY && ry <= listY + listH) {
-                AppleUiRenderer.drawRoundedRect(g, x, ry, w, 18, 5, bg);
+            int bg = m.isEnabled() ? accent : (hovered ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
+            if (cy + cellH >= y && cy <= y + h) {
+                AppleUiRenderer.drawRoundedRect(g, cx, cy, cellW, cellH, 6, bg);
                 String name = ConfigManager.english ? m.getSubtitle() : m.getName();
-                AppleUiRenderer.drawText(g, font, name, x + 7, ry + 5,
+                if (font.width(name) > cellW - 8) {
+                    name = font.plainSubstrByWidth(name, cellW - 10);
+                }
+                AppleUiRenderer.drawCenteredText(g, font, name, cx + cellW / 2, cy + 11,
                         m.isEnabled() ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
 
-                if (!m.getSettings().isEmpty()) {
-                    AppleUiRenderer.drawText(g, font, "›", x + w - 10, ry + 5,
-                            m.isEnabled() ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textTertiary());
+                if (!getDisplaySettings(m).isEmpty()) {
+                    g.fill(cx + cellW - 6, cy + 4, cx + cellW - 4, cy + 6,
+                            m.isEnabled() ? 0xCCFFFFFF : AppleUiRenderer.textTertiary());
                 }
 
-                if (ry >= listY && ry + 18 <= listY + listH) {
-                    HIT_RECTS.add(new HitRect(x, ry, w, 18,
+                if (cy >= y && cy + cellH <= y + h) {
+                    HIT_RECTS.add(new HitRect(cx, cy, cellW, cellH,
                             () -> {
                                 playClick();
                                 m.toggle();
                                 ConfigManager.saveAsync();
                             },
                             () -> {
-                                playClick();
-                                activeModule = m;
-                                pageSlide = 24.0f;
-                                selectedIndex = 0;
-                                scrollOffset = 0;
-                                targetScroll = 0;
-                                smoothSelY = -1.0f;
-                                openDropdown = null;
+                                if (!getDisplaySettings(m).isEmpty()) {
+                                    playClick();
+                                    activeModule = m;
+                                    pageSlide = 24.0f;
+                                    selectedIndex = 0;
+                                    scrollOffset = 0;
+                                    targetScroll = 0;
+                                    smoothSelY = -1.0f;
+                                    openDropdown = null;
+                                }
                             }, null));
                 }
             }
-            ry += 20;
         }
-        if (!mouseUnlocked && !mods.isEmpty() && smoothSelY >= listY - 18 && smoothSelY <= listY + listH) {
-            g.renderOutline(x, Math.round(smoothSelY), w, 18, 0xCCFFFFFF);
+
+        if (!mouseUnlocked && selX >= 0 && selY >= y - cellH && selY <= y + h) {
+            g.renderOutline(selX, selY, cellW, cellH, 0xCCFFFFFF);
         }
         g.disableScissor();
     }
@@ -583,29 +576,21 @@ public final class YeQuickMenu {
         playClick();
         if (activeTab == TopTab.MODULES) {
             if (activeModule == null) {
-                List<Module> mods = ModuleManager.getByCategory(activeCategory);
-                if (action == 0 && selectedIndex > 0) selectedIndex--;
-                else if (action == 1 && selectedIndex < mods.size() - 1) selectedIndex++;
-                else if (action == 2) {
-                    Category[] cs = Category.values();
-                    activeCategory = cs[(activeCategory.ordinal() + cs.length - 1) % cs.length];
-                    pageSlide = -18.0f;
+                List<Module> mods = ModuleManager.getAll();
+                if (action == 0 && selectedIndex >= GRID_COLS) selectedIndex -= GRID_COLS;
+                else if (action == 1 && selectedIndex + GRID_COLS < mods.size()) selectedIndex += GRID_COLS;
+                else if (action == 2 && selectedIndex > 0) selectedIndex--;
+                else if (action == 3 && selectedIndex < mods.size() - 1) selectedIndex++;
+                else if (action == 4 && !mods.isEmpty()) {
+                    mods.get(selectedIndex).toggle();
+                    ConfigManager.saveAsync();
+                } else if (action == 6 && !mods.isEmpty() && !getDisplaySettings(mods.get(selectedIndex)).isEmpty()) {
+                    activeModule = mods.get(selectedIndex);
+                    pageSlide = 24.0f;
                     selectedIndex = 0;
                     scrollOffset = 0;
                     targetScroll = 0;
                     smoothSelY = -1.0f;
-                } else if (action == 3) {
-                    if (!mods.isEmpty() && !getDisplaySettings(mods.get(selectedIndex)).isEmpty()) {
-                        activeModule = mods.get(selectedIndex);
-                        pageSlide = 24.0f;
-                        selectedIndex = 0;
-                        scrollOffset = 0;
-                        targetScroll = 0;
-                        smoothSelY = -1.0f;
-                    }
-                } else if (action == 4 && !mods.isEmpty()) {
-                    mods.get(selectedIndex).toggle();
-                    ConfigManager.saveAsync();
                 } else if (action == 5) {
                     handleEsc();
                 }
