@@ -31,7 +31,7 @@ public class ChatFilterModule extends Module {
     ));
 
     public ChatFilterModule() {
-        super("chat_filter", "聊天过滤", "Chat Filter", "分别隐藏成就/死亡/玩家发言/进出提示，支持黑名单屏蔽特定玩家", Category.SYSTEM);
+        super("chat_filter", "聊天过滤", "Chat", "过滤成就、死亡播报与刷屏发言", Category.UTILITY);
         addSetting(new ActionSetting("openLogs", "打开聊天与击杀日志文件夹", "查看本地保存的 chat_log.txt 与 kill_log.txt", PlayerStatsManager::openLogsFolder));
         addSetting(new ActionSetting("clearStats", "清空当前服务器玩家统计", "重置当前服务器记录的发言、击杀与死亡次数", PlayerStatsManager::clearCurrentStats));
     }

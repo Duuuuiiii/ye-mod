@@ -13,6 +13,7 @@ import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.player.AvatarRenderer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -29,9 +30,8 @@ public abstract class AvatarRendererMixin extends LivingEntityRenderer<net.minec
         this.addLayer(new YeCosmeticLayer(this, context.getModelSet()));
     }
 
-    @Inject(method = "setupRotations(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;FF)V",
-            at = @At("TAIL"))
-    private void ye$applyBodyScale(AvatarRenderState state, PoseStack poseStack, float bodyRot, float scale, CallbackInfo ci) {
+    @Unique
+    private static void ye$applyScaleInternal(AvatarRenderState state, PoseStack poseStack) {
         BodyScaleModule bs = ModuleManager.get(BodyScaleModule.class);
         if (bs == null || !bs.isEnabled()) return;
         Minecraft mc = Minecraft.getInstance();
@@ -45,7 +45,10 @@ public abstract class AvatarRendererMixin extends LivingEntityRenderer<net.minec
 
     @Inject(method = "setupRotations(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;FF)V",
             at = @At("HEAD"), cancellable = true)
-    private void ye$overrideFlightRotations(AvatarRenderState state, PoseStack poseStack, float bodyRot, float scale, CallbackInfo ci) {
+    private void ye$overrideFlightAndScale(AvatarRenderState state, PoseStack poseStack, float bodyRot, float scale, CallbackInfo ci) {
+        // Always apply BodyScale BEFORE any flight rotation override so BodyScale works during flight too!
+        ye$applyScaleInternal(state, poseStack);
+
         if (!state.isFallFlying) return;
         FlightModelModule flight = ModuleManager.get(FlightModelModule.class);
         if (flight == null || !flight.isEnabled()) return;

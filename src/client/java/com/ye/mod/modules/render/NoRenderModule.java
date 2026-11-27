@@ -84,6 +84,6 @@ public class NoRenderModule extends Module {
     ));
 
     public NoRenderModule() {
-        super("no_render", "屏蔽渲染与声音", "No Render & Sound", "按需屏蔽传送门禁用GUI、扭曲、遮罩、粒子和指定声音", Category.RENDER);
+        super("no_render", "屏蔽渲染", "NoRender", "按需屏蔽遮罩、粒子与音效", Category.UTILITY);
     }
 }

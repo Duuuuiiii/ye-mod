@@ -3,126 +3,399 @@ package com.ye.mod.modules.visual;
 import com.ye.mod.core.Category;
 import com.ye.mod.core.Module;
 import com.ye.mod.core.setting.BoolSetting;
-import com.ye.mod.core.setting.DoubleSetting;
 import com.ye.mod.core.setting.EnumSetting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 
 /**
- * Custom Crosshair Presets (#90) — all perfectly symmetric around screen center.
+ * 18 Curated, Strictly 4-Way Symmetric Pixel Crosshair Presets (inspired by YePack & PvP classics).
+ * Centered at exact vanilla crosshair center pixel: ((guiWidth - 1) / 2, (guiHeight - 1) / 2).
  */
 public class CrosshairModule extends Module {
     public enum Preset {
-        CLASSIC_CROSS("经典十字"),
-        GAP_CROSS("缺口十字"),
-        DOT_RING("圆环中心点"),
-        DIAMOND("菱形准星"),
-        PLUS_DOT("点+短线");
+        B01_THIN_L("细L四角", new String[]{
+                "...............",
+                "...............",
+                "...............",
+                "...###...###...",
+                "...#.......#...",
+                "...#.......#...",
+                "...............",
+                ".......#.......",
+                "...............",
+                "...#.......#...",
+                "...#.......#...",
+                "...###...###...",
+                "...............",
+                "...............",
+                "..............."
+        }),
+        B04_WIDE_L("宽L点核", new String[]{
+                "...............",
+                "...............",
+                "..###.....###..",
+                "..#.........#..",
+                "..#.........#..",
+                "...............",
+                "...............",
+                ".......#.......",
+                "...............",
+                "...............",
+                "..#.........#..",
+                "..#.........#..",
+                "..###.....###..",
+                "...............",
+                "..............."
+        }),
+        B05_CORNER_PLUS("阶梯十字", new String[]{
+                "...............",
+                "...............",
+                "...#.......#...",
+                "..##.......##..",
+                "...#.......#...",
+                ".......#.......",
+                ".......#.......",
+                ".....#####.....",
+                ".......#.......",
+                ".......#.......",
+                "...#.......#...",
+                "..##.......##..",
+                "...#.......#...",
+                "...............",
+                "..............."
+        }),
+        C01_RING_PLUS("细环十字", new String[]{
+                "...............",
+                "...............",
+                ".....#####.....",
+                "...##.....##...",
+                "...#.......#...",
+                "..#....#....#..",
+                "..#....#....#..",
+                "..#..#####..#..",
+                "..#....#....#..",
+                "..#....#....#..",
+                "...#.......#...",
+                "...##.....##...",
+                ".....#####.....",
+                "...............",
+                "..............."
+        }),
+        C02_SPLIT_RING("四向缺环", new String[]{
+                "...............",
+                "...............",
+                ".....##.##.....",
+                "...##.....##...",
+                "...#.......#...",
+                "..#.........#..",
+                "..#.........#..",
+                ".......#.......",
+                "..#.........#..",
+                "..#.........#..",
+                "...#.......#...",
+                "...##.....##...",
+                ".....##.##.....",
+                "...............",
+                "..............."
+        }),
+        C03_TICK_RING("刻度圆环", new String[]{
+                "...............",
+                ".......#.......",
+                ".....#####.....",
+                "...##.....##...",
+                "...#.......#...",
+                "..#.........#..",
+                "..#.........#..",
+                ".##....#....##.",
+                "..#.........#..",
+                "..#.........#..",
+                "...#.......#...",
+                "...##.....##...",
+                ".....#####.....",
+                ".......#.......",
+                "..............."
+        }),
+        D01_MINI_DIAMOND("小菱点核", new String[]{
+                "...............",
+                "...............",
+                "...............",
+                ".......#.......",
+                "......#.#......",
+                ".....#...#.....",
+                "....#.....#....",
+                "...#...#...#...",
+                "....#.....#....",
+                ".....#...#.....",
+                "......#.#......",
+                ".......#.......",
+                "...............",
+                "...............",
+                "..............."
+        }),
+        D02_STAR_DIAMOND("尖角星菱", new String[]{
+                "...............",
+                "...............",
+                ".......#.......",
+                "......#.#......",
+                "...............",
+                "...#...#...#...",
+                "..#....#....#..",
+                "..#..#####..#..",
+                "..#....#....#..",
+                "...#...#...#...",
+                "...............",
+                "......#.#......",
+                ".......#.......",
+                "...............",
+                "..............."
+        }),
+        D04_OUTER_DIAMOND("外菱内方", new String[]{
+                "...............",
+                "...............",
+                ".......#.......",
+                "......#.#......",
+                ".....#...#.....",
+                "....#.....#....",
+                "...#..###..#...",
+                "..#...###...#..",
+                "...#..###..#...",
+                "....#.....#....",
+                ".....#...#.....",
+                "......#.#......",
+                ".......#.......",
+                "...............",
+                "..............."
+        }),
+        L01_RING_DOTS("圆核四点", new String[]{
+                "...............",
+                ".......#.......",
+                "...............",
+                "...............",
+                ".....#####.....",
+                "....#.....#....",
+                "....#..#..#....",
+                ".#..#..#..#..#.",
+                "....#..#..#....",
+                "....#.....#....",
+                ".....#####.....",
+                "...............",
+                "...............",
+                ".......#.......",
+                "..............."
+        }),
+        L02_RING_CORNER("里环外角", new String[]{
+                "...............",
+                "...............",
+                "..##.......##..",
+                "..#.........#..",
+                ".....#####.....",
+                "....#.....#....",
+                "....#.....#....",
+                "....#..#..#....",
+                "....#.....#....",
+                "....#.....#....",
+                ".....#####.....",
+                "..#.........#..",
+                "..##.......##..",
+                "...............",
+                "..............."
+        }),
+        L04_DUAL_TARGET("双层圆靶", new String[]{
+                "...............",
+                "...............",
+                ".....#####.....",
+                "...##.....##...",
+                "...#..###..#...",
+                "..#..#...#..#..",
+                "..#.#.....#.#..",
+                "..#.#..#..#.#..",
+                "..#.#.....#.#..",
+                "..#..#...#..#..",
+                "...#..###..#...",
+                "...##.....##...",
+                ".....#####.....",
+                "...............",
+                "..............."
+        }),
+        T01_SHORT_TICKS("方核短刻", new String[]{
+                "...............",
+                "...............",
+                "...............",
+                ".......#.......",
+                ".......#.......",
+                "...............",
+                "......###......",
+                "...##.###.##...",
+                "......###......",
+                "...............",
+                ".......#.......",
+                ".......#.......",
+                "...............",
+                "...............",
+                "..............."
+        }),
+        T02_SLIM_CROSS("细线瞄点", new String[]{
+                "...............",
+                ".......#.......",
+                ".......#.......",
+                ".......#.......",
+                ".......#.......",
+                "...............",
+                "...............",
+                ".####..#..####.",
+                "...............",
+                "...............",
+                ".......#.......",
+                ".......#.......",
+                ".......#.......",
+                ".......#.......",
+                "..............."
+        }),
+        T03_INNER_PLUS("内十外刻", new String[]{
+                "...............",
+                "...............",
+                "......###......",
+                "...............",
+                ".......#.......",
+                ".......#.......",
+                "..#....#....#..",
+                "..#..#####..#..",
+                "..#....#....#..",
+                ".......#.......",
+                ".......#.......",
+                "...............",
+                "......###......",
+                "...............",
+                "..............."
+        }),
+        F01_MINI_BOX("精简方框", new String[]{
+                "...............",
+                "...............",
+                "...............",
+                "...............",
+                "....#######....",
+                "....#.....#....",
+                "....#.....#....",
+                "....#..#..#....",
+                "....#.....#....",
+                "....#.....#....",
+                "....#######....",
+                "...............",
+                "...............",
+                "...............",
+                "..............."
+        }),
+        F05_SPLIT_BOX("方环四缺", new String[]{
+                "...............",
+                "...............",
+                "...............",
+                "...###...###...",
+                "...#.......#...",
+                "...#...#...#...",
+                ".......#.......",
+                ".....#####.....",
+                ".......#.......",
+                "...#...#...#...",
+                "...#.......#...",
+                "...###...###...",
+                "...............",
+                "...............",
+                "..............."
+        }),
+        PVP_CLASSIC("竞技十字", new String[]{
+                "...............",
+                "...............",
+                "...............",
+                ".......#.......",
+                ".......#.......",
+                ".......#.......",
+                "...............",
+                "...###...###...",
+                "...............",
+                ".......#.......",
+                ".......#.......",
+                ".......#.......",
+                "...............",
+                "...............",
+                "..............."
+        });
 
         public final String label;
-        Preset(String label) { this.label = label; }
+        public final String[] rows;
+
+        Preset(String label, String[] rows) {
+            this.label = label;
+            this.rows = rows;
+        }
     }
 
     public enum ColorPreset {
-        WHITE(0xFFFFFFFF),
-        CYAN(0xFF22D3EE),
-        GREEN(0xFF4ADE80),
-        PINK(0xFFF472B6),
-        GOLD(0xFFFACC15),
-        RED(0xFFEF4444);
+        WHITE("白", 0xFFFFFFFF),
+        CYAN("青", 0xFF22D3EE),
+        GREEN("绿", 0xFF4ADE80),
+        PINK("粉", 0xFFF472B6),
+        GOLD("金", 0xFFFACC15),
+        RED("红", 0xFFEF4444);
 
+        public final String label;
         public final int argb;
-        ColorPreset(int argb) { this.argb = argb; }
+        ColorPreset(String label, int argb) {
+            this.label = label;
+            this.argb = argb;
+        }
     }
 
     public final EnumSetting<Preset> preset = addSetting(new EnumSetting<>(
-            "preset", "准星样式", "5种对称准星预设", Preset.GAP_CROSS
+            "preset", "样式", "18款严格像素对称准星预设", Preset.T02_SLIM_CROSS
     ));
 
     public final EnumSetting<ColorPreset> color = addSetting(new EnumSetting<>(
-            "color", "准星颜色", "选择准星配色", ColorPreset.CYAN
-    ));
-
-    public final DoubleSetting size = addSetting(new DoubleSetting(
-            "size", "线长大小", "准星线条长度", 5.0, 2.0, 14.0, 1.0
-    ));
-
-    public final DoubleSetting thickness = addSetting(new DoubleSetting(
-            "thickness", "线条粗细", "准星线条像素粗细", 1.0, 1.0, 3.0, 1.0
-    ));
-
-    public final DoubleSetting gap = addSetting(new DoubleSetting(
-            "gap", "中心间距", "中心留空像素", 3.0, 0.0, 10.0, 1.0
+            "color", "颜色", "白 / 青 / 绿 / 粉 / 金 / 红", ColorPreset.WHITE
     ));
 
     public final BoolSetting outline = addSetting(new BoolSetting(
-            "outline", "黑色描边", "给准星增加 1px 黑边提升对比度", true
+            "outline", "描边", "1px 暗色轮廓增强亮背景对比", true
     ));
 
     public CrosshairModule() {
-        super("crosshair", "准星大全", "Crosshair", "5种对称精致准星预设，可调颜色/大小/粗细/间距", Category.VISUAL);
+        super("crosshair", "准星", "Crosshair", "18款像素级四向对称准星预设", Category.VISUAL);
     }
 
     public void render(GuiGraphics g) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.options.hideGui || !mc.options.getCameraType().isFirstPerson()) return;
+        IdleWallpaperModule idle = com.ye.mod.core.ModuleManager.get(IdleWallpaperModule.class);
+        if (idle != null && idle.shouldHideHud()) return;
 
-        int cx = g.guiWidth() / 2;
-        int cy = g.guiHeight() / 2;
-        int len = Math.max(2, (int) Math.round(size.get()));
-        int th = Math.max(1, (int) Math.round(thickness.get()));
-        int gp = Math.max(0, (int) Math.round(gap.get()));
-        int col = color.get().argb;
-        boolean ol = outline.get();
-
-        int halfTh = th / 2;
-        int x0 = cx - halfTh;
-        int y0 = cy - halfTh;
-
-        switch (preset.get()) {
-            case CLASSIC_CROSS -> {
-                drawBar(g, cx - len, y0, cx + len + th, y0 + th, col, ol);
-                drawBar(g, x0, cy - len, x0 + th, cy + len + th, col, ol);
-            }
-            case GAP_CROSS -> {
-                drawBar(g, cx - gp - len, y0, cx - gp, y0 + th, col, ol);
-                drawBar(g, cx + gp + 1, y0, cx + gp + 1 + len, y0 + th, col, ol);
-                drawBar(g, x0, cy - gp - len, x0 + th, cy - gp, col, ol);
-                drawBar(g, x0, cy + gp + 1, x0 + th, cy + gp + 1 + len, col, ol);
-            }
-            case DOT_RING -> {
-                drawBar(g, cx - 1, cy - 1, cx + 1, cy + 1, col, ol);
-                int r = Math.max(3, gp + len / 2);
-                drawBar(g, cx - r, cy - 2, cx - r + 1, cy + 3, col, ol);
-                drawBar(g, cx + r, cy - 2, cx + r + 1, cy + 3, col, ol);
-                drawBar(g, cx - 2, cy - r, cx + 3, cy - r + 1, col, ol);
-                drawBar(g, cx - 2, cy + r, cx + 3, cy + r + 1, col, ol);
-            }
-            case DIAMOND -> {
-                int r = Math.max(3, len + gp / 2);
-                for (int i = 0; i <= r; i++) {
-                    int d = r - i;
-                    drawBar(g, cx - i, cy - d, cx - i + 1, cy - d + 1, col, false);
-                    drawBar(g, cx + i, cy - d, cx + i + 1, cy - d + 1, col, false);
-                    drawBar(g, cx - i, cy + d, cx - i + 1, cy + d + 1, col, false);
-                    drawBar(g, cx + i, cy + d, cx + i + 1, cy + d + 1, col, false);
-                }
-                drawBar(g, cx, cy, cx + 1, cy + 1, col, ol);
-            }
-            case PLUS_DOT -> {
-                drawBar(g, cx, cy, cx + 1, cy + 1, col, ol);
-                drawBar(g, cx - gp - len, cy, cx - gp, cy + 1, col, ol);
-                drawBar(g, cx + gp + 1, cy, cx + gp + 1 + len, cy + 1, col, ol);
-                drawBar(g, cx, cy - gp - len, cx + 1, cy - gp, col, ol);
-                drawBar(g, cx, cy + gp + 1, cx + 1, cy + gp + 1 + len, col, ol);
-            }
-        }
+        // Exact vanilla 15x15 crosshair center pixel!
+        int cx = (g.guiWidth() - 1) / 2;
+        int cy = (g.guiHeight() - 1) / 2;
+        renderAtCenter(g, preset.get(), cx, cy, color.get().argb, outline.get());
     }
 
-    private static void drawBar(GuiGraphics g, int x0, int y0, int x1, int y1, int col, boolean outline) {
+    public static void renderAtCenter(GuiGraphics g, Preset p, int cx, int cy, int col, boolean outline) {
+        String[] rows = p.rows;
         if (outline) {
-            g.fill(x0 - 1, y0 - 1, x1 + 1, y1 + 1, 0xBB000000);
+            for (int ry = 0; ry < 15; ry++) {
+                String row = rows[ry];
+                int py = cy - 7 + ry;
+                for (int rx = 0; rx < 15; rx++) {
+                    if (row.charAt(rx) == '#') {
+                        int px = cx - 7 + rx;
+                        g.fill(px - 1, py - 1, px + 2, py + 2, 0xAA000000);
+                    }
+                }
+            }
         }
-        g.fill(x0, y0, x1, y1, col);
+        for (int ry = 0; ry < 15; ry++) {
+            String row = rows[ry];
+            int py = cy - 7 + ry;
+            for (int rx = 0; rx < 15; rx++) {
+                if (row.charAt(rx) == '#') {
+                    int px = cx - 7 + rx;
+                    g.fill(px, py, px + 1, py + 1, col);
+                }
+            }
+        }
     }
 }

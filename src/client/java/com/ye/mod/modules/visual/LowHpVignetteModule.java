@@ -23,7 +23,7 @@ public class LowHpVignetteModule extends Module {
     private long lastBeatMs = 0L;
 
     public LowHpVignetteModule() {
-        super("low_hp_vignette", "低血心跳氛围", "Low HP Pulse", "残血时屏幕边缘呼吸红晕+心跳提示音", Category.VISUAL);
+        super("low_hp_vignette", "残血心跳", "Low HP", "低血量边缘脉冲红晕与心跳提示", Category.VISUAL);
     }
 
     public void render(GuiGraphics g) {

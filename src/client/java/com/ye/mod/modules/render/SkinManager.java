@@ -21,13 +21,66 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * Manages user-provided local PNG skins under config/ye/skins/.
+ * Manages 50 bundled 64x64 HD skins + user-provided local PNG skins under config/ye/skins/.
  */
 public final class SkinManager {
     private static final Logger LOGGER = LoggerFactory.getLogger("ye-skins");
     private static final Map<String, SkinEntry> SKINS = new LinkedHashMap<>();
 
     public record SkinEntry(String id, String displayName, Identifier textureId) {}
+
+    private static final String[][] BUNDLED_50 = {
+            {"technoblade", "Technoblade 皇冠战猪"},
+            {"ranboo", "Ranboo 双色末影"},
+            {"philza", "Philza 翠绿死神"},
+            {"grian", "Grian 红衣建筑师"},
+            {"sapnap", "Sapnap 烈焰少年"},
+            {"illumina", "Illumina 暗影速通"},
+            {"purpled", "Purpled 紫晶战神"},
+            {"wallibear", "Wallibear 冰熊战士"},
+            {"hannahxxrose", "Hannah 玫瑰女武神"},
+            {"gamerboy80", "Gamerboy80 墨镜刺客"},
+            {"inteledits", "IntelEdits 极简蓝调"},
+            {"xnestorio", "xNestorio 金眸猎手"},
+            {"tapl", "TapL 苹果骑士"},
+            {"fruitberries", "Fruitberries 翠果高手"},
+            {"feinberg", "Feinberg 黄金智者"},
+            {"couriway", "Couriway 圣光游侠"},
+            {"petezahhutt", "PeteZahHutt 史莱姆王"},
+            {"hbomb94", "HBomb 暗黑绅士"},
+            {"punz", "Punz 白金卫衣"},
+            {"krtzyy", "Krtzyy 紫焰斗士"},
+            {"seapeekay", "Seapeekay 灵狐少年"},
+            {"smajor1995", "Smajor 星彩礼服"},
+            {"ldshadowlady", "LDShadowLady 樱粉魔女"},
+            {"geminitay", "GeminiTay 森系精灵"},
+            {"pearlescentmoon", "Pearl 月光少女"},
+            {"mumbojumbo", "Mumbo 西装绅士"},
+            {"goodtimeswithscar", "Scar 荒野游侠"},
+            {"iskall85", "Iskall 机械义眼"},
+            {"ethoslab", "Etho 暗部忍者"},
+            {"bdoubleo100", "Bdubs 苔原旅人"},
+            {"docm77", "Docm77 赛博半机械"},
+            {"impulsesv", "Impulse 黑黄极客"},
+            {"zombiecleo", "Cleo 幽魂女王"},
+            {"smallishbeans", "Joel 神殿武士"},
+            {"solidaritygaming", "Jimmy 金发警长"},
+            {"inthelittlewood", "Martyn 森林猎人"},
+            {"captainsparklez", "Sparklez 皇家舰长"},
+            {"dantdm", "DanTDM 蓝钻博士"},
+            {"sb737", "SB737 极地企鹅"},
+            {"rekrap2", "Rekrap 暗夜礼帽"},
+            {"clownpierce", "ClownPierce 死神小丑"},
+            {"branzy", "Branzy 虚空紫客"},
+            {"parrotx2", "Parrot 绯红羽客"},
+            {"spokeishere", "Spoke 暗影特工"},
+            {"flamefrags", "FlameFrags 业火剑圣"},
+            {"sammygreen", "SammyGreen 翡翠潮人"},
+            {"tommyinnit", "Tommy 红白少年"},
+            {"tubbo", "Tubbo 翠蜂少年"},
+            {"wilbursoot", "Wilbur 风衣诗人"},
+            {"georgenotfound", "George 蓝白护目镜"}
+    };
 
     private SkinManager() {}
 
@@ -41,12 +94,9 @@ public final class SkinManager {
 
     public static void refreshSkins() {
         SKINS.clear();
-        registerBundledPreset("preset:technoblade", "猪神 Technoblade", "technoblade");
-        registerBundledPreset("preset:ranboo", "末影半身 Ranboo", "ranboo");
-        registerBundledPreset("preset:philza", "死神翼 Philza", "philza");
-        registerBundledPreset("preset:grian", "建筑大师 Grian", "grian");
-        registerBundledPreset("preset:sapnap", "烈焰 Sapnap", "sapnap");
-        registerBundledPreset("preset:illumina", "速通王 Illumina", "illumina");
+        for (String[] row : BUNDLED_50) {
+            registerBundledPreset("preset:" + row[0], row[1], row[0]);
+        }
         try {
             Files.createDirectories(getSkinsDir());
         } catch (IOException e) {

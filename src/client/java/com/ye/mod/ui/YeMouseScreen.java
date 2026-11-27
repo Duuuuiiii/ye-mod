@@ -1,7 +1,9 @@
 package com.ye.mod.ui;
 
 import com.ye.mod.core.ConfigManager;
+import com.ye.mod.core.ModuleManager;
 import com.ye.mod.core.setting.DoubleSetting;
+import com.ye.mod.modules.visual.HudModule;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
@@ -12,21 +14,25 @@ import org.lwjgl.glfw.GLFW;
 import java.util.List;
 
 /**
- * Transparent mouse-unlock overlay (toggled with F10) over the live YeQuickMenu widget.
- * Allows dragging the widget, dragging sliders, and selecting dropdown items while
- * seeing live character changes in the center of the screen!
+ * Transparent mouse-UI & RusherHack-style HUD Layout Editor (toggled with F10):
+ * - Drag & magnetic-snap ANY HUD widget directly on screen with live snap alignment guides!
+ * - Interact with YeQuickMenu cards, sliders, dropdowns, and per-module keybinds!
  */
 public class YeMouseScreen extends Screen {
     private boolean draggingWindow = false;
     private int dragOffX = 0;
     private int dragOffY = 0;
 
+    private ConfigManager.HudSlot draggingHudSlot = null;
+    private int hudDragOffX = 0;
+    private int hudDragOffY = 0;
+
     private DoubleSetting draggingSlider = null;
     private int sliderX = 0;
     private int sliderW = 100;
 
     public YeMouseScreen() {
-        super(Component.literal("Ye Mouse"));
+        super(Component.literal("Ye UI"));
     }
 
     @Override
@@ -36,12 +42,38 @@ public class YeMouseScreen extends Screen {
 
     @Override
     public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // Transparent: never blur or darken the live world so the player sees cosmetic changes clearly!
+        // Keep live 3D world & character crystal clear while tuning visuals and dragging HUD!
     }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        // Draw magnetic snap guide lines while dragging a HUD element
+        if (draggingHudSlot != null) {
+            int cx = this.width / 2;
+            int cy = this.height / 2;
+            if (draggingHudSlot.anchorX == 1 && draggingHudSlot.x == 0) {
+                g.fill(cx, 0, cx + 1, this.height, 0xAA38BDF8);
+            }
+            if (draggingHudSlot.anchorX == 0 && draggingHudSlot.x <= 6) {
+                g.fill(4, 0, 5, this.height, 0x8838BDF8);
+            } else if (draggingHudSlot.anchorX == 2 && draggingHudSlot.x <= 6) {
+                g.fill(this.width - 5, 0, this.width - 4, this.height, 0x8838BDF8);
+            }
+            String tip = draggingHudSlot.zhName + " (" + anchorLabel(draggingHudSlot) + ")";
+            g.drawCenteredString(this.font, tip, cx, cy + 28, 0xFF38BDF8);
+        }
+
         YeQuickMenu.render(g, mouseX, mouseY, true);
+    }
+
+    private static String anchorLabel(ConfigManager.HudSlot s) {
+        String h = switch (s.anchorX) {
+            case 1 -> "居中对齐";
+            case 2 -> "右吸附";
+            default -> "左吸附";
+        };
+        String v = (s.anchorY == 2) ? "底吸附" : "顶吸附";
+        return h + " · " + v;
     }
 
     @Override
@@ -49,6 +81,7 @@ public class YeMouseScreen extends Screen {
         double mx = event.x();
         double my = event.y();
 
+        // 1. Check YeQuickMenu interactive hit rects first
         List<YeQuickMenu.HitRect> rects = YeQuickMenu.getHitRects();
         for (int i = rects.size() - 1; i >= 0; i--) {
             YeQuickMenu.HitRect r = rects.get(i);
@@ -56,8 +89,8 @@ public class YeMouseScreen extends Screen {
                 if (event.button() == 0) {
                     if (r.slider() != null) {
                         draggingSlider = r.slider();
-                        sliderX = r.x() + 2;
-                        sliderW = r.w() - 4;
+                        sliderX = r.x() + 3;
+                        sliderW = r.w() - 6;
                         updateSlider(mx);
                         return true;
                     }
@@ -72,15 +105,34 @@ public class YeMouseScreen extends Screen {
             }
         }
 
-        // Drag window by header bar
+        // 2. Drag YeQuickMenu window by header bar
         int wx = YeQuickMenu.getWinX(this.width);
         int wy = YeQuickMenu.getWinY(this.height);
-        if (event.button() == 0 && mx >= wx && mx <= wx + YeQuickMenu.WIN_W && my >= wy && my <= wy + 24) {
+        if (event.button() == 0 && mx >= wx && mx <= wx + YeQuickMenu.WIN_W && my >= wy && my <= wy + 29) {
             draggingWindow = true;
             dragOffX = (int) mx - wx;
             dragOffY = (int) my - wy;
             return true;
         }
+
+        // 3. Drag any visible RusherHack HUD widget on screen (when clicking outside menu)
+        if (event.button() == 0 && !YeQuickMenu.isPointInsideMenuOrDropdown(mx, my, this.width, this.height)) {
+            HudModule hm = ModuleManager.get(HudModule.class);
+            if (hm != null && hm.isEnabled()) {
+                for (ConfigManager.HudSlot slot : ConfigManager.HUD_SLOTS.values()) {
+                    if (!slot.enabled || slot.lastW <= 0 || slot.lastH <= 0) continue;
+                    if (mx >= slot.lastScreenX && mx <= slot.lastScreenX + slot.lastW
+                            && my >= slot.lastScreenY && my <= slot.lastScreenY + slot.lastH) {
+                        draggingHudSlot = slot;
+                        hudDragOffX = (int) mx - slot.lastScreenX;
+                        hudDragOffY = (int) my - slot.lastScreenY;
+                        YeQuickMenu.playClick();
+                        return true;
+                    }
+                }
+            }
+        }
+
         return super.mouseClicked(event, doubleClick);
     }
 
@@ -93,6 +145,12 @@ public class YeMouseScreen extends Screen {
         if (draggingWindow && event.button() == 0) {
             ConfigManager.widgetX = Math.max(8, Math.min(this.width - YeQuickMenu.WIN_W - 8, (int) event.x() - dragOffX));
             ConfigManager.widgetY = Math.max(8, Math.min(this.height - YeQuickMenu.WIN_H - 8, (int) event.y() - dragOffY));
+            return true;
+        }
+        if (draggingHudSlot != null && event.button() == 0) {
+            int nx = (int) event.x() - hudDragOffX;
+            int ny = (int) event.y() - hudDragOffY;
+            draggingHudSlot.updateFromScreenPos(nx, ny, this.width, this.height);
             return true;
         }
         return super.mouseDragged(event, dx, dy);
@@ -110,18 +168,37 @@ public class YeMouseScreen extends Screen {
             ConfigManager.saveAsync();
             return true;
         }
+        if (draggingHudSlot != null) {
+            draggingHudSlot = null;
+            ConfigManager.saveAsync();
+            return true;
+        }
         return super.mouseReleased(event);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        YeQuickMenu.addScroll(scrollY);
+        YeQuickMenu.addScroll(mouseX, mouseY, scrollY);
         return true;
     }
 
     @Override
     public boolean keyPressed(KeyEvent event) {
         int key = event.key();
+
+        // Per-module keybind capture
+        if (YeQuickMenu.listeningModuleKey != null) {
+            YeQuickMenu.playClick();
+            if (key == GLFW.GLFW_KEY_ESCAPE || key == GLFW.GLFW_KEY_DELETE || key == GLFW.GLFW_KEY_BACKSPACE) {
+                YeQuickMenu.listeningModuleKey.setKeybind(-1);
+            } else {
+                YeQuickMenu.listeningModuleKey.setKeybind(key);
+            }
+            YeQuickMenu.listeningModuleKey = null;
+            return true;
+        }
+
+        // Global UI keybind capture
         if (YeQuickMenu.listeningKeySlot != 0) {
             YeQuickMenu.playClick();
             if (key != GLFW.GLFW_KEY_ESCAPE) {
@@ -131,6 +208,7 @@ public class YeMouseScreen extends Screen {
             YeQuickMenu.listeningKeySlot = 0;
             return true;
         }
+
         if (key == ConfigManager.getMouseUnlockKey()) {
             onClose();
             return true;

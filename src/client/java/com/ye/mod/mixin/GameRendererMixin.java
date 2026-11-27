@@ -2,12 +2,14 @@ package com.ye.mod.mixin;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.ye.mod.core.ModuleManager;
+import com.ye.mod.modules.visual.IdleWallpaperModule;
 import com.ye.mod.modules.visual.NoFovModule;
 import com.ye.mod.modules.visual.SinCityFilterModule;
 import com.ye.mod.modules.visual.ZoomModule;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.resources.Identifier;
+import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -21,20 +23,30 @@ public abstract class GameRendererMixin {
     @Shadow private void setPostEffect(Identifier id) {}
     @Shadow public abstract void clearPostEffect();
     @Shadow public abstract Identifier currentPostEffect();
-    @Unique private boolean ye$sinCityApplied = false;
+    @Unique private Identifier ye$appliedFilter = null;
 
     @Inject(method = "tick", at = @At("TAIL"))
-    private void ye$syncSinCityShader(CallbackInfo ci) {
+    private void ye$syncStylizedShader(CallbackInfo ci) {
         SinCityFilterModule mod = ModuleManager.get(SinCityFilterModule.class);
-        boolean want = mod != null && mod.isEnabled();
-        if (want && !SinCityFilterModule.EFFECT_ID.equals(this.currentPostEffect())) {
-            this.setPostEffect(SinCityFilterModule.EFFECT_ID);
-            ye$sinCityApplied = true;
-        } else if (!want && ye$sinCityApplied) {
-            if (SinCityFilterModule.EFFECT_ID.equals(this.currentPostEffect())) {
+        Identifier target = (mod != null && mod.isEnabled()) ? mod.getActiveEffectId() : null;
+        if (target != null) {
+            if (!target.equals(this.currentPostEffect())) {
+                this.setPostEffect(target);
+                ye$appliedFilter = target;
+            }
+        } else if (ye$appliedFilter != null) {
+            if (ye$appliedFilter.equals(this.currentPostEffect())) {
                 this.clearPostEffect();
             }
-            ye$sinCityApplied = false;
+            ye$appliedFilter = null;
+        }
+    }
+
+    @Inject(method = "renderItemInHand", at = @At("HEAD"), cancellable = true)
+    private void ye$hideHandDuringIdle(float partialTick, boolean sleeping, Matrix4f projectionMatrix, CallbackInfo ci) {
+        IdleWallpaperModule idle = ModuleManager.get(IdleWallpaperModule.class);
+        if (idle != null && idle.shouldHideHand()) {
+            ci.cancel();
         }
     }
 

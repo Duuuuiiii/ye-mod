@@ -16,7 +16,7 @@ public class CinematicBarsModule extends Module {
     private float anim = 0.0f;
 
     public CinematicBarsModule() {
-        super("cinematic_bars", "电影宽屏黑边", "Cinema Bars", "一键开启丝滑动画电影宽屏黑边（拍照构图神器）", Category.VISUAL);
+        super("cinematic_bars", "电影黑边", "Cinema Bars", "上下宽银幕构图黑边", Category.VISUAL);
     }
 
     public void render(GuiGraphics g) {

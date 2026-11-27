@@ -1,31 +1,30 @@
 package com.ye.mod.core;
 
 /**
- * Module categories displayed in the Ye ClickGUI sidebar.
+ * Three concise top-level module categories requested by user:
+ * 玩家模型 / 视觉渲染 / 特定功能
  */
 public enum Category {
-    RENDER("渲染", "RN", 0xFF38BDF8),
-    VISUAL("视觉", "VS", 0xFF818CF8),
-    PLAYER("玩家", "PL", 0xFF34D399),
-    WORLD("世界", "WD", 0xFFFBBF24),
-    SYSTEM("系统", "SY", 0xFFF472B6);
+    PLAYER_MODEL("玩家模型", "Model", 0xFF38BDF8),
+    VISUAL("视觉渲染", "Visual", 0xFFA855F7),
+    UTILITY("特定功能", "Utility", 0xFF10B981);
 
     private final String displayName;
-    private final String badge;
+    private final String englishName;
     private final int accentColor;
 
-    Category(String displayName, String badge, int accentColor) {
+    Category(String displayName, String englishName, int accentColor) {
         this.displayName = displayName;
-        this.badge = badge;
+        this.englishName = englishName;
         this.accentColor = accentColor;
     }
 
     public String getDisplayName() {
-        return displayName;
+        return ConfigManager.english ? englishName : displayName;
     }
 
     public String getBadge() {
-        return badge;
+        return englishName.substring(0, 2).toUpperCase();
     }
 
     public int getAccentColor() {

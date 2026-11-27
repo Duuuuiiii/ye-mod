@@ -78,7 +78,7 @@ public class AntiLagModule extends Module {
     private String activeAlertText = "";
 
     public AntiLagModule() {
-        super("anti_lag", "防卡死保护", "Anti-Lag Breaker", "实体/告示牌等同类数量过多或 FPS 骤降时自动限流或熔断渲染", Category.RENDER);
+        super("anti_lag", "防卡保护", "AntiLag", "过多实体与低帧率自动熔断保护", Category.UTILITY);
         setEnabled(true);
     }
 

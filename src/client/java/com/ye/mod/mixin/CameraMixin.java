@@ -31,18 +31,18 @@ public abstract class CameraMixin {
         if (flight == null || !flight.isEnabled()) return;
         if (flight.preset.get() == FlightModelModule.FlightPreset.SUPERMAN) return;
 
-        // Vanilla fall-flying drops eyeHeight to 0.40 (on the dragon mount); raise camera pivot back onto the player's head!
         this.setPosition(this.position.x, this.position.y + 1.25, this.position.z);
     }
 
     @Inject(method = "setup", at = @At("TAIL"))
     private void ye$idleWallpaperOrbit(Level level, Entity entity, boolean thirdPerson, boolean inverseView, float partialTick, CallbackInfo ci) {
-        if (!(entity instanceof LocalPlayer)) return;
+        if (!(entity instanceof LocalPlayer lp)) return;
         IdleWallpaperModule idle = ModuleManager.get(IdleWallpaperModule.class);
         if (idle != null && idle.isIdleActive()) {
             this.detached = true;
-            this.setRotation(idle.getOrbitYaw(), 12.0f);
-            this.move(-idle.getOrbitDistance(), 0.0f, 0.0f);
+            IdleWallpaperModule.ShotPose pose = idle.computeShotPose(lp.getYRot());
+            this.setRotation(pose.yaw(), pose.pitch());
+            this.move(-pose.zoomDist(), pose.verticalOffset(), pose.sideOffset());
         }
     }
 }

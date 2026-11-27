@@ -29,6 +29,6 @@ public class NoFovModule extends Module {
     ));
 
     public NoFovModule() {
-        super("no_fov", "固定视角与防扭曲", "No FOV & Distortion", "取消冲刺等行为改变视场角，彻底禁用扭曲与抖动效果", Category.VISUAL);
+        super("no_fov", "固定视角", "No FOV", "锁定动态视场角并取消屏幕抖动扭曲", Category.UTILITY);
     }
 }

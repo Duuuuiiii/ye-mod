@@ -2,17 +2,24 @@ package com.ye.mod;
 
 import com.ye.mod.core.ConfigManager;
 import com.ye.mod.core.ModuleManager;
-import com.ye.mod.modules.render.CapeManager;
+import com.ye.mod.modules.player.SmartAfkModule;
 import com.ye.mod.modules.render.AccessoriesModule;
 import com.ye.mod.modules.render.AntiLagModule;
 import com.ye.mod.modules.render.BodyScaleModule;
+import com.ye.mod.modules.render.CapeManager;
 import com.ye.mod.modules.render.CustomCapeModule;
+import com.ye.mod.modules.render.CustomSkinModule;
 import com.ye.mod.modules.render.DragonWingsModule;
 import com.ye.mod.modules.render.FlightModelModule;
 import com.ye.mod.modules.render.LavaEspModule;
+import com.ye.mod.modules.render.NoRenderModule;
+import com.ye.mod.modules.render.SkinManager;
 import com.ye.mod.modules.render.StandBuddyModule;
 import com.ye.mod.modules.render.SwingSpeedModule;
 import com.ye.mod.modules.render.TrajectoryPreviewModule;
+import com.ye.mod.modules.system.BorderlessFullscreenModule;
+import com.ye.mod.modules.system.ChatFilterModule;
+import com.ye.mod.modules.system.PlayerStatsManager;
 import com.ye.mod.modules.visual.AmbienceModule;
 import com.ye.mod.modules.visual.BlackHoleSkyModule;
 import com.ye.mod.modules.visual.CinematicBarsModule;
@@ -21,8 +28,10 @@ import com.ye.mod.modules.visual.DamagePopupsModule;
 import com.ye.mod.modules.visual.HealthPlatesModule;
 import com.ye.mod.modules.visual.HitCrosshairModule;
 import com.ye.mod.modules.visual.HitFeedbackModule;
+import com.ye.mod.modules.visual.HudModule;
 import com.ye.mod.modules.visual.IdleWallpaperModule;
 import com.ye.mod.modules.visual.LowHpVignetteModule;
+import com.ye.mod.modules.visual.NoFovModule;
 import com.ye.mod.modules.visual.SinCityFilterModule;
 import com.ye.mod.modules.visual.SoulAscendModule;
 import com.ye.mod.modules.visual.SoulRingsModule;
@@ -34,28 +43,21 @@ import com.ye.mod.modules.world.LogoutGhostsModule;
 import com.ye.mod.modules.world.PortalFinderModule;
 import com.ye.mod.modules.world.PortalSyncModule;
 import com.ye.mod.modules.world.StashRadarModule;
-import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
-import net.minecraft.world.InteractionResult;
-import com.ye.mod.modules.render.CustomSkinModule;
-import com.ye.mod.modules.render.NoRenderModule;
-import com.ye.mod.modules.render.SkinManager;
-import com.ye.mod.modules.system.BorderlessFullscreenModule;
-import com.ye.mod.modules.system.ChatFilterModule;
-import com.ye.mod.modules.system.PlayerStatsManager;
-import com.ye.mod.modules.visual.HudModule;
-import com.ye.mod.modules.visual.NoFovModule;
+import com.ye.mod.modules.world.WthitModule;
 import com.ye.mod.ui.YeMouseScreen;
 import com.ye.mod.ui.YeQuickMenu;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
+import net.minecraft.world.InteractionResult;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Client entrypoint for the Ye 1.21.11 Fabric utility mod.
+ * Client entrypoint for the Ye 1.21.11 Fabric mod (v1.7.0).
  */
 public class YeClient implements ClientModInitializer {
     private static boolean prevMenuKeyDown = false;
@@ -64,44 +66,55 @@ public class YeClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        ModuleManager.register(new CustomCapeModule());
-        ModuleManager.register(new CustomSkinModule());
-        ModuleManager.register(new AntiLagModule());
-        ModuleManager.register(new LavaEspModule());
+        // 1. 玩家模型 (PLAYER_MODEL)
         ModuleManager.register(new DragonWingsModule());
-        ModuleManager.register(new AccessoriesModule());
         ModuleManager.register(new FlightModelModule());
+        ModuleManager.register(new AccessoriesModule());
+        ModuleManager.register(new StandBuddyModule());
+        ModuleManager.register(new CustomSkinModule());
+        ModuleManager.register(new CustomCapeModule());
         ModuleManager.register(new BodyScaleModule());
         ModuleManager.register(new SwingSpeedModule());
-        ModuleManager.register(new StandBuddyModule());
-        ModuleManager.register(new TrajectoryPreviewModule());
-        ModuleManager.register(new HitFeedbackModule());
-        ModuleManager.register(new HitCrosshairModule());
-        ModuleManager.register(new DamagePopupsModule());
-        ModuleManager.register(new HealthPlatesModule());
+
+        // 2. 视觉渲染 (VISUAL)
         ModuleManager.register(new SoulRingsModule());
         ModuleManager.register(new AmbienceModule());
+        ModuleManager.register(new SinCityFilterModule());
         ModuleManager.register(new BlackHoleSkyModule());
-        ModuleManager.register(new VoxelShatterModule());
-        ModuleManager.register(new SoulAscendModule());
+        ModuleManager.register(new CrosshairModule());
+        ModuleManager.register(new HitCrosshairModule());
+        ModuleManager.register(new HitFeedbackModule());
         ModuleManager.register(new StepDecalsModule());
         ModuleManager.register(new SpeedLinesModule());
+        ModuleManager.register(new VoxelShatterModule());
+        ModuleManager.register(new SoulAscendModule());
         ModuleManager.register(new IdleWallpaperModule());
-        ModuleManager.register(new SinCityFilterModule());
-        ModuleManager.register(new CrosshairModule());
-        ModuleManager.register(new ZoomModule());
         ModuleManager.register(new CinematicBarsModule());
         ModuleManager.register(new LowHpVignetteModule());
-        ModuleManager.register(new PortalFinderModule());
+        ModuleManager.register(new ZoomModule());
+
+        // 3. 特定功能 (UTILITY)
+        ModuleManager.register(new HudModule());
+        ModuleManager.register(new WthitModule());
+        ModuleManager.register(new HealthPlatesModule());
+        ModuleManager.register(new DamagePopupsModule());
         ModuleManager.register(new StashRadarModule());
+        ModuleManager.register(new PortalFinderModule());
+        ModuleManager.register(new PortalSyncModule());
+        ModuleManager.register(new LavaEspModule());
+        ModuleManager.register(new TrajectoryPreviewModule());
         ModuleManager.register(new LogoutGhostsModule());
+        ModuleManager.register(new AntiLagModule());
+        ModuleManager.register(new NoRenderModule());
+        ModuleManager.register(new NoFovModule());
+        ModuleManager.register(new BorderlessFullscreenModule());
+        ModuleManager.register(new ChatFilterModule());
+        ModuleManager.register(new SmartAfkModule());
 
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
             if (world.isClientSide()) {
                 HitFeedbackModule hit = ModuleManager.get(HitFeedbackModule.class);
-                if (hit != null) {
-                    hit.onAttackEntity(entity);
-                }
+                if (hit != null) hit.onAttackEntity(entity);
                 HitCrosshairModule hc = ModuleManager.get(HitCrosshairModule.class);
                 if (hc != null) hc.triggerHit();
                 DamagePopupsModule dp = ModuleManager.get(DamagePopupsModule.class);
@@ -111,10 +124,6 @@ public class YeClient implements ClientModInitializer {
             }
             return InteractionResult.PASS;
         });
-        ModuleManager.register(new NoRenderModule());
-        ModuleManager.register(new NoFovModule());
-        ModuleManager.register(new BorderlessFullscreenModule());
-        ModuleManager.register(new ChatFilterModule());
 
         ConfigManager.load();
         PlayerStatsManager.init();

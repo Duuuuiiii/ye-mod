@@ -9,11 +9,12 @@ import com.ye.mod.modules.render.DragonWingsModule;
 import com.ye.mod.modules.render.FlightModelModule;
 import com.ye.mod.modules.render.StandBuddyModule;
 import com.ye.mod.modules.visual.SoulRingsModule;
+import com.ye.mod.render.stand.YeBedrockGeoModel;
 import com.ye.mod.render.wings.YeAvianWingsModel;
+import com.ye.mod.render.wings.YePvpDragonWingsModel;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.EntityModelSet;
 import net.minecraft.client.model.geom.ModelLayers;
-import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.monster.dragon.EnderDragonModel;
 import net.minecraft.client.model.monster.phantom.PhantomModel;
 import net.minecraft.client.model.player.PlayerModel;
@@ -26,17 +27,13 @@ import net.minecraft.client.renderer.entity.state.PhantomRenderState;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.Identifier;
-import net.minecraft.world.phys.Vec3;
-
-import java.util.List;
 
 /**
  * High-resolution 3D Cosmetic Layer on AvatarRenderer:
- * - 256x256 sculpted layered Wings (6 styles, angled cleanly outward & back)
- * - Forward-facing vanilla EnderDragonModel & fast-flapping PhantomModel
- * - Adjustable 3D Head Accessories
- * - Zero-lag 256x256 Magic-Array Soul Rings (auto-hidden when gliding)
- * - Foot-level multi-strand Energy Ribbon Trail
+ * - Dual-category Wings: Hypixel/Lunar PvP DragonWings + 4-joint Fantastic Avian Wings
+ * - 7 Authentic JoJo 3D Stand Models + Player Avatar Stand
+ * - Properly seated Magic Broom + Forward EnderDragon + Phantom + Xianxia Spirit Sword
+ * - 512x512 Ultra-HD Soul Rings with per-ring custom colors, speeds, and spacing
  */
 public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
     private static final Identifier DRAGON_TEX = Identifier.withDefaultNamespace("textures/entity/enderdragon/dragon.png");
@@ -44,8 +41,9 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
 
     private final EnderDragonModel dragonModel;
     private final PhantomModel phantomModel;
-    private final PlayerModel standModel;
+    private final PlayerModel standPlayerModel;
     private final YeAvianWingsModel avianWings = new YeAvianWingsModel();
+    private final YePvpDragonWingsModel pvpDragonWings = new YePvpDragonWingsModel();
     private final EnderDragonRenderState dragonState = new EnderDragonRenderState();
     private final PhantomRenderState phantomState = new PhantomRenderState();
 
@@ -53,7 +51,7 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
         super(parent);
         this.dragonModel = new EnderDragonModel(modelSet.bakeLayer(ModelLayers.ENDER_DRAGON));
         this.phantomModel = new PhantomModel(modelSet.bakeLayer(ModelLayers.PHANTOM));
-        this.standModel = new PlayerModel(modelSet.bakeLayer(ModelLayers.PLAYER), false);
+        this.standPlayerModel = new PlayerModel(modelSet.bakeLayer(ModelLayers.PLAYER), false);
     }
 
     @Override
@@ -68,7 +66,7 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
         DragonWingsModule wings = ModuleManager.get(DragonWingsModule.class);
         if (wings != null && wings.isEnabled() && (!wings.onlySelf.get() || isSelf)) {
             if (!wings.hideWithElytra.get() || !state.isFallFlying) {
-                renderHighResWings(poseStack, collector, packedLight, state, wings);
+                renderWings(poseStack, collector, packedLight, state, wings);
             }
         }
 
@@ -84,7 +82,6 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
 
         if (isSelf) {
             SoulRingsModule rings = ModuleManager.get(SoulRingsModule.class);
-            // Auto-hide Soul Rings when elytra-gliding
             if (rings != null && rings.isEnabled() && (rings.showWhenGliding.get() || !state.isFallFlying)
                     && !(rings.hideInFirstPerson.get() && mc.options.getCameraType().isFirstPerson())) {
                 renderSoulRings(poseStack, collector, rings);
@@ -94,42 +91,84 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
         StandBuddyModule stand = ModuleManager.get(StandBuddyModule.class);
         if (stand != null && stand.isEnabled() && (!stand.onlySelf.get() || isSelf)
                 && !(isSelf && mc.options.getCameraType().isFirstPerson())) {
-            renderStandBuddy(poseStack, collector, state, stand);
+            renderStandBuddy(poseStack, collector, state, stand, yRot, xRot);
         }
     }
 
-    private void renderStandBuddy(PoseStack poseStack, SubmitNodeCollector collector,
-                                  AvatarRenderState state, StandBuddyModule stand) {
+    private void renderWings(PoseStack poseStack, SubmitNodeCollector collector, int packedLight,
+                             AvatarRenderState state, DragonWingsModule wings) {
         long now = System.currentTimeMillis();
-        float bob = (float) Math.sin(now / 360.0) * 0.08f;
-        float sc = stand.scale.get().floatValue();
-
-        standModel.setupAnim(state);
-        if (state.attackTime > 0.0f) {
-            float rush = (float) Math.sin(now / 35.0) * 0.9f;
-            standModel.rightArm.xRot = -1.65f + rush;
-            standModel.leftArm.xRot = -1.65f - rush;
-        } else {
-            standModel.rightArm.xRot = -0.35f;
-            standModel.leftArm.xRot = -0.35f;
-        }
+        int tint = wings.getTintColor(now);
+        float sc = wings.scale.get().floatValue();
+        float speed = wings.flapSpeed.get().floatValue();
 
         poseStack.pushPose();
-        poseStack.translate(-0.72f, -0.32f + bob, 0.72f);
+        poseStack.translate(0.0f, -0.0625f, 0.0f);
+        if (!state.chestEquipment.isEmpty() && !wings.hideArmor.get()) {
+            poseStack.translate(0.0f, 0.0f, 0.0625f);
+        }
+        this.getParentModel().body.translateAndRotate(poseStack);
         poseStack.scale(sc, sc, sc);
-        collector.submitModelPart(
-                standModel.root(),
-                poseStack,
-                RenderTypes.entityTranslucent(state.skin.body().texturePath()),
-                0xF000F0,
-                OverlayTexture.NO_OVERLAY,
-                null,
-                false,
-                false,
-                stand.style.get().tintArgb,
-                null,
-                state.outlineColor
-        );
+
+        if (wings.wingCategory.get() == DragonWingsModule.WingCategory.PVP_DRAGON) {
+            pvpDragonWings.submit(poseStack, collector, YePvpDragonWingsModel.PVP_DRAGON_TEX,
+                    packedLight, tint, speed, now);
+        } else {
+            Identifier tex = Identifier.fromNamespaceAndPath("ye-mod", wings.wingStyle.get().texPath);
+            avianWings.setupProceduralAnim(state.isFallFlying, state.walkAnimationSpeed > 0.1f, speed, now);
+            avianWings.submit(poseStack, collector, tex, packedLight, tint, state.outlineColor);
+        }
+        poseStack.popPose();
+    }
+
+    private void renderStandBuddy(PoseStack poseStack, SubmitNodeCollector collector,
+                                  AvatarRenderState state, StandBuddyModule stand, float yRot, float xRot) {
+        long now = System.currentTimeMillis();
+        float bob = (float) Math.sin(now / 360.0) * 0.07f;
+        float sc = stand.scale.get().floatValue();
+        int alphaByte = Math.max(40, Math.min(255, Math.round(stand.alpha.get().floatValue() * 255.0f)));
+        boolean attacking = state.attackTime > 0.0f;
+
+        float ox = stand.offsetX.get().floatValue();
+        float oy = stand.offsetY.get().floatValue();
+        float oz = stand.offsetZ.get().floatValue();
+        if (attacking) {
+            // Lunge forward in front-side of user when delivering Ora-Ora / Muda-Muda barrage!
+            ox *= 0.45f;
+            oz = -0.55f;
+        }
+
+        StandBuddyModule.StandModelType mType = stand.modelType.get();
+        poseStack.pushPose();
+        poseStack.translate(ox, oy + bob, oz);
+        poseStack.scale(sc, sc, sc);
+
+        if (mType == StandBuddyModule.StandModelType.PLAYER_AVATAR) {
+            standPlayerModel.setupAnim(state);
+            if (attacking) {
+                float rush = (float) Math.sin(now / 30.0) * 0.85f;
+                standPlayerModel.rightArm.xRot = -1.60f + rush;
+                standPlayerModel.leftArm.xRot = -1.60f - rush;
+            } else {
+                standPlayerModel.rightArm.xRot = -0.38f;
+                standPlayerModel.leftArm.xRot = -0.32f;
+            }
+            int col = (alphaByte << 24) | 0x00A5F3FC;
+            collector.submitModelPart(
+                    standPlayerModel.root(),
+                    poseStack,
+                    RenderTypes.entityTranslucent(state.skin.body().texturePath()),
+                    0xF000F0,
+                    OverlayTexture.NO_OVERLAY,
+                    null, false, false, col, null, state.outlineColor
+            );
+        } else {
+            YeBedrockGeoModel geo = YeBedrockGeoModel.getOrLoad(mType.geoPath);
+            geo.setupStandAnim(yRot, xRot, attacking, now);
+            Identifier tex = Identifier.fromNamespaceAndPath("ye-mod", mType.texPath);
+            int col = (alphaByte << 24) | 0x00FFFFFF;
+            geo.submit(poseStack, collector, tex, 0xF000F0, col);
+        }
         poseStack.popPose();
     }
 
@@ -258,9 +297,7 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
                         drawBox(pose, vc, light, 0xFF15803D, 0.04f, -0.10f, -0.42f, 0.07f, -0.07f, -0.24f);
                         drawBox(pose, vc, 0xF000F0, 0xFFE11D48, 0.01f, -0.13f, -0.48f, 0.10f, -0.05f, -0.41f);
                     }
-                    case CLOWN_NOSE -> {
-                        drawBox(pose, vc, 0xF000F0, 0xFFEF4444, -0.055f, -0.21f, -0.34f, 0.055f, -0.11f, -0.25f);
-                    }
+                    case CLOWN_NOSE -> drawBox(pose, vc, 0xF000F0, 0xFFEF4444, -0.055f, -0.21f, -0.34f, 0.055f, -0.11f, -0.25f);
                     case EYEPATCH -> {
                         drawBox(pose, vc, light, 0xFF0F172A, 0.04f, -0.28f, -0.282f, 0.21f, -0.16f, -0.255f);
                         drawBox(pose, vc, light, 0xFF1E293B, -0.26f, -0.26f, -0.265f, 0.26f, -0.23f, 0.26f);
@@ -306,27 +343,6 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
         }
     }
 
-    private void renderHighResWings(PoseStack poseStack, SubmitNodeCollector collector, int packedLight,
-                                    AvatarRenderState state, DragonWingsModule wings) {
-        long now = System.currentTimeMillis();
-        int tint = wings.getTintColor(now);
-        float sc = wings.scale.get().floatValue();
-        float speed = wings.flapSpeed.get().floatValue();
-        Identifier tex = Identifier.fromNamespaceAndPath("ye-mod", wings.wingStyle.get().texPath);
-
-        avianWings.setupProceduralAnim(state.isFallFlying, state.walkAnimationSpeed > 0.1f, speed, now);
-
-        poseStack.pushPose();
-        poseStack.translate(0.0f, -0.0625f, 0.0f);
-        if (!state.chestEquipment.isEmpty()) {
-            poseStack.translate(0.0f, 0.0f, 0.0625f);
-        }
-        this.getParentModel().body.translateAndRotate(poseStack);
-        poseStack.scale(sc, sc, sc);
-        avianWings.submit(poseStack, collector, tex, packedLight, tint, state.outlineColor);
-        poseStack.popPose();
-    }
-
     private void renderFlightMount(PoseStack poseStack, SubmitNodeCollector collector, int packedLight,
                                    AvatarRenderState state, FlightModelModule flight) {
         FlightModelModule.FlightPreset preset = flight.preset.get();
@@ -340,27 +356,29 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
 
         if (preset == FlightModelModule.FlightPreset.MAGIC_BROOM) {
             poseStack.pushPose();
-            poseStack.translate(0.0f, 1.38f, 0.0f);
+            // Fixed Y from 1.38f -> 0.86f so the sitting player's hips rest directly on the broomstick shaft!
+            poseStack.translate(0.0f, 0.86f, 0.0f);
             poseStack.scale(sc, sc, sc);
-            float hover = (float) Math.sin((now % 3000L) / 3000.0 * Math.PI * 2.0) * 0.03f;
-            poseStack.translate(0.0f, hover, 0.0f);
             collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
-                // Multi-segment dark oak broomstick shaft
-                drawBox(pose, vc, packedLight, 0xFF5C3A21, -0.045f, -0.045f, -1.05f, 0.045f, 0.045f, 0.62f);
-                drawBox(pose, vc, packedLight, 0xFF78350F, -0.035f, -0.085f, -1.18f, 0.035f, -0.015f, -1.02f);
-                // Ornate gold binding collar
-                drawBox(pose, vc, 0xF000F0, 0xFFFACC15, -0.075f, -0.075f, 0.54f, 0.075f, 0.075f, 0.64f);
-                // Layered straw bristles tail
-                drawBox(pose, vc, packedLight, 0xFFD97706, -0.14f, -0.12f, 0.64f, 0.14f, 0.12f, 1.04f);
-                drawBox(pose, vc, packedLight, 0xFFF59E0B, -0.18f, -0.15f, 0.80f, 0.18f, 0.15f, 1.24f);
-                drawBox(pose, vc, packedLight, 0xFFB45309, -0.11f, -0.09f, 1.18f, 0.11f, 0.09f, 1.34f);
+                // Sculpted mahogany shaft + ergonomic curved nose + cushion saddle pad
+                drawBox(pose, vc, packedLight, 0xFF4A2C16, -0.052f, -0.052f, -1.08f, 0.052f, 0.052f, 0.62f);
+                drawBox(pose, vc, packedLight, 0xFF6B3E1E, -0.042f, -0.105f, -1.24f, 0.042f, -0.015f, -1.04f);
+                drawBox(pose, vc, 0xF000F0, 0xFFFACC15, -0.062f, -0.115f, -1.28f, 0.062f, -0.055f, -1.20f);
+                // Velvet saddle wrap right under rider
+                drawBox(pose, vc, packedLight, 0xFF7F1D1D, -0.072f, -0.068f, -0.22f, 0.072f, 0.062f, 0.22f);
+                // Dual gold arcane binding collars
+                drawBox(pose, vc, 0xF000F0, 0xFFFACC15, -0.088f, -0.088f, 0.54f, 0.088f, 0.088f, 0.64f);
+                drawBox(pose, vc, 0xF000F0, 0xFFF59E0B, -0.125f, -0.115f, 0.78f, 0.125f, 0.115f, 0.84f);
+                // Rich multi-tiered straw bristles tail
+                drawBox(pose, vc, packedLight, 0xFFD97706, -0.145f, -0.125f, 0.64f, 0.145f, 0.125f, 1.04f);
+                drawBox(pose, vc, packedLight, 0xFFF59E0B, -0.195f, -0.165f, 0.84f, 0.195f, 0.165f, 1.28f);
+                drawBox(pose, vc, packedLight, 0xFFB45309, -0.125f, -0.105f, 1.22f, 0.125f, 0.105f, 1.44f);
             });
             poseStack.popPose();
             return;
         }
 
         if (preset == FlightModelModule.FlightPreset.MINI_DRAGON) {
-            // Fixed orientation: face FORWARD (-Z), NOT 180 deg backward!
             poseStack.pushPose();
             poseStack.translate(0.0f, 1.35f, 0.0f);
             float dScale = sc * 0.24f;
@@ -409,27 +427,37 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
     }
 
     private void renderSoulRings(PoseStack poseStack, SubmitNodeCollector collector, SoulRingsModule rings) {
-        int count = Math.max(1, Math.min(9, (int) Math.round(rings.ringCount.get())));
+        int count = Math.max(1, Math.min(6, (int) Math.round(rings.ringCount.get())));
         float baseR = rings.radius.get().floatValue();
-        double speed = rings.spinSpeed.get();
+        float startY = rings.customMode.get() ? rings.baseHeight.get().floatValue() : 1.38f;
+        float gapY = rings.customMode.get() ? rings.verticalGap.get().floatValue() : 0.24f;
         long now = System.currentTimeMillis();
 
         for (int i = 0; i < count; i++) {
-            float y = 1.38f - i * 0.22f + (float) Math.sin((now / 400.0) * speed + i) * 0.04f;
-            float r = baseR + ((i % 2 == 0) ? 0.0f : 0.16f);
+            double spd = rings.pickRingSpeed(i);
+            float y = startY - i * gapY + (float) Math.sin((now / 420.0) * Math.abs(spd) + i) * 0.035f;
+            float r = baseR + (i * 0.09f);
             int rgb = rings.pickRingRgb(i);
-            int col = 0xEE000000 | rgb;
-            float spin = (float) (((now / 14.0) * speed * ((i % 2 == 0) ? 1 : -1)) % 360.0);
+            int col = 0xF2000000 | rgb;
+            float spin = (float) (((now / 15.0) * spd) % 360.0);
 
             poseStack.pushPose();
             poseStack.translate(0.0f, y, 0.0f);
             poseStack.mulPose(Axis.YP.rotationDegrees(spin));
-            collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.RING_ARRAY_TEX), (pose, vc) ->
-                    drawDoubleUvQuad(pose, vc, 0xF000F0, col,
-                            -r, 0f, -r, 0f, 0f,
-                            r, 0f, -r, 1f, 0f,
-                            r, 0f, r, 1f, 1f,
-                            -r, 0f, r, 0f, 1f));
+            // Render crisp 512x512 main ring + subtle vertical thickness glow ring
+            collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.RING_ARRAY_TEX), (pose, vc) -> {
+                drawDoubleUvQuad(pose, vc, 0xF000F0, col,
+                        -r, 0f, -r, 0f, 0f,
+                        r, 0f, -r, 1f, 0f,
+                        r, 0f, r, 1f, 1f,
+                        -r, 0f, r, 0f, 1f);
+                int glowCol = (0x66 << 24) | rgb;
+                drawDoubleUvQuad(pose, vc, 0xF000F0, glowCol,
+                        -r * 1.02f, 0.025f, -r * 1.02f, 0f, 0f,
+                        r * 1.02f, 0.025f, -r * 1.02f, 1f, 0f,
+                        r * 1.02f, 0.025f, r * 1.02f, 1f, 1f,
+                        -r * 1.02f, 0.025f, r * 1.02f, 0f, 1f);
+            });
             poseStack.popPose();
         }
     }
@@ -482,13 +510,5 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
                 .setOverlay(OverlayTexture.NO_OVERLAY)
                 .setLight(light)
                 .setNormal(pose, nx, ny, nz);
-    }
-
-    private static int darken(int argb, float factor) {
-        int a = (argb >>> 24) & 0xFF;
-        int r = Math.min(255, Math.round(((argb >>> 16) & 0xFF) * factor));
-        int g = Math.min(255, Math.round(((argb >>> 8) & 0xFF) * factor));
-        int b = Math.min(255, Math.round((argb & 0xFF) * factor));
-        return (a << 24) | (r << 16) | (g << 8) | b;
     }
 }

@@ -34,7 +34,7 @@ public class CustomCapeModule extends Module {
     ));
 
     public CustomCapeModule() {
-        super("custom_cape", "自定义披风", "Custom Cape", "本地渲染自定义披风，支持预设切换与导入本地 PNG", Category.RENDER);
+        super("custom_cape", "披风", "Cape", "官方全图鉴披风与本地贴图导入", Category.PLAYER_MODEL);
 
         addSetting(new ActionSetting("importCape", "导入本地 PNG 披风...", "打开文件选择器导入自定义披风贴图", this::openFilePicker));
         addSetting(new ActionSetting("openFolder", "打开披风文件夹", "在资源管理器中打开 config/ye/capes 目录", this::openCapesFolder));

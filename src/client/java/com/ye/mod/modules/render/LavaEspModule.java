@@ -68,7 +68,7 @@ public class LavaEspModule extends Module {
     private int tickCounter = 0;
 
     public LavaEspModule() {
-        super("lava_esp", "岩浆高亮", "Lava ESP", "透视高亮周围几格内的岩浆，支持范围调节与挖矿防烫预警", Category.RENDER);
+        super("lava_esp", "岩浆透视", "Lava ESP", "透视高亮附近岩浆与近距预警", Category.UTILITY);
     }
 
     @Override

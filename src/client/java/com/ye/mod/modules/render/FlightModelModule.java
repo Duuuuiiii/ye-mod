@@ -7,45 +7,43 @@ import com.ye.mod.core.setting.DoubleSetting;
 import com.ye.mod.core.setting.EnumSetting;
 
 /**
- * Client-side visual-only replacement for elytra flight posture and mount models.
- * Does not alter actual flight physics, speed, or server hitboxes.
+ * Client-side visual replacement for elytra flight posture and mount models.
  */
 public class FlightModelModule extends Module {
     public enum FlightPreset {
-        MINI_DRAGON("骑乘小末影龙"),
-        MAGIC_BROOM("魔法飞天扫帚"),
-        UPRIGHT("直立御风"),
-        SWORD_SURF("御剑飞行"),
-        MINI_PHANTOM("骑乘幻翼"),
-        SUPERMAN("超人俯冲");
+        MINI_DRAGON("末影龙"),
+        MAGIC_BROOM("扫帚"),
+        SWORD_SURF("御剑"),
+        MINI_PHANTOM("幻翼"),
+        UPRIGHT("踏空"),
+        SUPERMAN("超人");
 
         public final String label;
         FlightPreset(String label) { this.label = label; }
     }
 
     public final EnumSetting<FlightPreset> preset = addSetting(new EnumSetting<>(
-            "preset", "飞行模型预设", "MINI_DRAGON=骑小末影龙, UPRIGHT=直立飞行, SWORD_SURF=御剑, MINI_PHANTOM=骑幻翼, SUPERMAN=超人",
-            FlightPreset.MINI_DRAGON
+            "preset", "飞行坐骑", "末影龙 / 扫帚 / 御剑 / 幻翼 / 踏空 / 超人", FlightPreset.MINI_DRAGON
     ));
 
     public final DoubleSetting modelScale = addSetting(new DoubleSetting(
-            "modelScale", "坐骑大小", "调整末影龙/幻翼/飞剑模型的大小", 1.25, 0.6, 2.2, 0.05
+            "modelScale", "大小", "调整坐骑尺寸", 1.20, 0.6, 2.2, 0.05
     ));
 
     public final DoubleSetting wingSpeed = addSetting(new DoubleSetting(
-            "wingSpeed", "翅膀扇速", "调整末影龙/幻翼翅膀扇动速度", 1.3, 0.3, 3.5, 0.1
+            "wingSpeed", "扇速", "调整坐骑翅膀动作频率", 1.3, 0.3, 3.5, 0.1
     ));
 
     public final BoolSetting hideElytra = addSetting(new BoolSetting(
-            "hideElytra", "隐藏原版鞘翅", "使用自定义飞行模型时隐藏背上的原版鞘翅", true
+            "hideElytra", "隐藏鞘翅", "飞行时隐藏原版鞘翅", true
     ));
 
     public final BoolSetting onlySelf = addSetting(new BoolSetting(
-            "onlySelf", "仅本地玩家", "只替换你自己的鞘翅飞行视觉模型", true
+            "onlySelf", "仅自己", "只替换本地玩家飞行模型", true
     ));
 
     public FlightModelModule() {
-        super("flight_model", "飞行模型替换", "Flight Model", "仅本地渲染：鞘翅飞行时替换为骑小末影龙、直立、御剑等模型，实际飞行不变", Category.RENDER);
+        super("flight_model", "飞行坐骑", "Flight", "鞘翅滑翔时替换为末影龙、扫帚、御剑等坐骑", Category.PLAYER_MODEL);
         setEnabled(true, true);
     }
 }

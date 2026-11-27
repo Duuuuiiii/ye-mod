@@ -36,7 +36,7 @@ public class TrajectoryPreviewModule extends Module {
     ));
 
     public TrajectoryPreviewModule() {
-        super("trajectory_preview", "抛物线轨迹预测", "Trajectory Preview", "手持末影珍珠/弓箭/药水时实时预测 3D 飞行轨迹与落点", Category.RENDER);
+        super("trajectory_preview", "弹道预测", "Trajectory", "预测珍珠、弓箭与药水飞行落点", Category.UTILITY);
     }
 
     public void emitGizmos() {

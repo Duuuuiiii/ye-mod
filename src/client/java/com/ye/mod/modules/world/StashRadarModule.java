@@ -98,7 +98,7 @@ public class StashRadarModule extends Module {
     private int tickCounter = 0;
 
     public StashRadarModule() {
-        super("stash_radar", "仓库雷达", "Stash Radar", "透视仓库容器与刷怪笼，自动过滤自然箱子，支持独立追踪线与提示音", Category.WORLD);
+        super("stash_radar", "仓库雷达", "Stash", "透视容器与刷怪笼并自动过滤自然箱子", Category.UTILITY);
     }
 
     @Override
@@ -222,10 +222,11 @@ public class StashRadarModule extends Module {
         if (mc.options.hideGui) return;
         ConfigManager.HudSlot slot = ConfigManager.HUD_SLOTS.get("hud_radar");
         if (slot != null && !slot.enabled) return;
-        int hx = slot != null ? slot.x : 8;
-        int hy = slot != null ? slot.y : 36;
         String text = ConfigManager.tr("雷达: ", "Radar: ") + totalCount
                 + (shulkerCount > 0 ? " (" + ConfigManager.tr("潜影盒 ", "Shulker ") + shulkerCount + ")" : "");
-        g.drawString(mc.font, text, 8, 8, 0x88D946EF, true);
+        int tw = mc.font.width(text) + 4;
+        int hx = slot != null ? slot.resolveX(g.guiWidth(), tw) : 8;
+        int hy = slot != null ? slot.resolveY(g.guiHeight(), 12) : 82;
+        g.drawString(mc.font, text, hx, hy, 0xEED946EF, true);
     }
 }

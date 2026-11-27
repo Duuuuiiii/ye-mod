@@ -29,7 +29,7 @@ public class SmartAfkModule extends Module {
     private int savedFpsLimit = -1;
 
     public SmartAfkModule() {
-        super("smart_afk", "智能挂机省电", "Smart AFK", "挂机防踢微动作 + 切屏后台自动降帧省电", Category.PLAYER);
+        super("smart_afk", "后台省电", "AFK", "挂机防踢与后台自动降帧", Category.UTILITY);
     }
 
     @Override

@@ -18,7 +18,7 @@ public class ZoomModule extends Module {
     private long lastNs = 0L;
 
     public ZoomModule() {
-        super("zoom", "平滑望远镜", "Smooth Zoom", "按住 C 键丝滑放大远景视野", Category.VISUAL);
+        super("zoom", "放大镜", "Zoom", "按住 C 键平滑拉近远景视野", Category.VISUAL);
     }
 
     public float adjustFov(float baseFov) {

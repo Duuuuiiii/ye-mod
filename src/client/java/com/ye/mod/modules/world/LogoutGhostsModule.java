@@ -33,7 +33,7 @@ public class LogoutGhostsModule extends Module {
     private String lastDim = "";
 
     public LogoutGhostsModule() {
-        super("logout_ghosts", "掉线幽灵标记", "Logout Ghosts", "记录视野内离线玩家的最后位置，在原地留下 3D 线框幽灵与坐标", Category.WORLD);
+        super("logout_ghosts", "掉线标记", "Logout", "标记视野内玩家离线位置与坐标", Category.UTILITY);
         addSetting(new ActionSetting("clearSpots", "清空掉线标记", "清除当前保存的所有玩家掉线位置", spots::clear));
     }
 

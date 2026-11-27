@@ -47,7 +47,7 @@ public class PortalFinderModule extends Module {
     private int tickCounter = 0;
 
     public PortalFinderModule() {
-        super("portal_finder", "传送门查找", "Portal Finder", "查找周围下界传送门，每个门仅画一条追踪线并支持提示音", Category.WORLD);
+        super("portal_finder", "传送门查找", "Portals", "扫描下界传送门并绘制单条追踪线", Category.UTILITY);
     }
 
     @Override

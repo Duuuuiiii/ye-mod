@@ -23,7 +23,7 @@ public class PortalSyncModule extends Module {
     private String pinDim = "overworld";
 
     public PortalSyncModule() {
-        super("portal_sync", "下界坐标换算", "Portal Sync", "实时显示主世界/下界对应传送门坐标，支持标记点导航", Category.WORLD);
+        super("portal_sync", "坐标换算", "PortalSync", "主世界与下界坐标自动换算导航", Category.UTILITY);
         addSetting(new ActionSetting("pinHere", "标记当前位置为导航点", "记录当前坐标并实时指示距离与方向", this::pinCurrentPos));
         addSetting(new ActionSetting("clearPin", "清除导航点", "清除已标记的目标点", () -> hasPin = false));
     }
@@ -77,8 +77,9 @@ public class PortalSyncModule extends Module {
 
         com.ye.mod.core.ConfigManager.HudSlot slot = com.ye.mod.core.ConfigManager.HUD_SLOTS.get("hud_portal");
         if (slot != null && !slot.enabled) return;
-        int hx = slot != null ? slot.x : 8;
-        int hy = slot != null ? slot.y : 22;
+        int tw = mc.font.width(line) + 4;
+        int hx = slot != null ? slot.resolveX(g.guiWidth(), tw) : 8;
+        int hy = slot != null ? slot.resolveY(g.guiHeight(), 12) : 68;
         g.drawString(mc.font, line, hx, hy, 0xFFFBBF24, true);
     }
 
