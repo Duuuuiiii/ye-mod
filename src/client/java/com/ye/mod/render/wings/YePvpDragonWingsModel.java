@@ -2,146 +2,171 @@ package com.ye.mod.render.wings;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.math.Axis;
+import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.geom.PartPose;
+import net.minecraft.client.model.geom.builders.CubeListBuilder;
+import net.minecraft.client.model.geom.builders.LayerDefinition;
+import net.minecraft.client.model.geom.builders.MeshDefinition;
+import net.minecraft.client.model.geom.builders.PartDefinition;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.Identifier;
 
 /**
- * Authentic Hypixel PvP / Lunar / Badlion classic 2-bone Dragon Wings:
- * Fixed 1.21 PoseStack coordinate axes so the wing bones sweep UPWARD (-Y) and BACKWARD (+Z)
- * from the shoulder blades, with double-sided bat-dragon membranes unfurling behind the player!
+ * Rock-Solid Baked ModelPart Lunar/Badlion PvP Dragon Wings:
+ * Uses explicit symmetrical left (+X) & right (-X) ModelPart bone hierarchy (zero negative scale flips!)
+ * anchored firmly to the player's upper-back shoulder blades with smooth cambered 3D dragon membranes!
  */
 public class YePvpDragonWingsModel {
     public static final Identifier PVP_DRAGON_TEX = Identifier.fromNamespaceAndPath("ye-mod", "textures/wings/pvp_dragon.png");
+    private static final float DEG2RAD = (float) (Math.PI / 180.0);
+
+    private final ModelPart root;
+    private final ModelPart leftProximal;
+    private final ModelPart rightProximal;
+    private final ModelPart leftDistal;
+    private final ModelPart rightDistal;
+
+    public YePvpDragonWingsModel() {
+        this.root = createLayer().bakeRoot();
+        this.leftProximal = root.getChild("left_proximal");
+        this.rightProximal = root.getChild("right_proximal");
+        this.leftDistal = leftProximal.getChild("left_distal");
+        this.rightDistal = rightProximal.getChild("right_distal");
+    }
+
+    private static LayerDefinition createLayer() {
+        MeshDefinition mesh = new MeshDefinition();
+        PartDefinition root = mesh.getRoot();
+
+        // Left shoulder blade (+X outward, +Z behind torso)
+        PartDefinition lp = root.addOrReplaceChild("left_proximal",
+                CubeListBuilder.create()
+                        .texOffs(0, 0).addBox(0.0F, -1.0F, -0.8F, 10.0F, 2.0F, 2.0F)
+                        // Sculpted dragon thumb claw at elbow
+                        .texOffs(0, 5).addBox(8.8F, -2.6F, -1.2F, 1.2F, 2.0F, 1.2F),
+                PartPose.offset(1.6F, 2.4F, 2.1F));
+
+        // Right shoulder blade (-X outward, +Z behind torso)
+        PartDefinition rp = root.addOrReplaceChild("right_proximal",
+                CubeListBuilder.create()
+                        .texOffs(0, 0).addBox(-10.0F, -1.0F, -0.8F, 10.0F, 2.0F, 2.0F)
+                        .texOffs(0, 5).addBox(-10.0F, -2.6F, -1.2F, 1.2F, 2.0F, 1.2F),
+                PartPose.offset(-1.6F, 2.4F, 2.1F));
+
+        // Left outer wingtip (+X from elbow)
+        lp.addOrReplaceChild("left_distal",
+                CubeListBuilder.create()
+                        .texOffs(0, 5).addBox(0.0F, -0.6F, -0.6F, 10.5F, 1.2F, 1.2F),
+                PartPose.offset(9.8F, 0.0F, 0.0F));
+
+        // Right outer wingtip (-X from elbow)
+        rp.addOrReplaceChild("right_distal",
+                CubeListBuilder.create()
+                        .texOffs(0, 5).addBox(-10.5F, -0.6F, -0.6F, 10.5F, 1.2F, 1.2F),
+                PartPose.offset(-9.8F, 0.0F, 0.0F));
+
+        return LayerDefinition.create(mesh, 30, 30);
+    }
+
+    public void setupAnim(boolean gliding, boolean moving, float flapSpeed, long nowMs) {
+        float rate = flapSpeed * (gliding ? 1.55f : (moving ? 1.25f : 0.85f));
+        float t = ((nowMs % 120000L) / 1000.0f) * rate * 3.2f;
+
+        float flap = (float) Math.sin(t);
+        float lagFlap = (float) Math.sin(t - 0.85f);
+
+        // In PlayerModel.body:
+        // yDeg < 0 sweeps left (+X) backward (+Z); zDeg < 0 lifts left (+X) upward (-Y); xDeg > 0 tilts membrane (+Z) downward (+Y)
+        float proxX = 28.0f + (float) Math.cos(t) * 5.0f;
+        float proxY = (gliding ? -22.0f : -36.0f) + flap * (gliding ? 24.0f : 16.0f);
+        float proxZ = -22.0f + flap * 9.0f;
+
+        float distX = 6.0f;
+        float distY = (gliding ? -8.0f : -18.0f) + lagFlap * (gliding ? 22.0f : 15.0f);
+        float distZ = 14.0f + lagFlap * 11.0f;
+
+        setAngles(leftProximal, rightProximal, proxX, proxY, proxZ);
+        setAngles(leftDistal, rightDistal, distX, distY, distZ);
+    }
 
     public void submit(PoseStack poseStack, SubmitNodeCollector collector, Identifier tex,
-                       int packedLight, int tint, float flapSpeed, long nowMs) {
-        float periodMs = Math.max(250.0f, 1150.0f / Math.max(0.2f, flapSpeed));
-        float phase = ((nowMs % (long) periodMs) / periodMs) * (float) (Math.PI * 2.0);
+                       int packedLight, int tint, boolean gliding, boolean moving, float flapSpeed, long nowMs, int outlineColor) {
+        setupAnim(gliding, moving, flapSpeed, nowMs);
 
-        // In 1.21 PlayerModel.body space:
-        // -X = right outward, +X = left outward, -Y = UP toward head, +Y = DOWN toward waist, +Z = BEHIND back!
-        // Lift bone upward (+Z rot lifts -X toward -Y), sweep backward (+Y rot sweeps -X toward +Z),
-        // and angle membrane downward-back (+X rot pitches +Z membrane ~24 deg downward for classic dragon silhouette)!
-        float liftZ = (float) Math.toRadians(24.0f) + (float) Math.cos(phase) * 0.14f;
-        float sweepY = (float) Math.toRadians(32.0f) + (float) Math.sin(phase) * 0.38f;
-        float pitchX = (float) Math.toRadians(-22.0f) - (float) Math.cos(phase) * 0.10f;
+        // 1) Submit articulated 3D bones & elbow claws
+        collector.submitModelPart(
+                root, poseStack, RenderTypes.entityCutoutNoCull(tex),
+                packedLight, OverlayTexture.NO_OVERLAY, null, false, false, tint, null, outlineColor
+        );
 
-        float tipSweepY = (float) Math.sin(phase - 0.85f) * 0.34f + 0.12f;
-        float tipFoldZ = -((float) Math.cos(phase - 0.65f) * 0.22f) - 0.16f;
+        // 2) Submit smooth cambered membranes attached directly to each bone's exact transform
+        submitSideMembranes(poseStack, collector, tex, packedLight, tint, leftProximal, leftDistal, true);
+        submitSideMembranes(poseStack, collector, tex, packedLight, tint, rightProximal, rightDistal, false);
+    }
 
-        for (int side = 0; side < 2; side++) {
-            final float signX = (side == 0) ? 1.0f : -1.0f;
-            poseStack.pushPose();
-            // Upper-back shoulder blade attachment (y = +2px below neck, z = +2.2px on back of torso)
-            poseStack.translate(0.0f, 2.0f / 16.0f, 2.2f / 16.0f);
-            poseStack.scale(signX, 1.0f, 1.0f);
+    private static void submitSideMembranes(PoseStack ps, SubmitNodeCollector collector, Identifier tex,
+                                            int light, int tint, ModelPart prox, ModelPart dist, boolean left) {
+        ps.pushPose();
+        prox.translateAndRotate(ps);
+        collector.submitCustomGeometry(ps, RenderTypes.entityCutoutNoCull(tex), (pose, vc) -> {
+            float xStart = left ? 0.0f : -10.0f;
+            drawCamberedMembrane(pose, vc, light, tint, xStart, 10.0f, 0.4f, 10.4f, 0f, 8f, 10f, 18f, left);
+        });
 
-            // Inner shoulder joint (-1.5px outward)
-            poseStack.translate(-1.5f / 16.0f, 0.0f, 0.0f);
-            poseStack.mulPose(Axis.YP.rotation(sweepY));
-            poseStack.mulPose(Axis.ZP.rotation(liftZ));
-            poseStack.mulPose(Axis.XP.rotation(pitchX));
+        dist.translateAndRotate(ps);
+        collector.submitCustomGeometry(ps, RenderTypes.entityCutoutNoCull(tex), (pose, vc) -> {
+            float xStart = left ? 0.0f : -10.5f;
+            drawCamberedMembrane(pose, vc, light, tint, xStart, 10.5f, 0.3f, 10.2f, 0f, 18f, 10f, 28f, left);
+        });
+        ps.popPose();
+    }
 
-            collector.submitCustomGeometry(poseStack, RenderTypes.entityCutoutNoCull(tex), (pose, vc) -> {
-                // Inner wing bone along -X
-                drawUvBox30(pose, vc, packedLight, tint, 0, 0, -10f, -1f, -0.5f, 10f, 2f, 2f);
-                // Inner dragon membrane extending behind bone (+Z: 0.5..10.5)
-                drawDoubleSidedMembrane30(pose, vc, packedLight, tint, -10f, 0f, 0.5f, 10f, 10f, 0f, 8f, 10f, 18f);
-            });
+    /**
+     * Subdivides the wing membrane into 4 smooth cambered strips so it arches naturally like a real dragon wing!
+     */
+    private static void drawCamberedMembrane(PoseStack.Pose pose, VertexConsumer vc, int light, int argb,
+                                             float ox, float widthX, float oz, float depthZ,
+                                             float u0, float v0, float u1, float v1, boolean left) {
+        final int strips = 4;
+        for (int i = 0; i < strips; i++) {
+            float t0 = i / (float) strips;
+            float t1 = (i + 1) / (float) strips;
+            float z0 = (oz + depthZ * t0) / 16.0f;
+            float z1 = (oz + depthZ * t1) / 16.0f;
+            float arch0 = (float) Math.sin(t0 * Math.PI) * (-0.95f / 16.0f);
+            float arch1 = (float) Math.sin(t1 * Math.PI) * (-0.95f / 16.0f);
 
-            // Outer elbow joint at end of inner bone (-10px)
-            poseStack.translate(-10.0f / 16.0f, 0.0f, 0.0f);
-            poseStack.mulPose(Axis.YP.rotation(tipSweepY));
-            poseStack.mulPose(Axis.ZP.rotation(tipFoldZ));
+            float x0 = ox / 16.0f;
+            float x1 = (ox + widthX) / 16.0f;
+            float tu0 = (left ? u0 : u1) / 30.0f;
+            float tu1 = (left ? u1 : u0) / 30.0f;
+            float tv0 = (v0 + (v1 - v0) * t0) / 30.0f;
+            float tv1 = (v0 + (v1 - v0) * t1) / 30.0f;
 
-            collector.submitCustomGeometry(poseStack, RenderTypes.entityCutoutNoCull(tex), (pose, vc) -> {
-                // Outer wingtip bone along -X
-                drawUvBox30(pose, vc, packedLight, tint, 0, 5, -10f, -0.5f, -0.5f, 10f, 1f, 1f);
-                // Outer dragon membrane extending behind bone (+Z: 0.5..10.5)
-                drawDoubleSidedMembrane30(pose, vc, packedLight, tint, -10f, 0f, 0.5f, 10f, 10f, 0f, 18f, 10f, 28f);
-            });
-
-            poseStack.popPose();
+            emit(pose, vc, x0, arch0, z0, argb, tu0, tv0, light, 0f, -1f, 0f);
+            emit(pose, vc, x1, arch0, z0, argb, tu1, tv0, light, 0f, -1f, 0f);
+            emit(pose, vc, x1, arch1, z1, argb, tu1, tv1, light, 0f, -1f, 0f);
+            emit(pose, vc, x0, arch1, z1, argb, tu0, tv1, light, 0f, -1f, 0f);
         }
-    }
-
-    private static void drawDoubleSidedMembrane30(PoseStack.Pose pose, VertexConsumer vc, int light, int argb,
-                                                  float ox, float oy, float oz, float dx, float dz,
-                                                  float u0, float v0, float u1, float v1) {
-        float x0 = ox / 16.0f, x1 = (ox + dx) / 16.0f;
-        float y = oy / 16.0f;
-        float z0 = oz / 16.0f, z1 = (oz + dz) / 16.0f;
-        float tu0 = u0 / 30.0f, tu1 = u1 / 30.0f;
-        float tv0 = v0 / 30.0f, tv1 = v1 / 30.0f;
-
-        // Upper face (-Y normal)
-        emit(pose, vc, x1, y, z0, argb, tu1, tv0, light, 0f, -1f, 0f);
-        emit(pose, vc, x0, y, z0, argb, tu0, tv0, light, 0f, -1f, 0f);
-        emit(pose, vc, x0, y, z1, argb, tu0, tv1, light, 0f, -1f, 0f);
-        emit(pose, vc, x1, y, z1, argb, tu1, tv1, light, 0f, -1f, 0f);
-
-        // Lower face (+Y normal) so both front & back views have proper lighting!
-        emit(pose, vc, x1, y, z1, argb, tu1, tv1, light, 0f, 1f, 0f);
-        emit(pose, vc, x0, y, z1, argb, tu0, tv1, light, 0f, 1f, 0f);
-        emit(pose, vc, x0, y, z0, argb, tu0, tv0, light, 0f, 1f, 0f);
-        emit(pose, vc, x1, y, z0, argb, tu1, tv0, light, 0f, 1f, 0f);
-    }
-
-    private static void drawUvBox30(PoseStack.Pose pose, VertexConsumer vc, int light, int argb,
-                                    int texU, int texV,
-                                    float ox, float oy, float oz,
-                                    float dx, float dy, float dz) {
-        float x0 = ox / 16.0f, x1 = (ox + dx) / 16.0f;
-        float y0 = oy / 16.0f, y1 = (oy + dy) / 16.0f;
-        float z0 = oz / 16.0f, z1 = (oz + dz) / 16.0f;
-
-        int sx = Math.round(dx), sy = Math.round(dy), sz = Math.round(dz);
-        float f4 = texU / 30f;
-        float f5 = (texU + sz) / 30f;
-        float f6 = (texU + sz + sx) / 30f;
-        float f7 = (texU + sz + sx + sx) / 30f;
-        float f8 = (texU + sz + sx + sz) / 30f;
-        float f9 = (texU + sz + sx + sz + sx) / 30f;
-        float f10 = texV / 30f;
-        float f11 = (texV + sz) / 30f;
-        float f12 = (texV + sz + sy) / 30f;
-
-        quadUv(pose, vc, light, argb, x1, y0, z1, f6, f11, x0, y0, z1, f5, f11, x0, y0, z0, f5, f10, x1, y0, z0, f6, f10, 0, -1, 0);
-        quadUv(pose, vc, light, argb, x1, y1, z0, f7, f10, x0, y1, z0, f6, f10, x0, y1, z1, f6, f11, x1, y1, z1, f7, f11, 0, 1, 0);
-        quadUv(pose, vc, light, argb, x0, y0, z0, f5, f11, x0, y0, z1, f4, f11, x0, y1, z1, f4, f12, x0, y1, z0, f5, f12, -1, 0, 0);
-        quadUv(pose, vc, light, argb, x1, y0, z0, f6, f11, x0, y0, z0, f5, f11, x0, y1, z0, f5, f12, x1, y1, z0, f6, f12, 0, 0, -1);
-        quadUv(pose, vc, light, argb, x1, y0, z1, f8, f11, x1, y0, z0, f6, f11, x1, y1, z0, f6, f12, x1, y1, z1, f8, f12, 1, 0, 0);
-        quadUv(pose, vc, light, argb, x0, y0, z1, f8, f11, x1, y0, z1, f9, f11, x1, y1, z1, f9, f12, x0, y1, z1, f8, f12, 0, 0, 1);
-    }
-
-    private static void quadUv(PoseStack.Pose pose, VertexConsumer vc, int light, int argb,
-                               float x1, float y1, float z1, float u1, float v1,
-                               float x2, float y2, float z2, float u2, float v2,
-                               float x3, float y3, float z3, float u3, float v3,
-                               float x4, float y4, float z4, float u4, float v4,
-                               float nx, float ny, float nz) {
-        emit(pose, vc, x1, y1, z1, argb, u1, v1, light, nx, ny, nz);
-        emit(pose, vc, x2, y2, z2, argb, u2, v2, light, nx, ny, nz);
-        emit(pose, vc, x3, y3, z3, argb, u3, v3, light, nx, ny, nz);
-        emit(pose, vc, x4, y4, z4, argb, u4, v4, light, nx, ny, nz);
     }
 
     private static void emit(PoseStack.Pose pose, VertexConsumer vc,
                              float x, float y, float z, int argb,
                              float u, float v, int light,
                              float nx, float ny, float nz) {
-        int a = (argb >>> 24) & 0xFF;
-        int r = (argb >>> 16) & 0xFF;
-        int g = (argb >>> 8) & 0xFF;
-        int b = argb & 0xFF;
         vc.addVertex(pose, x, y, z)
-                .setColor(r, g, b, a)
+                .setColor(argb)
                 .setUv(u, v)
                 .setOverlay(OverlayTexture.NO_OVERLAY)
                 .setLight(light)
                 .setNormal(pose, nx, ny, nz);
+    }
+
+    private static void setAngles(ModelPart left, ModelPart right, float xDeg, float yDeg, float zDeg) {
+        right.xRot = (left.xRot = xDeg * DEG2RAD);
+        right.yRot = -(left.yRot = yDeg * DEG2RAD);
+        right.zRot = -(left.zRot = zDeg * DEG2RAD);
     }
 }

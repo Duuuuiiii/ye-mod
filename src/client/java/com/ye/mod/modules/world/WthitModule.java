@@ -1,13 +1,13 @@
 package com.ye.mod.modules.world;
 
 import com.ye.mod.core.ConfigManager;
+import com.ye.mod.core.YeZhCnDict;
 import com.ye.mod.core.setting.BoolSetting;
 import com.ye.mod.modules.hud.HudElementModule;
 import com.ye.mod.ui.AppleUiRenderer;
 import com.ye.mod.ui.YeHdFont;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -20,26 +20,24 @@ import net.minecraft.world.phys.HitResult;
 import java.util.Locale;
 
 /**
- * Crosshair Block/Entity Inspector HUD Sub-Module (方块信息 / WTHIT).
- * Kept in the HUD tab with default OFF per user preference (since Jade is installed).
- * Rendered with 1:1 physical-pixel YeHdFont and smooth rounded outlines!
+ * Crosshair Block/Entity Inspector HUD Sub-Module (方块信息).
  */
 public class WthitModule extends HudElementModule {
     public final BoolSetting showCoords = addSetting(new BoolSetting(
-            "showCoords", "显示目标坐标", "卡片副标题显示指向方块的精确坐标", true
-    ));
+            "showCoords", "显示目标坐标", "副标题显示指向方块的精确坐标", true
+    ).functionGroup());
 
     public final BoolSetting showToolHint = addSetting(new BoolSetting(
-            "showToolHint", "挖掘工具与进度", "显示推荐挖掘工具与实时破坏百分比%", true
-    ));
+            "showToolHint", "挖掘工具与进度", "显示推荐挖掘工具与实时破坏百分比", true
+    ).functionGroup());
 
     public final BoolSetting showEntities = addSetting(new BoolSetting(
             "showEntities", "包含生物实体", "准星指向生物或实体时显示血量与距离", true
-    ));
+    ).functionGroup());
 
     public WthitModule() {
         super("wthit", "hud_wthit", "方块信息", "Block Info",
-                "准星指向方块/生物信息卡片（默认关闭，可随时开启与拖拽）",
+                "显示准星指向方块与生物的中文名称、推荐工具、挖掘进度及坐标",
                 false, true, ColorStyle.ICE_CYAN, 10);
         addResetPositionButton();
     }
@@ -56,7 +54,7 @@ public class WthitModule extends HudElementModule {
             BlockState state = mc.level.getBlockState(pos);
             if (!state.isAir()) {
                 ItemStack icon = state.getBlock().asItem().getDefaultInstance();
-                String title = state.getBlock().getName().getString();
+                String title = YeZhCnDict.blockName(state.getBlock());
                 StringBuilder sub = new StringBuilder();
                 if (showToolHint.get()) sub.append(resolveToolTag(state));
                 if (showCoords.get()) {
@@ -99,10 +97,10 @@ public class WthitModule extends HudElementModule {
 
         if (showEntities.get() && mc.hitResult != null && mc.hitResult.getType() == HitResult.Type.ENTITY && mc.hitResult instanceof EntityHitResult ehr) {
             Entity ent = ehr.getEntity();
-            String title = ent.getDisplayName().getString();
+            String title = YeZhCnDict.entityTypeName(ent.getType());
             String subStr = (ent instanceof LivingEntity le)
-                    ? String.format(Locale.ROOT, "❤ %.1f / %.1f · %.1fm", le.getHealth(), le.getMaxHealth(), mc.player.distanceTo(ent))
-                    : String.format(Locale.ROOT, "%s · %.1fm", BuiltInRegistries.ENTITY_TYPE.getKey(ent.getType()).getPath(), mc.player.distanceTo(ent));
+                    ? String.format(Locale.ROOT, "%.1f / %.1f HP · %.1fm", le.getHealth(), le.getMaxHealth(), mc.player.distanceTo(ent))
+                    : String.format(Locale.ROOT, "%.1fm", mc.player.distanceTo(ent));
             int w = Math.round(Math.max(92 * sc, Math.max(YeHdFont.widthF(title, fTitle, true), YeHdFont.widthF(subStr, fSub, false)) + 16 * sc));
             int h = Math.round(26 * sc);
             int x = slot != null ? slot.resolveX(sw, w) : (sw - w) / 2;
@@ -119,16 +117,16 @@ public class WthitModule extends HudElementModule {
             int x = slot != null ? slot.resolveX(sw, w) : (sw - w) / 2;
             int y = slot != null ? slot.resolveY(sh, h) : 6;
             drawHudCard(g, x, y, w, h, true);
-            drawHudText(g, ConfigManager.tr("方块信息预览", "Block Info"), x + 8 * sc, y + 7 * sc, fTitle, resolvePrimaryColor(), true);
+            drawHudText(g, ConfigManager.tr("草方块", "Grass Block"), x + 8 * sc, y + 4 * sc, fTitle, resolvePrimaryColor(), true);
+            drawHudText(g, "0, 64, 0", x + 8 * sc, y + 14.5f * sc, fSub, 0xFF94A3B8, false);
         }
     }
 
-    private static String resolveToolTag(BlockState state) {
-        if (state.getDestroySpeed(null, BlockPos.ZERO) < 0) return ConfigManager.tr("不可破坏", "Unbreakable");
-        if (state.is(BlockTags.MINEABLE_WITH_PICKAXE)) return ConfigManager.tr("镐", "Pickaxe");
-        if (state.is(BlockTags.MINEABLE_WITH_AXE)) return ConfigManager.tr("斧", "Axe");
-        if (state.is(BlockTags.MINEABLE_WITH_SHOVEL)) return ConfigManager.tr("锹", "Shovel");
-        if (state.is(BlockTags.MINEABLE_WITH_HOE)) return ConfigManager.tr("锄", "Hoe");
-        return ConfigManager.tr("任意工具", "Any");
+    private static String resolveToolTag(BlockState s) {
+        if (s.is(BlockTags.MINEABLE_WITH_PICKAXE)) return ConfigManager.tr("镐", "Pickaxe");
+        if (s.is(BlockTags.MINEABLE_WITH_AXE)) return ConfigManager.tr("斧", "Axe");
+        if (s.is(BlockTags.MINEABLE_WITH_SHOVEL)) return ConfigManager.tr("锹", "Shovel");
+        if (s.is(BlockTags.MINEABLE_WITH_HOE)) return ConfigManager.tr("锄", "Hoe");
+        return ConfigManager.tr("徒手", "Hand");
     }
 }

@@ -46,7 +46,7 @@ public final class YeHighResTextures {
     }
 
     private static NativeImage buildRingArray512() {
-        int S = 512;
+        int S = 1024;
         NativeImage img = new NativeImage(S, S, true);
         double half = (S - 1) * 0.5;
         for (int py = 0; py < S; py++) {
@@ -54,56 +54,57 @@ public final class YeHighResTextures {
                 double dx = (px - half) / half;
                 double dy = (py - half) / half;
                 double r = Math.hypot(dx, dy);
-                if (r > 0.995) {
+                if (r > 0.996) {
                     img.setPixel(px, py, 0);
                     continue;
                 }
                 double ang = Math.atan2(dy, dx);
                 double val = 0.0;
 
-                // Crisp double outer rim + inner geometric rings with soft bloom
-                val = Math.max(val, ringGlow(r, 0.90, 0.014, 0.045));
-                val = Math.max(val, ringGlow(r, 0.84, 0.008, 0.025) * 0.88);
-                val = Math.max(val, ringGlow(r, 0.68, 0.011, 0.032) * 0.95);
-                val = Math.max(val, ringGlow(r, 0.50, 0.009, 0.024) * 0.82);
+                // Razor-sharp 1024x1024 multi-tiered geometric rings + luminous aura
+                val = Math.max(val, ringGlow(r, 0.91, 0.009, 0.038));
+                val = Math.max(val, ringGlow(r, 0.855, 0.005, 0.020) * 0.92);
+                val = Math.max(val, ringGlow(r, 0.715, 0.007, 0.026) * 0.96);
+                val = Math.max(val, ringGlow(r, 0.56, 0.005, 0.018) * 0.85);
 
-                // 24 high-resolution ancient rune glyphs between r=0.70 and r=0.83
-                if (r > 0.70 && r < 0.83) {
-                    double seg = ((ang + Math.PI) / (2.0 * Math.PI)) * 24.0;
+                // 36 crisp high-resolution celestial rune glyphs between r=0.73 and r=0.845
+                if (r > 0.73 && r < 0.845) {
+                    double seg = ((ang + Math.PI) / (2.0 * Math.PI)) * 36.0;
                     int idx = (int) Math.floor(seg);
                     double u = seg - idx;
-                    double v = (r - 0.70) / 0.13;
-                    if (u > 0.16 && u < 0.84 && v > 0.12 && v < 0.88) {
-                        boolean bar1 = Math.abs(u - 0.5) < 0.07;
-                        boolean bar2 = Math.abs(v - ((idx % 2 == 0) ? 0.32 : 0.68)) < 0.09;
-                        boolean diag = Math.abs((u - 0.2) - v * 0.6) < 0.075;
-                        if (bar1 || bar2 || (idx % 3 == 0 && diag)) {
-                            val = Math.max(val, 0.94);
+                    double v = (r - 0.73) / 0.115;
+                    if (u > 0.14 && u < 0.86 && v > 0.10 && v < 0.90) {
+                        double d1 = Math.abs(u - 0.5);
+                        double d2 = Math.abs(v - ((idx % 2 == 0) ? 0.30 : 0.70));
+                        double d3 = Math.abs((u - 0.22) - v * 0.56);
+                        double stroke = Math.min(d1, Math.min(d2, (idx % 3 == 0) ? d3 : 1.0));
+                        if (stroke < 0.065) {
+                            val = Math.max(val, Math.min(1.0, (0.065 - stroke) / 0.025));
                         }
                     }
                 }
 
-                // 8-pointed star / octagram inside r <= 0.68
-                if (r >= 0.34 && r <= 0.685) {
-                    for (int k = 0; k < 8; k++) {
-                        double a1 = k * (Math.PI / 4.0);
-                        double a2 = a1 + (3.0 * Math.PI / 4.0);
-                        double d = distToSegment(dx, dy, Math.cos(a1) * 0.675, Math.sin(a1) * 0.675,
-                                Math.cos(a2) * 0.675, Math.sin(a2) * 0.675);
-                        if (d < 0.016) {
-                            val = Math.max(val, (1.0 - d / 0.016) * 0.92);
+                // Smooth anti-aliased 12-pointed star filigree inside r <= 0.715
+                if (r >= 0.42 && r <= 0.718) {
+                    for (int k = 0; k < 12; k++) {
+                        double a1 = k * (Math.PI / 6.0);
+                        double a2 = a1 + (5.0 * Math.PI / 6.0);
+                        double d = distToSegment(dx, dy, Math.cos(a1) * 0.712, Math.sin(a1) * 0.712,
+                                Math.cos(a2) * 0.712, Math.sin(a2) * 0.712);
+                        if (d < 0.010) {
+                            val = Math.max(val, (1.0 - d / 0.010) * 0.94);
                         }
                     }
                 }
 
-                // Flowing outer spirit flame wisps
-                double wave = 0.90 + 0.065 * Math.sin(ang * 12.0) + 0.025 * Math.cos(ang * 24.0);
-                if (r > 0.88 && r < wave) {
-                    val = Math.max(val, 0.52 * (1.0 - (r - 0.88) / 0.10));
+                // Crown-like spirit flame crests outside main ring
+                double wave = 0.91 + 0.058 * Math.sin(ang * 16.0) + 0.022 * Math.cos(ang * 32.0);
+                if (r > 0.89 && r < wave) {
+                    val = Math.max(val, 0.62 * (1.0 - (r - 0.89) / 0.095));
                 }
 
                 int a = clamp255(val * 255.0);
-                int bright = clamp255(195 + val * 60.0);
+                int bright = clamp255(215 + val * 40.0);
                 img.setPixel(px, py, argb(a, bright, bright, 255));
             }
         }

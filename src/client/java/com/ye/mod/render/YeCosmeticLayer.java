@@ -114,7 +114,7 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
 
         if (wings.wingCategory.get() == DragonWingsModule.WingCategory.PVP_DRAGON) {
             pvpDragonWings.submit(poseStack, collector, YePvpDragonWingsModel.PVP_DRAGON_TEX,
-                    packedLight, tint, speed, now);
+                    packedLight, tint, state.isFallFlying, state.walkAnimationSpeed > 0.1f, speed, now, state.outlineColor);
         } else {
             Identifier tex = Identifier.fromNamespaceAndPath("ye-mod", wings.wingStyle.get().texPath);
             avianWings.setupProceduralAnim(state.isFallFlying, state.walkAnimationSpeed > 0.1f, speed, now);
@@ -255,6 +255,7 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
                         drawBox(pose, vc, 0xF000F0, 0xFF4ADE80, -0.14f, -0.71f, -0.05f, -0.01f, -0.64f, 0.05f);
                         drawBox(pose, vc, 0xF000F0, 0xFF86EFAC, 0.01f, -0.73f, -0.05f, 0.14f, -0.66f, 0.05f);
                     }
+                    case BALLOON -> renderSmoothHighPolyBalloon(pose, vc, light);
                     default -> {}
                 }
             });
@@ -549,33 +550,176 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
         float baseR = rings.radius.get().floatValue();
         float startY = rings.customMode.get() ? rings.baseHeight.get().floatValue() : 1.38f;
         float gapY = rings.customMode.get() ? rings.verticalGap.get().floatValue() : 0.24f;
+        float bri = rings.brightness.get().floatValue();
         long now = System.currentTimeMillis();
 
         for (int i = 0; i < count; i++) {
             double spd = rings.pickRingSpeed(i);
             float y = startY - i * gapY + (float) Math.sin((now / 420.0) * Math.abs(spd) + i) * 0.035f;
             float r = baseR + (i * 0.09f);
-            int rgb = rings.pickRingRgb(i);
-            int col = 0xF2000000 | rgb;
+            int rawRgb = rings.pickRingRgb(i);
+            int boostedRgb = scaleRgbWithWhiteHot(rawRgb, bri);
+            int alphaMain = Math.max(55, Math.min(255, Math.round(Math.min(1.0f, bri) * 245.0f)));
+            int col = (alphaMain << 24) | boostedRgb;
             float spin = (float) (((now / 15.0) * spd) % 360.0);
 
             poseStack.pushPose();
             poseStack.translate(0.0f, y, 0.0f);
             poseStack.mulPose(Axis.YP.rotationDegrees(spin));
-            collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.RING_ARRAY_TEX), (pose, vc) -> {
-                drawDoubleUvQuad(pose, vc, 0xF000F0, col,
-                        -r, 0f, -r, 0f, 0f,
-                        r, 0f, -r, 1f, 0f,
-                        r, 0f, r, 1f, 1f,
-                        -r, 0f, r, 0f, 1f);
-                int glowCol = (0x66 << 24) | rgb;
-                drawDoubleUvQuad(pose, vc, 0xF000F0, glowCol,
-                        -r * 1.02f, 0.025f, -r * 1.02f, 0f, 0f,
-                        r * 1.02f, 0.025f, -r * 1.02f, 1f, 0f,
-                        r * 1.02f, 0.025f, r * 1.02f, 1f, 1f,
-                        -r * 1.02f, 0.025f, r * 1.02f, 0f, 1f);
-            });
+
+            // 1) Crisp 1024x1024 Runic Disc (Base Translucent + Additive Emissive Eyes Pass for intense HDR brightness!)
+            collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.RING_ARRAY_TEX), (pose, vc) ->
+                    drawDoubleUvQuad(pose, vc, 0xF000F0, col,
+                            -r, 0f, -r, 0f, 0f,
+                            r, 0f, -r, 1f, 0f,
+                            r, 0f, r, 1f, 1f,
+                            -r, 0f, r, 0f, 1f));
+
+            if (bri > 0.65f) {
+                float glowStrength = Math.min(1.0f, (bri - 0.55f) / 1.85f);
+                int eRgb = scaleRgbWithWhiteHot(rawRgb, glowStrength * 1.15f);
+                int eCol = 0xFF000000 | eRgb;
+                collector.submitCustomGeometry(poseStack, RenderTypes.eyes(YeHighResTextures.RING_ARRAY_TEX), (pose, vc) -> {
+                    drawDoubleUvQuad(pose, vc, 0xF000F0, eCol,
+                            -r, 0.002f, -r, 0f, 0f,
+                            r, 0.002f, -r, 1f, 0f,
+                            r, 0.002f, r, 1f, 1f,
+                            -r, 0.002f, r, 0f, 1f);
+                    if (bri > 1.75f) {
+                        int superRgb = scaleRgbWithWhiteHot(0xFFFFFF, (bri - 1.75f) * 0.70f);
+                        drawDoubleUvQuad(pose, vc, 0xF000F0, 0xFF000000 | superRgb,
+                                -r * 1.015f, -0.002f, -r * 1.015f, 0f, 0f,
+                                r * 1.015f, -0.002f, -r * 1.015f, 1f, 0f,
+                                r * 1.015f, -0.002f, r * 1.015f, 1f, 1f,
+                                -r * 1.015f, -0.002f, r * 1.015f, 0f, 1f);
+                    }
+                });
+            }
+
+            // 2) Smooth 48-segment 3D Curved Torus Rim (gives real sculptural 3D volume from every camera angle!)
+            float majorR = r * 0.905f;
+            float minorR = 0.018f + Math.min(0.012f, bri * 0.005f);
+            int coreCol = (0xFA << 24) | scaleRgbWithWhiteHot(boostedRgb, 1.35f);
+            collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX),
+                    (pose, vc) -> drawSmoothTorus(pose, vc, majorR, minorR, 48, 8, coreCol));
+
             poseStack.popPose();
+        }
+    }
+
+    private static int scaleRgbWithWhiteHot(int rgb, float mult) {
+        float r = ((rgb >> 16) & 0xFF) * mult;
+        float g = ((rgb >> 8) & 0xFF) * mult;
+        float b = (rgb & 0xFF) * mult;
+        // Spill excess HDR energy across channels so high brightness turns incandescent white-gold/cyan!
+        float overflow = Math.max(0f, (Math.max(r, Math.max(g, b)) - 255f) * 0.42f);
+        int ir = Math.max(0, Math.min(255, Math.round(r + overflow)));
+        int ig = Math.max(0, Math.min(255, Math.round(g + overflow)));
+        int ib = Math.max(0, Math.min(255, Math.round(b + overflow)));
+        return (ir << 16) | (ig << 8) | ib;
+    }
+
+    private static void drawSmoothTorus(PoseStack.Pose pose, VertexConsumer vc, float majorR, float minorR,
+                                        int segU, int segV, int argb) {
+        for (int i = 0; i < segU; i++) {
+            double a0 = (i / (double) segU) * Math.PI * 2.0;
+            double a1 = ((i + 1) / (double) segU) * Math.PI * 2.0;
+            float cosA0 = (float) Math.cos(a0), sinA0 = (float) Math.sin(a0);
+            float cosA1 = (float) Math.cos(a1), sinA1 = (float) Math.sin(a1);
+
+            for (int j = 0; j < segV; j++) {
+                double b0 = (j / (double) segV) * Math.PI * 2.0;
+                double b1 = ((j + 1) / (double) segV) * Math.PI * 2.0;
+                float cosB0 = (float) Math.cos(b0), sinB0 = (float) Math.sin(b0);
+                float cosB1 = (float) Math.cos(b1), sinB1 = (float) Math.sin(b1);
+
+                float r0 = majorR + minorR * cosB0;
+                float r1 = majorR + minorR * cosB1;
+                float y0 = minorR * sinB0;
+                float y1 = minorR * sinB1;
+
+                emitVertex(pose, vc, r0 * cosA0, y0, r0 * sinA0, argb, 0.5f, 0.5f, 0xF000F0, cosB0 * cosA0, sinB0, cosB0 * sinA0);
+                emitVertex(pose, vc, r0 * cosA1, y0, r0 * sinA1, argb, 0.5f, 0.5f, 0xF000F0, cosB0 * cosA1, sinB0, cosB0 * sinA1);
+                emitVertex(pose, vc, r1 * cosA1, y1, r1 * sinA1, argb, 0.5f, 0.5f, 0xF000F0, cosB1 * cosA1, sinB1, cosB1 * sinA1);
+                emitVertex(pose, vc, r1 * cosA0, y1, r1 * sinA0, argb, 0.5f, 0.5f, 0xF000F0, cosB1 * cosA0, sinB1, cosB1 * sinA0);
+            }
+        }
+    }
+
+    /**
+     * Smooth 28x18 Curved 3D Lathe Balloon + Knot Flange + Gently Swaying Catenary String!
+     */
+    private static void renderSmoothHighPolyBalloon(PoseStack.Pose pose, VertexConsumer vc, int light) {
+        long now = System.currentTimeMillis();
+        float swayX = (float) Math.sin(now / 650.0) * 0.045f;
+        float bobY = (float) Math.cos(now / 520.0) * 0.03f;
+        float cx = 0.38f + swayX;
+        float cy = -1.28f + bobY;
+        float cz = 0.08f;
+
+        int baseRgb = GlobalColorModule.resolveRgb(true, 0xA855F7, 2);
+        int balloonCol = 0xFA000000 | baseRgb;
+        int stringCol = 0xFFE2E8F0;
+
+        final int segU = 28;
+        final int segV = 18;
+        for (int iv = 0; iv < segV; iv++) {
+            double v0 = iv / (double) segV;
+            double v1 = (iv + 1) / (double) segV;
+            float[] prof0 = balloonProfile(v0);
+            float[] prof1 = balloonProfile(v1);
+
+            for (int iu = 0; iu < segU; iu++) {
+                double p0 = (iu / (double) segU) * Math.PI * 2.0;
+                double p1 = ((iu + 1) / (double) segU) * Math.PI * 2.0;
+                float cp0 = (float) Math.cos(p0), sp0 = (float) Math.sin(p0);
+                float cp1 = (float) Math.cos(p1), sp1 = (float) Math.sin(p1);
+
+                emitVertex(pose, vc, cx + prof0[0] * cp0, cy + prof0[1], cz + prof0[0] * sp0, balloonCol, 0.5f, 0.5f, light, cp0 * prof0[2], prof0[3], sp0 * prof0[2]);
+                emitVertex(pose, vc, cx + prof0[0] * cp1, cy + prof0[1], cz + prof0[0] * sp1, balloonCol, 0.5f, 0.5f, light, cp1 * prof0[2], prof0[3], sp1 * prof0[2]);
+                emitVertex(pose, vc, cx + prof1[0] * cp1, cy + prof1[1], cz + prof1[0] * sp1, balloonCol, 0.5f, 0.5f, light, cp1 * prof1[2], prof1[3], sp1 * prof1[2]);
+                emitVertex(pose, vc, cx + prof1[0] * cp0, cy + prof1[1], cz + prof1[0] * sp0, balloonCol, 0.5f, 0.5f, light, cp0 * prof1[2], prof1[3], sp0 * prof1[2]);
+            }
+        }
+
+        // Smooth curved string from balloon knot (cx, cy + 0.30, cz) down to shoulder/head side (0.20, -0.46, 0.04)
+        final int strSegs = 10;
+        float sx0 = cx, sy0 = cy + 0.31f, sz0 = cz;
+        float sxEnd = 0.22f, syEnd = -0.46f, szEnd = 0.05f;
+        float rStr = 0.0065f;
+        for (int s = 0; s < strSegs; s++) {
+            float t0 = s / (float) strSegs;
+            float t1 = (s + 1) / (float) strSegs;
+            float px0 = sx0 + (sxEnd - sx0) * t0 + (float) Math.sin(t0 * Math.PI) * 0.025f;
+            float py0 = sy0 + (syEnd - sy0) * (t0 * t0 * 0.25f + t0 * 0.75f);
+            float pz0 = sz0 + (szEnd - sz0) * t0;
+
+            float px1 = sx0 + (sxEnd - sx0) * t1 + (float) Math.sin(t1 * Math.PI) * 0.025f;
+            float py1 = sy0 + (syEnd - sy0) * (t1 * t1 * 0.25f + t1 * 0.75f);
+            float pz1 = sz0 + (szEnd - sz0) * t1;
+
+            drawBox(pose, vc, 0xF000F0, stringCol,
+                    Math.min(px0, px1) - rStr, Math.min(py0, py1), Math.min(pz0, pz1) - rStr,
+                    Math.max(px0, px1) + rStr, Math.max(py0, py1), Math.max(pz0, pz1) + rStr);
+        }
+    }
+
+    // Returns {radius, localY, normRadial, normY} for v in [0..1] (0 = top crown, 0.90 = pinch neck, 1.0 = flared knot)
+    private static float[] balloonProfile(double v) {
+        if (v <= 0.90) {
+            double u = v / 0.90; // 0..1 from top pole (-0.28) to neck (+0.27)
+            double th = u * Math.PI;
+            double taper = 1.0 - 0.22 * Math.pow(u, 1.8);
+            float r = (float) (Math.sin(th) * 0.245 * taper);
+            float y = (float) (-Math.cos(th) * 0.275);
+            float nr = (float) Math.sin(th);
+            float ny = (float) (-Math.cos(th));
+            return new float[]{r, y, nr, ny};
+        } else {
+            double k = (v - 0.90) / 0.10; // Flared balloon tie knot!
+            float r = (float) (0.012 + k * 0.028);
+            float y = (float) (0.275 + k * 0.036);
+            return new float[]{r, y, 0.85f, 0.52f};
         }
     }
 

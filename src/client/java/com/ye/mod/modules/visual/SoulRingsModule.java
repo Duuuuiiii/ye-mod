@@ -3,12 +3,12 @@ package com.ye.mod.modules.visual;
 import com.ye.mod.core.Category;
 import com.ye.mod.core.Module;
 import com.ye.mod.core.setting.BoolSetting;
+import com.ye.mod.core.setting.ColorSetting;
 import com.ye.mod.core.setting.DoubleSetting;
 import com.ye.mod.core.setting.EnumSetting;
 
 /**
- * 512x512 Ultra-HD Player-attached Soul Rings (魂环).
- * Clean preset mode by default; enabling "高级自定义" unlocks per-ring color, speed, and vertical spacing!
+ * 1024x1024 + Smooth 3D Curved Torus Player-attached Soul Rings (魂环) with HDR Brightness & Custom Color Picker!
  */
 public class SoulRingsModule extends Module {
     public enum RingRank {
@@ -17,7 +17,8 @@ public class SoulRingsModule extends Module {
         RED_100K("赤红"),
         PURPLE_1K("紫晶"),
         BLACK_10K("玄黑"),
-        ICE_CYAN("冰蓝");
+        ICE_CYAN("冰蓝"),
+        CUSTOM_COLOR("单色自选");
 
         public final String label;
         RingRank(String label) { this.label = label; }
@@ -42,36 +43,44 @@ public class SoulRingsModule extends Module {
     }
 
     public final EnumSetting<RingRank> rank = addSetting(new EnumSetting<>(
-            "rank", "预设配色", "整体魂环品阶预设", RingRank.MIXED
-    ));
-
-    public final BoolSetting syncGlobalColor = addSetting(new BoolSetting(
-            "syncGlobalColor", "同步全局色彩", "所有魂环层统一跟随全局色彩与追光相位", false
-    ));
+            "rank", "预设配色", "魂环整体品阶配色", RingRank.MIXED
+    ).functionGroup());
 
     public final DoubleSetting ringCount = addSetting(new DoubleSetting(
             "ringCount", "数量", "悬浮魂环层数", 4.0, 1.0, 6.0, 1.0
-    ));
+    ).functionGroup());
 
     public final DoubleSetting radius = addSetting(new DoubleSetting(
-            "radius", "半径", "魂环基础半径", 1.20, 0.6, 2.5, 0.05
-    ));
+            "radius", "半径", "魂环基础半径", 1.18, 0.6, 2.5, 0.05
+    ).functionGroup());
 
     public final DoubleSetting spinSpeed = addSetting(new DoubleSetting(
             "spinSpeed", "转速", "整体旋转倍率", 1.0, 0.2, 3.0, 0.1
+    ).functionGroup());
+
+    public final DoubleSetting brightness = addSetting(new DoubleSetting(
+            "brightness", "发光亮度", "调节魂环辉光强度（调高开启高亮叠加层）", 1.45, 0.30, 3.00, 0.05
+    ));
+
+    public final ColorSetting customRingColor = addSetting(new ColorSetting(
+            "customRingColor", "自定义环色", "单色自选模式下的魂环颜色", 0xFF38BDF8
+    ).visible(() -> rank.get() == RingRank.CUSTOM_COLOR));
+
+    public final BoolSetting syncGlobalColor = addSetting(new BoolSetting(
+            "syncGlobalColor", "跟随同步色", "跟随同步色模块的彩虹渐变或自选色", false
     ));
 
     public final BoolSetting customMode = addSetting(new BoolSetting(
-            "customMode", "高级自定义", "单独调节每道魂环的颜色、独立转速与高度间距", false
-    ));
+            "customMode", "高级自定义", "单独调节每道魂环颜色、独立转速与高度间距", false
+    ).functionGroup());
 
     public final DoubleSetting baseHeight = addSetting(new DoubleSetting(
             "baseHeight", "起始高度", "第一道魂环相对高度", 1.38, 0.4, 2.0, 0.04
-    ).visible(customMode::get));
+    ).visible(customMode::get).functionGroup());
 
     public final DoubleSetting verticalGap = addSetting(new DoubleSetting(
             "verticalGap", "层间间距", "相邻魂环上下间距", 0.24, 0.06, 0.50, 0.02
-    ).visible(customMode::get));
+    ).visible(customMode::get).functionGroup());
 
     public final BoolSetting hideInFirstPerson = addSetting(new BoolSetting(
             "hideInFirstPerson", "第一人称隐藏", "第一人称视角隐藏魂环", true
@@ -86,7 +95,7 @@ public class SoulRingsModule extends Module {
     public final DoubleSetting[] perRingSpeed = new DoubleSetting[6];
 
     public SoulRingsModule() {
-        super("soul_rings", "魂环", "Soul Rings", "512×512 高清符文魂环，支持每环独立颜色与转速", Category.VISUAL);
+        super("soul_rings", "魂环", "Soul Rings", "立体曲面圆环与符文光阵，支持独立发光亮度、每环配色与转速控制", Category.VISUAL);
         setEnabled(true, true);
 
         SingleColor[] defaults = {
@@ -102,7 +111,7 @@ public class SoulRingsModule extends Module {
             perRingSpeed[i] = addSetting(new DoubleSetting(
                     "ringSpd" + ringIdx, "第" + ringIdx + "环转速", "正数顺时针，负数逆时针",
                     (i % 2 == 0) ? 1.0 : -1.0, -3.0, 3.0, 0.2
-            ).visible(() -> customMode.get() && Math.round(ringCount.get()) >= ringIdx));
+            ).visible(() -> customMode.get() && Math.round(ringCount.get()) >= ringIdx).functionGroup());
         }
     }
 
@@ -115,14 +124,15 @@ public class SoulRingsModule extends Module {
         }
         return switch (rank.get()) {
             case PURPLE_1K -> 0xA855F7;
-            case BLACK_10K -> 0x272733;
+            case BLACK_10K -> 0x3F3F56;
             case RED_100K -> 0xEF4444;
             case GOD_GOLD -> 0xFACC15;
             case ICE_CYAN -> 0x22D3EE;
+            case CUSTOM_COLOR -> customRingColor.getRgb();
             case MIXED -> {
                 if (idx == 0) yield 0xFACC15;
                 if (idx == 1) yield 0xA855F7;
-                if (idx <= 3) yield 0x3F3F52;
+                if (idx <= 3) yield 0x474761;
                 yield 0xEF4444;
             }
         };

@@ -3,16 +3,21 @@ package com.ye.mod.modules.hud;
 import com.ye.mod.core.ConfigManager;
 import com.ye.mod.core.Module;
 import com.ye.mod.core.ModuleManager;
+import com.ye.mod.core.YeZhCnDict;
 import com.ye.mod.core.setting.BoolSetting;
 import com.ye.mod.core.setting.DoubleSetting;
 import com.ye.mod.core.setting.EnumSetting;
+import com.ye.mod.modules.visual.GlobalColorModule;
+import com.ye.mod.ui.AppleUiRenderer;
 import com.ye.mod.ui.YeHdFont;
-import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.core.Holder;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
@@ -20,6 +25,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.phys.EntityHitResult;
 
 import java.awt.Color;
 import java.time.LocalTime;
@@ -34,13 +40,15 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 10 Crisp Native-DPI Vector HUD Sub-Modules (+ WthitModule = 11 total in the HUD tab!).
- * Right-clicking any HUD widget on screen in F10 mode opens its dedicated settings page directly!
+ * 11 Modular HUD Widgets (+ WthitModule = 12 total in HUD tab!):
+ * Includes Potions, Coords, Multi-Mode Speedometer (Text / Arc Gauge / Energy Bar / Wave Graph),
+ * Time, FPS/Ping/CPS, Armor (0px bottom flush!), PvP Items, Inventory, Localized Chinese Item List (物品列表),
+ * Module List, and 3D Paper-Doll PlayerView (玩家预览)!
  */
 public final class HudElements {
     private HudElements() {}
 
-    // ==================== 1. POTIONS HUD (药水效果) ====================
+    // ==================== 1. POTIONS HUD (药水面板) ====================
     public static final class PotionsHud extends HudElementModule {
         public enum Style {
             TABLE("表模式"),
@@ -50,23 +58,23 @@ public final class HudElements {
         }
 
         public final EnumSetting<Style> style = addSetting(new EnumSetting<>(
-                "style", "呈现样式", "表模式(默认对齐表格) / 条模式(动态倒计时条)", Style.TABLE
-        ));
+                "style", "呈现样式", "表模式 / 条模式", Style.TABLE
+        ).functionGroup());
         public final BoolSetting hideVanilla = addSetting(new BoolSetting(
-                "hideVanilla", "隐藏原版图标", "隐藏屏幕右上角原版方形药水框", true
-        ));
+                "hideVanilla", "隐藏原版图标", "隐藏右上角原版方形药水框", true
+        ).functionGroup());
         public final BoolSetting warnExpiring = addSetting(new BoolSetting(
                 "warnExpiring", "临期闪烁提示", "剩余不足 8 秒时时间数字变红提醒", true
-        ));
+        ).functionGroup());
         public final BoolSetting compact = addSetting(new BoolSetting(
-                "compact", "紧凑行高", "缩小行间距容纳更多药水状态", false
-        ));
+                "compact", "紧凑行高", "缩小行间距容纳更多状态", false
+        ).functionGroup());
 
         private final Map<String, Integer> maxEffectDurations = new HashMap<>();
 
         public PotionsHud() {
-            super("hud_potions_mod", "hud_potions", "药水面板", "Potions HUD",
-                    "高清矢量药水状态表/进度条，支持独立缩放与原版图标隐藏",
+            super("hud_potions_mod", "hud_potions", "药水面板", "Potions",
+                    "药水状态表或倒计时进度条，支持原版图标隐藏",
                     true, true, ColorStyle.ICE_CYAN, 0);
             addResetPositionButton();
         }
@@ -125,7 +133,7 @@ public final class HudElements {
                     boolean low = warnExpiring.get() && !eff.isInfiniteDuration() && eff.getDuration() <= 160;
                     int durCol = low && ((System.currentTimeMillis() / 250L) % 2 == 0) ? 0xFFF87171 : 0xFFCBD5E1;
 
-                    com.ye.mod.ui.AppleUiRenderer.drawCircle(g, x + 6.5f * sc, ry + 3.5f * sc, 4.5f * sc, eCol);
+                    AppleUiRenderer.drawCircle(g, x + 6.5f * sc, ry + 3.5f * sc, 4.5f * sc, eCol);
                     drawHudText(g, name, x + 14 * sc, ry + 1 * sc, fSize, 0xFFF8FAFC, false);
                     drawHudText(g, dur, x + w - 7 * sc - YeHdFont.widthF(dur, fSize, false), ry + 1 * sc, fSize, durCol, false);
                     ry += rowStep;
@@ -152,8 +160,8 @@ public final class HudElements {
                     drawHudText(g, dur, x + w - 6 * sc - YeHdFont.widthF(dur, fSize, false), ry, fSize, 0xFFCBD5E1, false);
 
                     float bx = x + 6 * sc, by = ry + 12 * sc, bw = w - 12 * sc, bh = Math.max(2.5f, 3.2f * sc);
-                    com.ye.mod.ui.AppleUiRenderer.drawRoundedRect(g, bx, by, bw, bh, bh * 0.5f, 0xFF1E293B);
-                    com.ye.mod.ui.AppleUiRenderer.drawRoundedRect(g, bx, by, bw * pct, bh, bh * 0.5f, eCol);
+                    AppleUiRenderer.drawRoundedRect(g, bx, by, bw, bh, bh * 0.5f, 0xFF1E293B);
+                    AppleUiRenderer.drawRoundedRect(g, bx, by, bw * pct, bh, bh * 0.5f, eCol);
                     ry += rowStep;
                 }
             }
@@ -162,22 +170,17 @@ public final class HudElements {
 
     // ==================== 2. COORDS HUD (双维坐标) ====================
     public static final class CoordsHud extends HudElementModule {
-        public final BoolSetting multiLine = addSetting(new BoolSetting(
-                "multiLine", "三行对齐模式", "开启为X/Y/Z三行排布，关闭为单行紧凑排布", true
-        ));
-        public final BoolSetting showNetherSync = addSetting(new BoolSetting(
-                "showNetherSync", "主世界↔下界换算", "括号内同步显示对应的×8或÷8跨维度坐标", true
-        ));
-        public final BoolSetting showChunk = addSetting(new BoolSetting(
-                "showChunk", "显示区块坐标", "附带显示当前所在 Chunk (X, Z)", false
-        ));
-        public final BoolSetting showBiome = addSetting(new BoolSetting(
-                "showBiome", "显示当前群系", "底部附带显示脚下生物群系名称", false
-        ));
+        public final BoolSetting multiLine = addSetting(new BoolSetting("multiLine", "三行分列排布", "开启为X/Y/Z三行，关闭为单行排布", true).functionGroup());
+        public final BoolSetting showPrefix = addSetting(new BoolSetting("showPrefix", "显示XYZ字母", "显示 X / Y / Z 轴标签", true).functionGroup());
+        public final BoolSetting showDecimals = addSetting(new BoolSetting("showDecimals", "精确到小数位", "显示精确到 0.1 的浮点坐标", false).functionGroup());
+        public final BoolSetting showNetherSync = addSetting(new BoolSetting("showNetherSync", "主世界与下界换算", "括号内同步显示对应的×8或÷8跨维度坐标", true).functionGroup());
+        public final BoolSetting showDirection = addSetting(new BoolSetting("showDirection", "附带朝向方位", "显示东南西北与正负坐标轴方向", false).functionGroup());
+        public final BoolSetting showChunk = addSetting(new BoolSetting("showChunk", "显示区块坐标", "附带显示所在 Chunk (X, Z)", false).functionGroup());
+        public final BoolSetting showBiome = addSetting(new BoolSetting("showBiome", "显示生物群系", "附带显示当前群系", false).functionGroup());
 
         public CoordsHud() {
-            super("hud_coords_mod", "hud_coords", "双维坐标", "Coords HUD",
-                    "高清矢量 XYZ 坐标，自带主世界↔下界×8同步换算、区块与群系显示",
+            super("hud_coords_mod", "hud_coords", "双维坐标", "Coords",
+                    "XYZ坐标面板，支持跨维度坐标同步换算、小数精度、朝向、区块与群系",
                     true, false, ColorStyle.RUSHER_PINK, 1);
             addResetPositionButton();
         }
@@ -191,6 +194,9 @@ public final class HudElements {
             float fSize = 8.8f * sc;
             int col = resolvePrimaryColor();
 
+            boolean dec = showDecimals.get();
+            boolean pref = showPrefix.get();
+            double dx = mc.player.getX(), dy = mc.player.getY(), dz = mc.player.getZ();
             int px = mc.player.getBlockX(), py = mc.player.getBlockY(), pz = mc.player.getBlockZ();
             boolean isNether = mc.level.dimension() == Level.NETHER;
             boolean isOw = mc.level.dimension() == Level.OVERWORLD;
@@ -198,15 +204,21 @@ public final class HudElements {
             int altZ = isNether ? pz * 8 : Math.floorDiv(pz, 8);
             boolean canAlt = showNetherSync.get() && (isNether || isOw);
 
+            String sx = dec ? String.format(Locale.ROOT, "%.1f", dx) : String.valueOf(px);
+            String sy = dec ? String.format(Locale.ROOT, "%.1f", dy) : String.valueOf(py);
+            String sz = dec ? String.format(Locale.ROOT, "%.1f", dz) : String.valueOf(pz);
+
             List<String> lines = new ArrayList<>();
             if (multiLine.get()) {
-                lines.add(canAlt ? String.format("X  %d  §7(%d)", px, altX) : String.format("X  %d", px));
-                lines.add(String.format("Y  %d", py));
-                lines.add(canAlt ? String.format("Z  %d  §7(%d)", pz, altZ) : String.format("Z  %d", pz));
+                lines.add((pref ? "X  " : "") + sx + (canAlt ? ("  §7(" + altX + ")") : ""));
+                lines.add((pref ? "Y  " : "") + sy);
+                lines.add((pref ? "Z  " : "") + sz + (canAlt ? ("  §7(" + altZ + ")") : ""));
             } else {
-                lines.add(canAlt
-                        ? String.format("XYZ  %d, %d, %d  §7(%d, %d)", px, py, pz, altX, altZ)
-                        : String.format("XYZ  %d, %d, %d", px, py, pz));
+                String base = (pref ? "XYZ  " : "") + sx + ", " + sy + ", " + sz;
+                lines.add(canAlt ? (base + "  §7(" + altX + ", " + altZ + ")") : base);
+            }
+            if (showDirection.get()) {
+                lines.add("§7" + cardinalDir(mc.player.getYRot()));
             }
             if (showChunk.get()) {
                 lines.add(ConfigManager.tr("§7区块: ", "§7Chunk: ") + (px >> 4) + ", " + (pz >> 4));
@@ -217,15 +229,15 @@ public final class HudElements {
                 lines.add("§7" + bId);
             }
 
-            float maxW = 42 * sc;
+            float maxW = 36 * sc;
             for (String ln : lines) maxW = Math.max(maxW, YeHdFont.widthF(ln, fSize, false));
             float lineH = 11.5f * sc;
             int w = Math.round(maxW + 10 * sc);
-            int h = Math.round(lines.size() * lineH + 5 * sc);
+            int h = Math.round(lines.size() * lineH + 4 * sc);
             int x = slot.resolveX(sw, w), y = slot.resolveY(sh, h);
 
             drawHudCard(g, x, y, w, h, editMode);
-            float ry = y + 2.5f * sc;
+            float ry = y + 2.0f * sc;
             for (String ln : lines) {
                 drawHudText(g, ln, x + 5 * sc, ry, fSize, col, false);
                 ry += lineH;
@@ -233,42 +245,81 @@ public final class HudElements {
         }
     }
 
-    // ==================== 3. SPEED HUD (移动速度) ====================
+    // ==================== 3. SPEED HUD (移动速度 — 文字 / 仪表盘 / 能量条 / 波形图) ====================
     public static final class SpeedHud extends HudElementModule {
+        public enum DisplayMode {
+            TEXT("纯文字数值"),
+            GAUGE_ARC("动态仪表盘(无字或带数)"),
+            ENERGY_BAR("动态能量条"),
+            WAVE_GRAPH("速度波形曲线");
+
+            public final String label;
+            DisplayMode(String label) { this.label = label; }
+        }
+
         public enum SpeedUnit {
-            BPS("格/秒", 20.0, "格/秒", "b/s"),
-            KMH("千米/时", 72.0, "km/h", "km/h"),
-            BPT("格/刻", 1.0, "格/刻", "b/t");
+            KMH("KM/H (千米/时)", 72.0, "KM/H"),
+            MPS("米/秒 (m/s)", 20.0, "m/s"),
+            BPS("格/秒 (b/s)", 20.0, "格/秒"),
+            BPT("格/刻 (b/t)", 1.0, "格/刻");
 
             public final String label;
             final double mult;
-            final String zhUnit;
-            final String enUnit;
+            final String suffix;
 
-            SpeedUnit(String label, double mult, String zhUnit, String enUnit) {
+            SpeedUnit(String label, double mult, String suffix) {
                 this.label = label;
                 this.mult = mult;
-                this.zhUnit = zhUnit;
-                this.enUnit = enUnit;
+                this.suffix = suffix;
             }
         }
 
+        public final EnumSetting<DisplayMode> displayMode = addSetting(new EnumSetting<>(
+                "displayMode", "表现形态", "文字数值 / 动态圆弧仪表盘 / 动态能量条 / 实时波形曲线", DisplayMode.TEXT
+        ).functionGroup());
+
         public final EnumSetting<SpeedUnit> unit = addSetting(new EnumSetting<>(
-                "unit", "速度单位", "格/秒 · 千米/时 · 格/刻", SpeedUnit.BPS
-        ));
+                "unit", "速度单位", "KM/H · 米/秒 · 格/秒 · 格/刻", SpeedUnit.BPS
+        ).functionGroup());
+
+        public final BoolSetting showPrefix = addSetting(new BoolSetting(
+                "showPrefix", "显示「移速：」前缀", "关闭后不显示前缀文字", true
+        ).visible(() -> displayMode.get() == DisplayMode.TEXT).functionGroup());
+
+        public final BoolSetting showUnit = addSetting(new BoolSetting(
+                "showUnit", "显示速度单位", "关闭后只保留数字不显示单位后缀", true
+        ).functionGroup());
+
+        public final BoolSetting showNumberInGraphic = addSetting(new BoolSetting(
+                "showNumInGraphic", "图形内附带数字", "关闭后纯用动画图形表达速度，完全无文字", true
+        ).visible(() -> displayMode.get() != DisplayMode.TEXT).functionGroup());
+
+        public final DoubleSetting decimals = addSetting(new DoubleSetting(
+                "decimals", "小数位数", "0 = 整数，1 = 一位小数，2 = 两位小数", 2.0, 0.0, 2.0, 1.0
+        ).functionGroup());
+
         public final BoolSetting includeVertical = addSetting(new BoolSetting(
                 "includeVertical", "计入垂直升降", "鞘翅俯冲爬升时将Y轴速度一并计入合速度", false
-        ));
+        ).functionGroup());
+
         public final BoolSetting showPeak = addSetting(new BoolSetting(
                 "showPeak", "显示最高峰值", "附带记录近期最高冲刺/飞行速度", false
-        ));
+        ).visible(() -> displayMode.get() == DisplayMode.TEXT).functionGroup());
+
+        public final DoubleSetting maxGaugeBps = addSetting(new DoubleSetting(
+                "maxGaugeBps", "图形满格基准(米/秒)", "仪表盘与能量条达到满格时的基准速度", 35.0, 8.0, 120.0, 2.0
+        ).visible(() -> displayMode.get() != DisplayMode.TEXT).functionGroup());
 
         private double peakBpt = 0.0;
         private long peakTimeMs = 0L;
+        private float smoothSpeedBps = 0.0f;
+        private final float[] historyBps = new float[40];
+        private int histIdx = 0;
+        private long lastSampleMs = 0L;
 
         public SpeedHud() {
-            super("hud_speed_mod", "hud_speed", "移动速度", "Speed HUD",
-                    "实时高精度移速监控，支持多单位切换、垂直速度与峰值记录",
+            super("hud_speed_mod", "hud_speed", "移动速度", "Speed",
+                    "多形态移速监控：支持 KM/H、米/秒、格/秒、纯数字、无文字动态圆弧仪表盘、流光能量条与实时速度曲线",
                     true, false, ColorStyle.RUSHER_PINK, 2);
             addResetPositionButton();
         }
@@ -282,46 +333,138 @@ public final class HudElements {
             double dy = includeVertical.get() ? (mc.player.getY() - mc.player.yo) : 0.0;
             double dz = mc.player.getZ() - mc.player.zo;
             double bpt = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            float bps = (float) (bpt * 20.0);
+            smoothSpeedBps += (bps - smoothSpeedBps) * 0.22f;
 
             long now = System.currentTimeMillis();
             if (bpt >= peakBpt || now - peakTimeMs > 8000L) {
                 peakBpt = bpt;
                 peakTimeMs = now;
             }
-
-            SpeedUnit u = unit.get();
-            double val = bpt * u.mult;
-            String uStr = ConfigManager.english ? u.enUnit : u.zhUnit;
-            String txt = ConfigManager.tr("移速: ", "Speed: ") + String.format(Locale.ROOT, "%.2f %s", val, uStr);
-            if (showPeak.get()) {
-                txt += String.format(Locale.ROOT, " §7(峰值 %.1f)", peakBpt * u.mult);
+            if (now - lastSampleMs >= 50L) {
+                lastSampleMs = now;
+                historyBps[histIdx] = smoothSpeedBps;
+                histIdx = (histIdx + 1) % historyBps.length;
             }
 
-            float sc = scale.get().floatValue();
-            float fSize = 8.8f * sc;
-            int w = Math.round(YeHdFont.widthF(txt, fSize, false) + 10 * sc);
-            int h = Math.round(15 * sc);
-            int x = slot.resolveX(sw, w), y = slot.resolveY(sh, h);
+            SpeedUnit u = unit.get();
+            double val = (smoothSpeedBps / 20.0) * u.mult;
+            int dec = (int) Math.round(decimals.get());
+            String fmt = "%." + dec + "f";
+            String numStr = String.format(Locale.ROOT, fmt, val);
+            String uStr = showUnit.get() ? (" " + (ConfigManager.english && u == SpeedUnit.BPS ? "b/s" : u.suffix)) : "";
 
-            drawHudCard(g, x, y, w, h, editMode);
-            drawHudText(g, txt, x + 5 * sc, y + 2.5f * sc, fSize, resolvePrimaryColor(), false);
+            float sc = scale.get().floatValue();
+            int col = resolvePrimaryColor();
+            DisplayMode dm = displayMode.get();
+
+            if (dm == DisplayMode.TEXT) {
+                String pref = showPrefix.get() ? ConfigManager.tr("移速: ", "Speed: ") : "";
+                String txt = pref + numStr + uStr;
+                if (showPeak.get()) {
+                    txt += String.format(Locale.ROOT, " §7(%.1f)", peakBpt * u.mult);
+                }
+                float fSize = 8.8f * sc;
+                int w = Math.round(YeHdFont.widthF(txt, fSize, false) + 10 * sc);
+                int h = Math.round(15 * sc);
+                int x = slot.resolveX(sw, w), y = slot.resolveY(sh, h);
+                drawHudCard(g, x, y, w, h, editMode);
+                drawHudText(g, txt, x + 5 * sc, y + 2.5f * sc, fSize, col, false);
+            } else if (dm == DisplayMode.GAUGE_ARC) {
+                // Pure graphical animated speedometer dial + needle!
+                int size = Math.round(52 * sc);
+                int x = slot.resolveX(sw, size), y = slot.resolveY(sh, size - Math.round(6 * sc));
+                drawHudCard(g, x, y, size, size - Math.round(6 * sc), editMode);
+
+                float cx = x + size * 0.5f;
+                float cy = y + size * 0.54f;
+                float rad = 19.5f * sc;
+                float ratio = Math.max(0.0f, Math.min(1.0f, smoothSpeedBps / maxGaugeBps.get().floatValue()));
+
+                // 24-tick radial gauge arc (-210 deg to +30 deg)
+                int ticks = 24;
+                int litTicks = Math.round(ratio * ticks);
+                for (int i = 0; i <= ticks; i++) {
+                    double ang = Math.toRadians(-210.0 + (i / (double) ticks) * 240.0);
+                    float tx = cx + (float) Math.cos(ang) * rad;
+                    float ty = cy + (float) Math.sin(ang) * rad;
+                    int dotCol = (i <= litTicks)
+                            ? (isUsingRainbowSync() ? ModuleManager.get(GlobalColorModule.class).getSpatialArgb(i * 0.35f) : col)
+                            : 0x44475569;
+                    float dotSz = (i == litTicks && ratio > 0.02f) ? 3.4f * sc : 2.3f * sc;
+                    AppleUiRenderer.drawCircle(g, tx - dotSz * 0.5f, ty - dotSz * 0.5f, dotSz, dotCol);
+                }
+
+                // Animated needle dot chain from center hub
+                double needleAng = Math.toRadians(-210.0 + ratio * 240.0);
+                for (int s = 1; s <= 6; s++) {
+                    float nr = (s / 6.0f) * (rad - 3.5f * sc);
+                    float nx = cx + (float) Math.cos(needleAng) * nr;
+                    float ny = cy + (float) Math.sin(needleAng) * nr;
+                    AppleUiRenderer.drawCircle(g, nx - 1.1f * sc, ny - 1.1f * sc, 2.2f * sc, 0xFFF8FAFC);
+                }
+                AppleUiRenderer.drawCircle(g, cx - 2.4f * sc, cy - 2.4f * sc, 4.8f * sc, col);
+
+                if (showNumberInGraphic.get()) {
+                    YeHdFont.drawCentered(g, numStr + (showUnit.get() ? uStr : ""), cx, y + size - 15.5f * sc, 7.2f * sc, 0xFFF8FAFC, textShadow.get(), true);
+                }
+            } else if (dm == DisplayMode.ENERGY_BAR) {
+                int w = Math.round(96 * sc);
+                int h = Math.round((showNumberInGraphic.get() ? 20 : 10) * sc);
+                int x = slot.resolveX(sw, w), y = slot.resolveY(sh, h);
+                drawHudCard(g, x, y, w, h, editMode);
+
+                float ratio = Math.max(0.02f, Math.min(1.0f, smoothSpeedBps / maxGaugeBps.get().floatValue()));
+                float bx = x + 4 * sc, bw = w - 8 * sc;
+                float bh = 4.6f * sc;
+                float by = showNumberInGraphic.get() ? (y + h - bh - 3.5f * sc) : (y + (h - bh) * 0.5f);
+
+                AppleUiRenderer.drawRoundedRect(g, bx, by, bw, bh, bh * 0.5f, 0x661E293B);
+                AppleUiRenderer.drawRoundedRect(g, bx, by, bw * ratio, bh, bh * 0.5f, col);
+                AppleUiRenderer.drawCircle(g, bx + bw * ratio - 2.5f * sc, by - 0.8f * sc, bh + 1.6f * sc, 0xFFFFFFFF);
+
+                if (showNumberInGraphic.get()) {
+                    drawHudText(g, numStr + uStr, bx, y + 2.0f * sc, 7.8f * sc, col, true);
+                }
+            } else {
+                // WAVE_GRAPH: Live scrolling speed waveform
+                int w = Math.round(92 * sc);
+                int h = Math.round(28 * sc);
+                int x = slot.resolveX(sw, w), y = slot.resolveY(sh, h);
+                drawHudCard(g, x, y, w, h, editMode);
+
+                float maxB = maxGaugeBps.get().floatValue();
+                float gx0 = x + 4 * sc, gw = w - 8 * sc;
+                float gyBot = y + h - 4 * sc, gh = h - 8 * sc;
+                for (int i = 0; i < historyBps.length; i++) {
+                    float v = historyBps[(histIdx + i) % historyBps.length];
+                    float pct = Math.max(0.04f, Math.min(1.0f, v / maxB));
+                    float barX = gx0 + (i / (float) historyBps.length) * gw;
+                    float barH = gh * pct;
+                    int barCol = isUsingRainbowSync() ? ModuleManager.get(GlobalColorModule.class).getSpatialArgb(i * 0.25f) : col;
+                    AppleUiRenderer.drawRoundedRect(g, barX, gyBot - barH, Math.max(1.2f, (gw / historyBps.length) - 0.6f), barH, 0.8f, AppleUiRenderer.withAlpha(barCol, 0.82f));
+                }
+                if (showNumberInGraphic.get()) {
+                    drawHudText(g, numStr + uStr, x + 5 * sc, y + 2.5f * sc, 7.6f * sc, 0xFFF8FAFC, true);
+                }
+            }
         }
     }
 
-    // ==================== 4. TIME & ONLINE STATS HUD (时间与在线) ====================
+    // ==================== 4. TIME & ONLINE STATS HUD (时间统计) ====================
     public static final class TimeHud extends HudElementModule {
         private static final DateTimeFormatter FMT_24 = DateTimeFormatter.ofPattern("HH:mm:ss");
         private static final DateTimeFormatter FMT_12 = DateTimeFormatter.ofPattern("hh:mm:ss a", Locale.ENGLISH);
 
-        public final BoolSetting showClock = addSetting(new BoolSetting("showClock", "显示现实时间", "显示当前电脑系统时钟", true));
-        public final BoolSetting clock12h = addSetting(new BoolSetting("clock12h", "12小时制", "使用 AM/PM 12小时制时间格式", false).visible(showClock::get));
-        public final BoolSetting showOnline = addSetting(new BoolSetting("showOnline", "显示在线时长", "统计本次启动游戏累计游玩时长", true));
-        public final BoolSetting showWorldDay = addSetting(new BoolSetting("showWorldDay", "显示世界天数", "显示当前存档/服务器游戏内天数", false));
+        public final BoolSetting showClock = addSetting(new BoolSetting("showClock", "显示现实时间", "显示电脑系统时钟", true).functionGroup());
+        public final BoolSetting clock12h = addSetting(new BoolSetting("clock12h", "12小时制", "使用 AM/PM 格式", false).visible(showClock::get).functionGroup());
+        public final BoolSetting showOnline = addSetting(new BoolSetting("showOnline", "显示在线时长", "统计本次游戏累计时长", true).functionGroup());
+        public final BoolSetting showWorldDay = addSetting(new BoolSetting("showWorldDay", "显示世界天数", "显示当前存档游戏内天数", false).functionGroup());
 
         private final long sessionStartMs = System.currentTimeMillis();
 
         public TimeHud() {
-            super("hud_time_mod", "hud_time", "时间统计", "Time HUD",
+            super("hud_time_mod", "hud_time", "时间统计", "Time",
                     "显示系统时钟、本次在线计时与世界天数",
                     true, false, ColorStyle.RUSHER_PINK, 3);
             addResetPositionButton();
@@ -346,7 +489,7 @@ public final class HudElements {
                 long day = mc.level.getDayTime() / 24000L;
                 lines.add(ConfigManager.tr("天数: 第 " + day + " 天", "Day: " + day));
             }
-            if (lines.isEmpty()) lines.add(ConfigManager.tr("时间统计", "Time HUD"));
+            if (lines.isEmpty()) lines.add(ConfigManager.tr("时间统计", "Time"));
 
             float sc = scale.get().floatValue();
             float fSize = 8.8f * sc;
@@ -354,12 +497,12 @@ public final class HudElements {
             for (String ln : lines) maxW = Math.max(maxW, YeHdFont.widthF(ln, fSize, false));
             float lineH = 11.5f * sc;
             int w = Math.round(maxW + 10 * sc);
-            int h = Math.round(lines.size() * lineH + 5 * sc);
+            int h = Math.round(lines.size() * lineH + 4 * sc);
             int x = slot.resolveX(sw, w), y = slot.resolveY(sh, h);
 
             drawHudCard(g, x, y, w, h, editMode);
             int col = resolvePrimaryColor();
-            float ry = y + 2.5f * sc;
+            float ry = y + 2.0f * sc;
             for (String ln : lines) {
                 drawHudText(g, ln, x + 5 * sc, ry, fSize, col, false);
                 ry += lineH;
@@ -369,14 +512,18 @@ public final class HudElements {
 
     // ==================== 5. FPS & PING HUD (帧率与延迟) ====================
     public static final class FpsPingHud extends HudElementModule {
-        public final BoolSetting showFps = addSetting(new BoolSetting("showFps", "显示帧率", "实时显示当前 FPS", true));
-        public final BoolSetting showPing = addSetting(new BoolSetting("showPing", "显示网络延迟", "实时读取当前服务器 Ping 毫秒数", true));
-        public final BoolSetting showDirection = addSetting(new BoolSetting("showDirection", "显示方位角", "显示玩家当前朝向（东南西北与正负轴）", true));
-        public final BoolSetting showMem = addSetting(new BoolSetting("showMem", "显示内存占用", "显示 JVM 已用内存百分比", false));
+        public final BoolSetting showFps = addSetting(new BoolSetting("showFps", "显示帧率", "实时显示当前 FPS", true).functionGroup());
+        public final BoolSetting showPing = addSetting(new BoolSetting("showPing", "显示网络延迟", "读取当前服务器 Ping 毫秒数", true).functionGroup());
+        public final BoolSetting showCps = addSetting(new BoolSetting("showCps", "显示按键CPS", "实时统计左键/右键每秒点击次数", false).functionGroup());
+        public final BoolSetting showDirection = addSetting(new BoolSetting("showDirection", "显示方位角", "显示玩家当前朝向", true).functionGroup());
+        public final BoolSetting showMem = addSetting(new BoolSetting("showMem", "显示内存占用", "显示 JVM 已用内存百分比", false).functionGroup());
+
+        private final List<Long> leftClicks = new ArrayList<>();
+        private boolean wasLeftDown = false;
 
         public FpsPingHud() {
             super("hud_info_mod", "hud_info", "帧率与延迟", "FPS & Ping",
-                    "实时显示高清帧率、网络延迟、朝向轴线与内存占用",
+                    "显示实时帧率、网络延迟、点击CPS、朝向轴线与内存占用",
                     true, false, ColorStyle.RUSHER_PINK, 4);
             addResetPositionButton();
         }
@@ -386,25 +533,30 @@ public final class HudElements {
             ConfigManager.HudSlot slot = getSlot();
             if (slot == null) return;
 
-            List<String> parts = new ArrayList<>();
-            if (showFps.get()) {
-                parts.add((ConfigManager.english ? "FPS " : "帧率 ") + mc.getFps());
+            long now = System.currentTimeMillis();
+            if (mc.getWindow() != null) {
+                boolean lDown = org.lwjgl.glfw.GLFW.glfwGetMouseButton(mc.getWindow().handle(), 0) == org.lwjgl.glfw.GLFW.GLFW_PRESS;
+                if (lDown && !wasLeftDown) leftClicks.add(now);
+                wasLeftDown = lDown;
+                leftClicks.removeIf(t -> now - t > 1000L);
             }
+
+            List<String> parts = new ArrayList<>();
+            if (showFps.get()) parts.add("FPS " + mc.getFps());
             if (showPing.get()) {
                 int ping = 0;
                 if (mc.getConnection() != null) {
                     PlayerInfo info = mc.getConnection().getPlayerInfo(mc.player.getUUID());
                     if (info != null) ping = info.getLatency();
                 }
-                parts.add((ConfigManager.english ? "Ping " : "延迟 ") + ping + "ms");
+                parts.add(ping + "ms");
             }
-            if (showDirection.get()) {
-                parts.add(cardinalDir(mc.player.getYRot()));
-            }
+            if (showCps.get()) parts.add(leftClicks.size() + " CPS");
+            if (showDirection.get()) parts.add(cardinalDir(mc.player.getYRot()));
             if (showMem.get()) {
                 Runtime rt = Runtime.getRuntime();
                 long pct = Math.round(((rt.totalMemory() - rt.freeMemory()) * 100.0) / Math.max(1L, rt.maxMemory()));
-                parts.add((ConfigManager.english ? "Mem " : "内存 ") + pct + "%");
+                parts.add(ConfigManager.tr("内存 ", "Mem ") + pct + "%");
             }
             String txt = parts.isEmpty() ? "FPS" : String.join(" · ", parts);
 
@@ -419,7 +571,7 @@ public final class HudElements {
         }
     }
 
-    // ==================== 6. ARMOR DURABILITY HUD (装备耐久) ====================
+    // ==================== 6. ARMOR DURABILITY HUD (装备耐久 — 0px 贴底对齐!) ====================
     public static final class ArmorHud extends HudElementModule {
         public enum DurabilityMode {
             PERCENT("百分比%"),
@@ -433,16 +585,16 @@ public final class HudElements {
                 EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET
         };
 
-        public final BoolSetting horizontal = addSetting(new BoolSetting("horizontal", "横向排列", "开启为横向一排，关闭为纵向列表", true));
-        public final BoolSetting showHands = addSetting(new BoolSetting("showHands", "包含主副手", "一并展示主手武器与副手物品耐久", false));
+        public final BoolSetting horizontal = addSetting(new BoolSetting("horizontal", "横向排列", "开启为横向一排，关闭为纵向列表", true).functionGroup());
+        public final BoolSetting showHands = addSetting(new BoolSetting("showHands", "包含主副手", "一并展示主手武器与副手物品耐久", false).functionGroup());
         public final EnumSetting<DurabilityMode> durMode = addSetting(new EnumSetting<>(
                 "durMode", "数字格式", "百分比% / 剩余点数 / 仅原版耐久条", DurabilityMode.PERCENT
-        ));
-        public final BoolSetting lowBlink = addSetting(new BoolSetting("lowBlink", "低耐久闪烁", "护甲或鞘翅耐久低于 20% 时红色闪烁警示", true));
+        ).functionGroup());
+        public final BoolSetting lowBlink = addSetting(new BoolSetting("lowBlink", "低耐久闪烁", "耐久低于 20% 时闪烁提醒", true).functionGroup());
 
         public ArmorHud() {
-            super("hud_armor_mod", "hud_armor", "装备耐久", "Armor HUD",
-                    "护甲与主副手实时耐久监控，支持横纵排布、点数/百分比与低耐久预警",
+            super("hud_armor_mod", "hud_armor", "装备耐久", "Armor",
+                    "护甲与主副手实时耐久监控，支持完全贴底对齐快捷栏",
                     true, false, ColorStyle.EMERALD, 5);
             addResetPositionButton();
         }
@@ -470,8 +622,10 @@ public final class HudElements {
             float sc = scale.get().floatValue();
             boolean horiz = horizontal.get();
             int count = stacks.size();
-            int w = horiz ? Math.round((count * 20 + 6) * sc) : Math.round(48 * sc);
-            int h = horiz ? Math.round(26 * sc) : Math.round((count * 19 + 6) * sc);
+            boolean showTxt = durMode.get() != DurabilityMode.ICON_ONLY;
+            // Tight exact height (23px with text, 17px icon-only) so dragging to bottom aligns 100% flush with hotbar!
+            int w = horiz ? Math.round((count * 19 + 4) * sc) : Math.round(46 * sc);
+            int h = horiz ? Math.round((showTxt ? 23 : 17) * sc) : Math.round((count * 18 + 4) * sc);
             int x = slot.resolveX(sw, w), y = slot.resolveY(sh, h);
 
             drawHudCard(g, x, y, w, h, editMode);
@@ -482,15 +636,15 @@ public final class HudElements {
             pose.scale(sc, sc);
             for (int i = 0; i < count; i++) {
                 ItemStack st = stacks.get(i);
-                int ix = horiz ? (3 + i * 20) : 3;
-                int iy = horiz ? 8 : (3 + i * 19);
+                int ix = horiz ? (2 + i * 19) : 2;
+                int iy = horiz ? (showTxt ? 6 : 1) : (2 + i * 18);
                 g.renderItem(st, ix, iy);
                 g.renderItemDecorations(mc.font, st, ix, iy);
             }
             pose.popMatrix();
 
-            if (durMode.get() != DurabilityMode.ICON_ONLY) {
-                float fSize = 7.0f * sc;
+            if (showTxt) {
+                float fSize = 6.9f * sc;
                 for (int i = 0; i < count; i++) {
                     ItemStack st = stacks.get(i);
                     if (!st.isDamageableItem()) continue;
@@ -503,10 +657,10 @@ public final class HudElements {
                     }
                     String txt = (durMode.get() == DurabilityMode.PERCENT) ? (pct + "%") : String.valueOf(rem);
                     if (horiz) {
-                        float cx = x + (3 + i * 20 + 8) * sc;
-                        YeHdFont.drawCentered(g, txt, cx, y + 1 * sc, fSize, dCol, textShadow.get(), true);
+                        float cx = x + (2 + i * 19 + 8) * sc;
+                        YeHdFont.drawCentered(g, txt, cx, y + 0.5f * sc, fSize, dCol, textShadow.get(), true);
                     } else {
-                        drawHudText(g, txt, x + 22 * sc, y + (7 + i * 19) * sc, fSize * 1.1f, dCol, true);
+                        drawHudText(g, txt, x + 21 * sc, y + (6 + i * 18) * sc, fSize * 1.1f, dCol, true);
                     }
                 }
             }
@@ -515,19 +669,19 @@ public final class HudElements {
 
     // ==================== 7. PVP ITEMS COUNTER HUD (物资计数) ====================
     public static final class PvpItemsHud extends HudElementModule {
-        public final BoolSetting countTotem = addSetting(new BoolSetting("countTotem", "统计不死图腾", "统计全身不死图腾", true));
-        public final BoolSetting countGapple = addSetting(new BoolSetting("countGapple", "统计金苹果", "统计附魔金苹果与金苹果", true));
-        public final BoolSetting countRocket = addSetting(new BoolSetting("countRocket", "统计烟花火箭", "统计飞行烟花火箭", true));
-        public final BoolSetting countXp = addSetting(new BoolSetting("countXp", "统计附魔之瓶", "统计修甲经验瓶", true));
-        public final BoolSetting countCrystal = addSetting(new BoolSetting("countCrystal", "统计末影水晶", "统计末影水晶数量", true));
-        public final BoolSetting countPearl = addSetting(new BoolSetting("countPearl", "统计末影珍珠", "统计传送珍珠数量", false));
-        public final BoolSetting countObsidian = addSetting(new BoolSetting("countObsidian", "统计黑曜石", "统计背包黑曜石", false));
-        public final BoolSetting twoRows = addSetting(new BoolSetting("twoRows", "双排网格布局", "物品较多时自动换为两排紧凑网格", false));
-        public final BoolSetting showZero = addSetting(new BoolSetting("showZero", "零库存常显", "数量为 0 时仍保留图标并标红 0", false));
+        public final BoolSetting countTotem = addSetting(new BoolSetting("countTotem", "统计不死图腾", "统计全身不死图腾", true).functionGroup());
+        public final BoolSetting countGapple = addSetting(new BoolSetting("countGapple", "统计金苹果", "统计附魔金苹果与金苹果", true).functionGroup());
+        public final BoolSetting countRocket = addSetting(new BoolSetting("countRocket", "统计烟花火箭", "统计飞行烟花火箭", true).functionGroup());
+        public final BoolSetting countXp = addSetting(new BoolSetting("countXp", "统计附魔之瓶", "统计修甲经验瓶", true).functionGroup());
+        public final BoolSetting countCrystal = addSetting(new BoolSetting("countCrystal", "统计末影水晶", "统计末影水晶数量", true).functionGroup());
+        public final BoolSetting countPearl = addSetting(new BoolSetting("countPearl", "统计末影珍珠", "统计传送珍珠数量", false).functionGroup());
+        public final BoolSetting countObsidian = addSetting(new BoolSetting("countObsidian", "统计黑曜石", "统计背包黑曜石", false).functionGroup());
+        public final BoolSetting twoRows = addSetting(new BoolSetting("twoRows", "双排网格布局", "物品较多时换为两排紧凑网格", false).functionGroup());
+        public final BoolSetting showZero = addSetting(new BoolSetting("showZero", "零库存常显", "数量为 0 时仍保留图标并标红", false).functionGroup());
 
         public PvpItemsHud() {
-            super("hud_items_mod", "hud_items", "物资计数", "PvP Items HUD",
-                    "可自选物资种类的战斗库存计数器（图腾/金果/烟花/经验瓶/水晶/珍珠/黑曜石）",
+            super("hud_items_mod", "hud_items", "物资计数", "PvP Items",
+                    "战斗关键物资库存计数器（图腾/金果/烟花/经验瓶/水晶/珍珠/黑曜石）",
                     true, true, ColorStyle.PURE_WHITE, 6);
             addResetPositionButton();
         }
@@ -614,12 +768,12 @@ public final class HudElements {
 
     // ==================== 8. INVENTORY PREVIEW HUD (背包预览) ====================
     public static final class InventoryHud extends HudElementModule {
-        public final BoolSetting includeHotbar = addSetting(new BoolSetting("includeHotbar", "包含快捷栏", "底部额外显示第4行快捷栏物品", false));
-        public final BoolSetting showSlotCells = addSetting(new BoolSetting("showSlotCells", "显示格子底纹", "为每个背包格绘制微透圆角槽位", true));
+        public final BoolSetting includeHotbar = addSetting(new BoolSetting("includeHotbar", "包含快捷栏", "底部额外显示第4行快捷栏", false).functionGroup());
+        public final BoolSetting showSlotCells = addSetting(new BoolSetting("showSlotCells", "显示格子底纹", "为每个背包格绘制槽位框", true).functionGroup());
 
         public InventoryHud() {
-            super("hud_inv_mod", "hud_inv", "背包预览", "Inventory HUD",
-                    "屏幕实时透视 3×9（或 4×9）背包库存格子",
+            super("hud_inv_mod", "hud_inv", "背包预览", "Inventory",
+                    "屏幕实时透视 3×9 或 4×9 背包格子",
                     false, true, ColorStyle.ICE_CYAN, 7);
             addResetPositionButton();
         }
@@ -645,7 +799,7 @@ public final class HudElements {
             pose.scale(sc, sc);
             Inventory inv = mc.player.getInventory();
             for (int row = 0; row < rows; row++) {
-                int invRow = (row < 3) ? (row + 1) : 0; // row 3 -> hotbar (0..8)
+                int invRow = (row < 3) ? (row + 1) : 0;
                 int sy = 3 + row * 18 + (row == 3 ? 3 : 0);
                 for (int col = 0; col < 9; col++) {
                     int idx = invRow * 9 + col;
@@ -664,15 +818,16 @@ public final class HudElements {
         }
     }
 
-    // ==================== 9. NEARBY DROPS HUD (附近掉落物) ====================
+    // ==================== 9. ITEM LIST HUD (物品列表 — 原「附近掉落物」，强制支持官方简体中文译名!) ====================
     public static final class NearbyDropsHud extends HudElementModule {
-        public final DoubleSetting scanDist = addSetting(new DoubleSetting("scanDist", "扫描半径", "检测周围多少米内的地面掉落物", 64.0, 16.0, 128.0, 8.0));
-        public final DoubleSetting maxRows = addSetting(new DoubleSetting("maxRows", "最大显示行数", "最多列出前多少种掉落物", 6.0, 2.0, 12.0, 1.0));
-        public final BoolSetting showIcon = addSetting(new BoolSetting("showIcon", "显示物品小图标", "每行前方渲染对应3D物品小图标", true));
+        public final DoubleSetting scanDist = addSetting(new DoubleSetting("scanDist", "扫描半径", "检测周围多少米内的地面物品", 64.0, 16.0, 128.0, 8.0).functionGroup());
+        public final DoubleSetting maxRows = addSetting(new DoubleSetting("maxRows", "最大显示行数", "最多列出前多少种地面物品", 6.0, 2.0, 16.0, 1.0).functionGroup());
+        public final BoolSetting showIcon = addSetting(new BoolSetting("showIcon", "显示物品图标", "每行前方渲染对应物品图标", true).functionGroup());
+        public final BoolSetting showDistance = addSetting(new BoolSetting("showDistance", "显示距离米数", "末尾附带最近距离", true).functionGroup());
 
         public NearbyDropsHud() {
-            super("hud_drops_mod", "hud_drops", "附近掉落物", "Drops HUD",
-                    "聚合统计周围地面掉落物图标、总数量与最近距离",
+            super("hud_drops_mod", "hud_drops", "物品列表", "Item List",
+                    "聚合统计周围地面物品中文名称、图标、总数量与距离",
                     true, false, ColorStyle.ROYAL_GOLD, 8);
             addResetPositionButton();
         }
@@ -689,7 +844,8 @@ public final class HudElements {
                 if (e instanceof ItemEntity ie && !ie.getItem().isEmpty()) {
                     double d = mc.player.distanceTo(ie);
                     if (d > maxD) continue;
-                    String nm = ie.getItem().getHoverName().getString();
+                    // Uses YeZhCnDict so even on English client language it displays official Chinese item names!
+                    String nm = YeZhCnDict.itemName(ie.getItem());
                     int cnt = ie.getItem().getCount();
                     DropGroup prev = grouped.get(nm);
                     if (prev == null) {
@@ -712,26 +868,29 @@ public final class HudElements {
             float sc = scale.get().floatValue();
             float fSize = 8.4f * sc;
             boolean icons = showIcon.get();
+            boolean distOn = showDistance.get();
             float iconOff = icons ? 14.0f * sc : 0.0f;
 
             List<String> texts = new ArrayList<>(list.size());
             float maxW = 54 * sc;
             for (DropGroup dg : list) {
-                String s = String.format(Locale.ROOT, "%s ×%d §7(%.1fm)", dg.name, dg.count, dg.minDist);
+                String s = distOn
+                        ? String.format(Locale.ROOT, "%s ×%d §7(%.1fm)", dg.name, dg.count, dg.minDist)
+                        : String.format(Locale.ROOT, "%s ×%d", dg.name, dg.count);
                 texts.add(s);
                 maxW = Math.max(maxW, iconOff + YeHdFont.widthF(s, fSize, false));
             }
 
             float rowH = 12.5f * sc;
             int w = Math.round(maxW + 10 * sc);
-            int h = Math.round(list.size() * rowH + 5 * sc);
+            int h = Math.round(list.size() * rowH + 4 * sc);
             int x = slot.resolveX(sw, w), y = slot.resolveY(sh, h);
 
             drawHudCard(g, x, y, w, h, editMode);
             int col = resolvePrimaryColor();
 
             for (int i = 0; i < list.size(); i++) {
-                float ry = y + 2.5f * sc + i * rowH;
+                float ry = y + 2.0f * sc + i * rowH;
                 if (icons) {
                     var pose = g.pose();
                     pose.pushMatrix();
@@ -745,15 +904,15 @@ public final class HudElements {
         }
     }
 
-    // ==================== 10. ACTIVE MODULE LIST HUD (开启模块表) ====================
+    // ==================== 10. ACTIVE MODULE LIST HUD (开启列表) ====================
     public static final class ModuleListHud extends HudElementModule {
-        public final BoolSetting rainbowWave = addSetting(new BoolSetting("rainbowWave", "流光彩虹渐变", "模块名称随高度呈现柔和流光波浪", true));
-        public final BoolSetting sideStripe = addSetting(new BoolSetting("sideStripe", "边缘亮色竖条", "在对齐侧绘制流光强调线", true));
-        public final BoolSetting hideHudCategory = addSetting(new BoolSetting("hideHudCategory", "仅列出功能模块", "不在列表中重复显示 HUD 子模块", true));
+        public final BoolSetting rainbowWave = addSetting(new BoolSetting("rainbowWave", "流光彩虹渐变", "模块名称随高度呈现流光波浪", true).functionGroup());
+        public final BoolSetting sideStripe = addSetting(new BoolSetting("sideStripe", "边缘亮色竖条", "在对齐侧绘制流光边线", true).functionGroup());
+        public final BoolSetting hideHudCategory = addSetting(new BoolSetting("hideHudCategory", "仅列功能模块", "不重复列出 HUD 子模块", true).functionGroup());
 
         public ModuleListHud() {
-            super("hud_modules_mod", "hud_modules", "开启列表", "ArrayList HUD",
-                    "Rusher风格已开启功能列表，支持自适应左右对齐与流光波浪",
+            super("hud_modules_mod", "hud_modules", "开启列表", "ArrayList",
+                    "已开启功能模块列表，支持左右自适应对齐与流光波浪",
                     false, false, ColorStyle.ICE_CYAN, 9);
             addResetPositionButton();
         }
@@ -800,7 +959,7 @@ public final class HudElements {
                 }
                 float tw = YeHdFont.widthF(nm, fSize, false);
                 float tx = rightAlign ? (x + w - 6 * sc - tw) : (x + 6 * sc);
-                drawHudText(g, nm, tx, ry, fSize, rowCol, false);
+                YeHdFont.draw(g, nm, tx, ry, fSize, rowCol, textShadow.get(), false);
                 if (sideStripe.get()) {
                     int sx = rightAlign ? (x + w - 2) : x;
                     g.fill(sx, Math.round(ry), sx + 2, Math.round(ry + rowH - 1), rowCol);
@@ -810,10 +969,118 @@ public final class HudElements {
         }
     }
 
+    // ==================== 11. 3D PAPER-DOLL PLAYERVIEW HUD (玩家预览 — RusherHack 超越版!) ====================
+    public static final class PlayerViewHud extends HudElementModule {
+        public enum AngleMode {
+            CLASSIC_ANGLE("立体微侧角"),
+            FOLLOW_PITCH_YAW("跟随实时转头"),
+            FRONT_STRAIGHT("正脸平视"),
+            AUTO_TURNTABLE("360°自转展示");
+
+            public final String label;
+            AngleMode(String label) { this.label = label; }
+        }
+
+        public enum TargetChoice {
+            SELF_ONLY("始终自己"),
+            COMBAT_TARGET("对视/战斗时切敌方");
+
+            public final String label;
+            TargetChoice(String label) { this.label = label; }
+        }
+
+        public final EnumSetting<AngleMode> angleMode = addSetting(new EnumSetting<>(
+                "angleMode", "朝向模式", "立体微侧角 / 跟随转头俯仰 / 正脸平视 / 360°自转", AngleMode.FOLLOW_PITCH_YAW
+        ).functionGroup());
+
+        public final EnumSetting<TargetChoice> targetChoice = addSetting(new EnumSetting<>(
+                "targetChoice", "预览对象", "始终渲染自己，或准星指向生物时实时预览对方3D装备模型", TargetChoice.SELF_ONLY
+        ).functionGroup());
+
+        public final DoubleSetting customYaw = addSetting(new DoubleSetting(
+                "customYaw", "侧身角度", "调节立体侧身旋转偏角", 26.0, -90.0, 90.0, 2.0
+        ).visible(() -> angleMode.get() == AngleMode.CLASSIC_ANGLE).functionGroup());
+
+        public final BoolSetting showStatusFooter = addSetting(new BoolSetting(
+                "showStatusFooter", "底部名称与生命条", "在3D小人脚下附带紧凑名字与生命条", false
+        ).functionGroup());
+
+        public PlayerViewHud() {
+            super("hud_player_view_mod", "hud_player_view", "玩家预览", "Player View",
+                    "屏幕实时渲染3D玩家纸娃娃（同步盔甲、手持、潜行、滑翔、翅膀及敌方目标预览）",
+                    false, false, ColorStyle.ICE_CYAN, 11);
+            addResetPositionButton();
+        }
+
+        @Override
+        public void renderElement(GuiGraphics g, int sw, int sh, boolean editMode) {
+            ConfigManager.HudSlot slot = getSlot();
+            if (slot == null) return;
+
+            LivingEntity subject = mc.player;
+            if (targetChoice.get() == TargetChoice.COMBAT_TARGET
+                    && mc.hitResult instanceof EntityHitResult ehr
+                    && ehr.getEntity() instanceof LivingEntity le && le.isAlive()) {
+                subject = le;
+            }
+
+            float sc = scale.get().floatValue();
+            boolean footer = showStatusFooter.get();
+            int w = Math.round(52 * sc);
+            int h = Math.round((footer ? 82 : 70) * sc);
+            int x = slot.resolveX(sw, w);
+            int y = slot.resolveY(sh, h);
+
+            drawHudCard(g, x, y, w, h, editMode);
+
+            int dollBottom = y + h - Math.round((footer ? 14 : 4) * sc);
+            int dollScale = Math.max(12, Math.round(28 * sc));
+            float cx = x + w * 0.5f;
+            float cy = y + (dollBottom - y) * 0.45f;
+
+            float lookX, lookY;
+            switch (angleMode.get()) {
+                case FRONT_STRAIGHT -> {
+                    lookX = cx;
+                    lookY = cy;
+                }
+                case CLASSIC_ANGLE -> {
+                    lookX = cx + customYaw.get().floatValue() * 1.6f * sc;
+                    lookY = cy - 6.0f * sc;
+                }
+                case AUTO_TURNTABLE -> {
+                    double ang = ((System.currentTimeMillis() % 6000L) / 6000.0) * Math.PI * 2.0;
+                    lookX = cx + (float) Math.sin(ang) * 90.0f * sc;
+                    lookY = cy - 4.0f * sc;
+                }
+                default -> {
+                    float relYaw = net.minecraft.util.Mth.wrapDegrees(subject.getYRot());
+                    lookX = cx - relYaw * 0.85f * sc;
+                    lookY = cy - subject.getXRot() * 0.95f * sc;
+                }
+            }
+
+            try {
+                InventoryScreen.renderEntityInInventoryFollowsMouse(
+                        g, x + 2, y + 2, x + w - 2, dollBottom,
+                        dollScale, 0.0625f, lookX, lookY, subject
+                );
+            } catch (Throwable ignored) {}
+
+            if (footer) {
+                float pct = Math.max(0f, Math.min(1f, subject.getHealth() / Math.max(1f, subject.getMaxHealth())));
+                String nm = YeHdFont.clipToWidth(subject.getName().getString(), 7.4f * sc, true, w - 8 * sc);
+                YeHdFont.drawCentered(g, nm, cx, dollBottom + 1 * sc, 7.4f * sc, resolvePrimaryColor(), textShadow.get(), true);
+                AppleUiRenderer.drawRoundedRect(g, x + 5 * sc, y + h - 4.5f * sc, w - 10 * sc, 2.8f * sc, 1.4f * sc, 0xFF1E293B);
+                AppleUiRenderer.drawRoundedRect(g, x + 5 * sc, y + h - 4.5f * sc, (w - 10 * sc) * pct, 2.8f * sc, 1.4f * sc, 0xFF4ADE80);
+            }
+        }
+    }
+
     // ==================== SHARED HELPERS ====================
 
     private static String effectLabel(MobEffectInstance eff) {
-        String base = eff.getEffect().value().getDisplayName().getString();
+        String base = YeZhCnDict.effectName(eff.getEffect().value());
         int amp = eff.getAmplifier();
         if (amp <= 0) return base;
         String roman = switch (amp) {

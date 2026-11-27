@@ -3,6 +3,7 @@ package com.ye.mod.mixin;
 import com.ye.mod.core.ModuleManager;
 import com.ye.mod.modules.hud.HudElementModule;
 import com.ye.mod.modules.hud.HudElements;
+import com.ye.mod.modules.player.PlayerUiModule;
 import com.ye.mod.modules.render.AntiLagModule;
 import com.ye.mod.modules.render.EntityEspModule;
 import com.ye.mod.modules.render.LavaEspModule;
@@ -27,12 +28,14 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Gui.class)
 public abstract class GuiMixin {
+    @Unique private boolean ye$pushedHotbarSlide = false;
 
     @Inject(method = "render", at = @At("HEAD"), cancellable = true)
     private void ye$hideAllHudWhenIdle(GuiGraphics guiGraphics, DeltaTracker deltaTracker, CallbackInfo ci) {
@@ -40,6 +43,41 @@ public abstract class GuiMixin {
         if (idle != null && idle.shouldHideHud() && Minecraft.getInstance().screen == null) {
             CinematicBarsModule bars = ModuleManager.get(CinematicBarsModule.class);
             if (bars != null) bars.render(guiGraphics);
+            ci.cancel();
+        }
+    }
+
+    @Inject(method = "renderItemHotbar", at = @At("HEAD"), cancellable = true)
+    private void ye$autoHideHotbarHead(GuiGraphics g, DeltaTracker deltaTracker, CallbackInfo ci) {
+        ye$pushedHotbarSlide = false;
+        PlayerUiModule pui = ModuleManager.get(PlayerUiModule.class);
+        if (pui != null && pui.isEnabled() && pui.autoHideHotbar.get()) {
+            float offY = pui.computeHotbarSlideOffset();
+            if (offY >= 29.0f) {
+                ci.cancel();
+                return;
+            }
+            if (offY > 0.1f) {
+                g.pose().pushMatrix();
+                g.pose().translate(0.0f, offY);
+                ye$pushedHotbarSlide = true;
+            }
+        }
+    }
+
+    @Inject(method = "renderItemHotbar", at = @At("RETURN"))
+    private void ye$autoHideHotbarTail(GuiGraphics g, DeltaTracker deltaTracker, CallbackInfo ci) {
+        if (ye$pushedHotbarSlide) {
+            g.pose().popMatrix();
+            ye$pushedHotbarSlide = false;
+        }
+    }
+
+    @Inject(method = "renderPlayerHealth", at = @At("HEAD"), cancellable = true)
+    private void ye$replacePlayerHealthWithModernBars(GuiGraphics g, CallbackInfo ci) {
+        PlayerUiModule pui = ModuleManager.get(PlayerUiModule.class);
+        if (pui != null && pui.shouldReplaceStatusBars()) {
+            pui.renderCustomStatusBars(g);
             ci.cancel();
         }
     }
@@ -118,6 +156,8 @@ public abstract class GuiMixin {
 
     @Inject(method = "render", at = @At("TAIL"))
     private void ye$renderHud(GuiGraphics guiGraphics, DeltaTracker deltaTracker, CallbackInfo ci) {
+        float partialTick = deltaTracker.getGameTimeDeltaPartialTick(false);
+
         AmbienceModule amb = ModuleManager.get(AmbienceModule.class);
         if (amb != null) amb.renderOverlay(guiGraphics);
 
@@ -128,13 +168,13 @@ public abstract class GuiMixin {
         if (speedLines != null) speedLines.render(guiGraphics);
 
         EntityEspModule entityEsp = ModuleManager.get(EntityEspModule.class);
-        if (entityEsp != null) entityEsp.render2d(guiGraphics, deltaTracker.getGameTimeDeltaPartialTick(false));
+        if (entityEsp != null) entityEsp.render2d(guiGraphics, partialTick);
 
         DamagePopupsModule dmg = ModuleManager.get(DamagePopupsModule.class);
         if (dmg != null) dmg.render(guiGraphics);
 
         HealthPlatesModule hpBar = ModuleManager.get(HealthPlatesModule.class);
-        if (hpBar != null) hpBar.render(guiGraphics);
+        if (hpBar != null) hpBar.render(guiGraphics, partialTick);
 
         boolean editingHud = Minecraft.getInstance().screen instanceof YeMouseScreen;
         HudElementModule.renderAllActive(guiGraphics, editingHud);

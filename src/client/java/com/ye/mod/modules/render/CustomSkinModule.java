@@ -40,7 +40,7 @@ public class CustomSkinModule extends Module {
     ));
 
     public CustomSkinModule() {
-        super("custom_skin", "皮肤", "Skin", "内置 50 款高清皮肤预设与本地导入", Category.PLAYER_MODEL);
+        super("custom_skin", "皮肤", "Skin", "内置 50 款角色皮肤预设与本地文件导入", Category.PLAYER_MODEL);
         addSetting(new ActionSetting("importSkin", "导入本地皮肤 PNG...", "打开文件选择器导入 64x64 皮肤贴图", this::openFilePicker));
         addSetting(new ActionSetting("openFolder", "打开皮肤文件夹", "在资源管理器中打开 config/ye/skins 目录", this::openSkinsFolder));
         addSetting(new ActionSetting("refreshSkins", "刷新皮肤列表", "重新扫描 skins 文件夹中的 PNG 文件", SkinManager::refreshSkins));

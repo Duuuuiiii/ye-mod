@@ -144,7 +144,7 @@ public class AutoLogModule extends Module {
     private long lastDisconnectMs = 0L;
 
     public AutoLogModule() {
-        super("auto_log", "自动下线", "AutoLog", "或/且自由组合智能保命下线，含连爆图腾、视野玩家白名单与断线战报", Category.UTILITY);
+        super("auto_log", "自动下线", "AutoLog", "支持或/且条件组合自动断开连接，含图腾计数、视野玩家过滤与断线战报", Category.UTILITY);
 
         addSetting(new ActionSetting("toggleTargetFriend", "准星加删好友", "将准星对准的玩家加入或移出白名单", () -> {
             String res = FriendManager.toggleCrosshairPlayer();

@@ -46,7 +46,7 @@ public class LavaEspModule extends Module {
     ));
 
     public final BoolSetting onlyExposedEdges = addSetting(new BoolSetting(
-            "onlyExposedEdges", "智能只描外缘", "大岩浆海只高亮与非岩浆相邻的外缘方块，不糊屏也不卡", true
+            "onlyExposedEdges", "仅描外缘", "大面积岩浆只高亮与非岩浆相邻的外缘方块", true
     ));
 
     public final BoolSetting onlySource = addSetting(new BoolSetting(

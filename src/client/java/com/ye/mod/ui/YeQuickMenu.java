@@ -2,79 +2,100 @@ package com.ye.mod.ui;
 
 import com.ye.mod.core.Category;
 import com.ye.mod.core.ConfigManager;
+import com.ye.mod.core.FriendManager;
+import com.ye.mod.core.KeyCombo;
 import com.ye.mod.core.Module;
 import com.ye.mod.core.ModuleManager;
 import com.ye.mod.core.YeSoundPresets;
 import com.ye.mod.core.setting.ActionSetting;
 import com.ye.mod.core.setting.BoolSetting;
+import com.ye.mod.core.setting.ColorSetting;
 import com.ye.mod.core.setting.DoubleSetting;
 import com.ye.mod.core.setting.EnumSetting;
+import com.ye.mod.core.setting.KeybindSetting;
 import com.ye.mod.core.setting.Setting;
+import com.ye.mod.core.setting.StringSetting;
 import com.ye.mod.modules.hud.HudElementModule;
 import com.ye.mod.modules.render.AccessoriesModule;
 import com.ye.mod.modules.render.CapeManager;
 import com.ye.mod.modules.render.CustomCapeModule;
 import com.ye.mod.modules.render.CustomSkinModule;
 import com.ye.mod.modules.render.SkinManager;
+import com.ye.mod.modules.world.BlockSearchModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.RenderPipelines;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.world.entity.player.Player;
 
+import java.awt.Color;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.DoubleConsumer;
+import java.util.function.DoubleSupplier;
 
 /**
- * Desktop-Grade 1:1 Vector UI (YeQuickMenu):
- * - 3 Clean Top-Level Plates: 功能 (Unified Vertical Scroll) / HUD (11 Modular Widgets) / 设置 (Config & Sound & Theme)
- * - ZERO corner square artifacts, ZERO bottom white lines, ZERO top-right module dots!
- * - Automatic 2-Column Balanced Inspector Table for modules with 4+ settings!
- * - Right-clicking any HUD element on screen opens its dedicated settings page immediately!
+ * Dual-Mode, Dual-Persona Main Interface (YeQuickMenu v1.7.3):
+ * - Arrow UI (F9): Compact 308x206 card at bottom-right with smooth slide-down exit animation!
+ * - Mouse UI (F10): Centered 538x366 spacious command center with vector module icons, Pin/Favorite badges,
+ *   Gaussian Glass real blur, 2D draggable HSV color picker, double-click inline number input,
+ *   confirmation modal on all resets, tutorial guide modal, and dedicated 4th top tab: 好友!
  */
 public final class YeQuickMenu {
     public enum TopSection {
         FEATURES("功能", "Features"),
         HUD("HUD", "HUD"),
-        SETTINGS("设置", "Settings");
+        SETTINGS("设置", "Settings"),
+        FRIENDS("好友", "Friends");
 
         final String zh;
         final String en;
-
-        TopSection(String zh, String en) {
-            this.zh = zh;
-            this.en = en;
-        }
-
-        String label() {
-            return ConfigManager.tr(zh, en);
-        }
+        TopSection(String zh, String en) { this.zh = zh; this.en = en; }
+        String label() { return ConfigManager.tr(zh, en); }
     }
 
     private static final Category[] FEATURE_CATEGORIES = {
             Category.PLAYER_MODEL, Category.VISUAL, Category.UTILITY
     };
 
-    public static final int WIN_W = 424;
-    public static final int WIN_H = 304;
-    private static final int EDGE_MARGIN = 16;
-    private static final int GRID_COLS = 4;
+    // Compact Arrow-UI (bottom-right) vs Large Centered Mouse-UI
+    public static final int COMPACT_W = 308;
+    public static final int COMPACT_H = 206;
+    public static final int LARGE_W = 538;
+    public static final int LARGE_H = 366;
 
     private static boolean open = false;
     private static float openAnim = 0.0f;
     private static float pageSlide = 0.0f;
     private static float tabIndicatorX = -1.0f;
-    private static float tabIndicatorW = 54.0f;
+    private static float tabIndicatorW = 52.0f;
 
-    public static int listeningKeySlot = 0;
-    public static Module listeningModuleKey = null;
+    // Keybind recording target (supports Module toggle key, Module preset cycle key, KeybindSetting, MenuKey, MouseKey)
+    public static java.util.function.IntConsumer activeKeybindConsumer = null;
+    public static String activeKeybindId = "";
+    public static int pendingModifierKeyAlone = -1;
 
-    public static int profileInputMode = 0;
-    public static String profileInputBuffer = "";
+    // Inline text/number editing
+    public static int textInputKind = 0; // 0=none, 1=new profile, 2=rename profile, 3=friend ID, 4=StringSetting, 5=Number edit, 6=Hex color
+    public static String textInputBuffer = "";
+    public static StringSetting activeStringSetting = null;
+    public static DoubleConsumer activeNumberSetter = null;
+    public static String activeNumberKey = "";
+
+    // Interactive 2D HSV Color Picker Popover
+    public static ColorSetting openColorSetting = null;
+    public static boolean openThemeCustomColor = false;
+    public static int pickerX, pickerY, pickerW = 148, pickerSvH = 86;
+
+    // Confirmation Modal (确定要重置吗？) & Tutorial Guide Modal
+    private static String confirmMessage = null;
+    private static Runnable confirmAction = null;
+    public static boolean tutorialModalOpen = false;
 
     private static String toastText = "";
     private static int toastColor = 0xFF22C55E;
@@ -97,7 +118,18 @@ public final class YeQuickMenu {
 
     private static final Map<Class<?>, Field> ENUM_LABEL_CACHE = new HashMap<>();
     private static final List<HitRect> HIT_RECTS = new ArrayList<>();
-    public record HitRect(int x, int y, int w, int h, Runnable leftClick, Runnable rightClick, DoubleSetting slider) {}
+
+    public interface SliderBinding {
+        double getMin();
+        double getMax();
+        void setValue(double v);
+    }
+
+    public record HitRect(int x, int y, int w, int h, Runnable leftClick, Runnable rightClick, SliderBinding slider, int zPriority, Runnable doubleClick) {
+        public HitRect(int x, int y, int w, int h, Runnable leftClick, Runnable rightClick, SliderBinding slider, int zPriority) {
+            this(x, y, w, h, leftClick, rightClick, slider, zPriority, null);
+        }
+    }
 
     private YeQuickMenu() {}
 
@@ -107,6 +139,19 @@ public final class YeQuickMenu {
         toastText = msg;
         toastColor = color;
         toastUntilMs = System.currentTimeMillis() + 2400L;
+    }
+
+    public static void requestConfirmation(String msg, Runnable onConfirm) {
+        confirmMessage = msg;
+        confirmAction = onConfirm;
+    }
+
+    public static void openEntityPickerModal(String title, Set<String> set) {
+        YePickerModal.openEntityModal(title, set);
+    }
+
+    public static void openBlockPickerModal(String title, Set<String> set) {
+        YePickerModal.openBlockModal(title, set);
     }
 
     public static void toggleOpen() {
@@ -123,17 +168,22 @@ public final class YeQuickMenu {
         if (!open) closeOverlays();
     }
 
-    private static void closeOverlays() {
+    public static void closeOverlays() {
         openDropdown = null;
         soundDropdownOpen = false;
-        listeningKeySlot = 0;
-        listeningModuleKey = null;
-        profileInputMode = 0;
+        openColorSetting = null;
+        openThemeCustomColor = false;
+        activeKeybindConsumer = null;
+        activeKeybindId = "";
+        pendingModifierKeyAlone = -1;
+        commitInlineInputIfNumber();
+        textInputKind = 0;
+        confirmMessage = null;
+        confirmAction = null;
+        tutorialModalOpen = false;
+        YePickerModal.close();
     }
 
-    /**
-     * Jumps directly to a specific HUD element's settings page (invoked on right-clicking HUD on screen!).
-     */
     public static void openHudElementSettings(HudElementModule hm) {
         if (hm == null) return;
         open = true;
@@ -151,156 +201,222 @@ public final class YeQuickMenu {
         YeSoundPresets.playUi(ConfigManager.uiClickSound, ConfigManager.uiSoundVolume);
     }
 
-    public static int getWinX(int sw) {
-        if (ConfigManager.widgetX >= 0) {
-            return Math.max(8, Math.min(sw - WIN_W - 8, ConfigManager.widgetX));
-        }
-        return sw - WIN_W - EDGE_MARGIN;
+    public static int currentWinW(boolean mouseMode) {
+        return mouseMode ? LARGE_W : COMPACT_W;
     }
 
-    public static int getWinY(int sh) {
-        if (ConfigManager.widgetY >= 0) {
-            return Math.max(8, Math.min(sh - WIN_H - 8, ConfigManager.widgetY));
-        }
-        return sh - WIN_H - EDGE_MARGIN;
+    public static int currentWinH(boolean mouseMode) {
+        return mouseMode ? LARGE_H : COMPACT_H;
     }
 
-    public static boolean isPointInsideMenuOrDropdown(double mx, double my, int sw, int sh) {
-        int wx = getWinX(sw);
-        int wy = getWinY(sh);
-        if (inBounds(mx, my, wx, wy, WIN_W, WIN_H)) return true;
-        if (openDropdown != null && inBounds(mx, my, dropX, Math.max(4, dropY - 200), dropW, 400)) return true;
-        if (soundDropdownOpen && inBounds(mx, my, soundDropX, Math.max(4, soundDropY - 200), soundDropW, 400)) return true;
+    public static int getWinX(int sw, boolean mouseMode) {
+        if (mouseMode) {
+            return (sw - LARGE_W) / 2;
+        }
+        return Math.max(6, sw - COMPACT_W - 10);
+    }
+
+    public static int getWinY(int sh, boolean mouseMode) {
+        if (mouseMode) {
+            return (sh - LARGE_H) / 2;
+        }
+        return Math.max(6, sh - COMPACT_H - 10);
+    }
+
+    public static boolean isPointInsideMenuOrOverlay(double mx, double my, int sw, int sh) {
+        if (YePickerModal.isOpen() || confirmMessage != null || tutorialModalOpen) return true;
+        int wx = getWinX(sw, true);
+        int wy = getWinY(sh, true);
+        if (inBounds(mx, my, wx, wy, LARGE_W, LARGE_H)) return true;
+        if (openDropdown != null && inBounds(mx, my, dropX, Math.max(4, dropY - 220), dropW, 440)) return true;
+        if (soundDropdownOpen && inBounds(mx, my, soundDropX, Math.max(4, soundDropY - 180), soundDropW, 360)) return true;
+        if ((openColorSetting != null || openThemeCustomColor) && inBounds(mx, my, pickerX, pickerY, pickerW + 16, pickerSvH + 54)) return true;
         return false;
+    }
+
+    private static void addClippedHit(int x, int y, int w, int h, int clipTop, int clipBot,
+                                      Runnable leftClick, Runnable rightClick, SliderBinding slider, Runnable dblClick) {
+        int top = Math.max(clipTop, y);
+        int bot = Math.min(clipBot, y + h);
+        if (bot - top >= 3) {
+            HIT_RECTS.add(new HitRect(x, top, w, bot - top, leftClick, rightClick, slider, 0, dblClick));
+        }
     }
 
     public static void render(GuiGraphics g, int mouseX, int mouseY, boolean mouseUnlocked) {
         AppleUiRenderer.beginFrame();
         float dt = AppleUiRenderer.dt();
-        openAnim = AppleUiRenderer.smooth(openAnim, open ? 1.0f : 0.0f, 18.0f, dt);
-        pageSlide = AppleUiRenderer.smooth(pageSlide, 0.0f, 20.0f, dt);
+        boolean mech = AppleUiRenderer.isMechanical();
+
+        float targetOpen = open ? 1.0f : 0.0f;
+        openAnim = mech ? targetOpen : AppleUiRenderer.smooth(openAnim, targetOpen, 17.0f, dt);
+        pageSlide = mech ? 0.0f : AppleUiRenderer.smooth(pageSlide, 0.0f, 20.0f, dt);
 
         if (targetScroll > maxScroll) targetScroll = maxScroll;
         if (targetScroll < 0.0) targetScroll = 0.0;
-        scrollOffset = AppleUiRenderer.smooth((float) scrollOffset, (float) targetScroll, 22.0f, dt);
+        scrollOffset = mech ? targetScroll : AppleUiRenderer.smooth((float) scrollOffset, (float) targetScroll, 22.0f, dt);
         if (scrollOffset > maxScroll) scrollOffset = maxScroll;
         if (scrollOffset < 0.0) scrollOffset = 0.0;
 
-        if (!open && openAnim < 0.02f) return;
-
         Minecraft mc = Minecraft.getInstance();
-        Font font = mc.font;
         int sw = mc.getWindow().getGuiScaledWidth();
         int sh = mc.getWindow().getGuiScaledHeight();
 
-        int slideY = Math.round((1.0f - openAnim) * 18.0f);
-        int wx = getWinX(sw);
-        int wy = getWinY(sh) + slideY;
+        // Always render floating Toast even when menu is closed!
+        if (!open && openAnim < 0.015f) {
+            renderToastOnly(g, sw, sh);
+            return;
+        }
+
+        if (AppleUiRenderer.isGlass()) {
+            g.blurBeforeThisStratum();
+        }
+
+        int winW = currentWinW(mouseUnlocked);
+        int winH = currentWinH(mouseUnlocked);
+        int wx = getWinX(sw, mouseUnlocked);
+        int baseWy = getWinY(sh, mouseUnlocked);
+        // Smooth Slide-Down Exit Animation for Arrow UI (slides completely down off-screen when closing!)
+        int slideDownPx = mouseUnlocked
+                ? Math.round((1.0f - openAnim) * 18.0f)
+                : Math.round((1.0f - openAnim) * (winH + 24.0f));
+        int wy = baseWy + slideDownPx;
         int accent = ConfigManager.getAccentColor();
+        int gridCols = mouseUnlocked ? 4 : 3;
 
         HIT_RECTS.clear();
 
-        // 1. Seam-free 1:1 Vector Window Shell + Header Bar (zero sharp square corner boxes!)
-        AppleUiRenderer.drawElevatedWindow(g, wx, wy, WIN_W, WIN_H, 11);
-        AppleUiRenderer.drawRoundedRect(g, wx + 2, wy + 2, WIN_W - 4, 28, 9, AppleUiRenderer.bgHeader());
-        g.fill(wx + 12, wy + 30, wx + WIN_W - 12, wy + 31, AppleUiRenderer.borderSubtle());
+        // 1. Window Shell + Header Bar
+        int winRad = mech ? 0 : (mouseUnlocked ? 12 : 9);
+        int hdrH = mouseUnlocked ? 32 : 24;
+        AppleUiRenderer.drawElevatedWindow(g, wx, wy, winW, winH, winRad);
+        AppleUiRenderer.drawRoundedRect(g, wx + 2, wy + 2, winW - 4, hdrH - 2, mech ? 0 : Math.max(4, winRad - 2), AppleUiRenderer.bgHeader());
+        g.fill(wx + 8, wy + hdrH, wx + winW - 8, wy + hdrH + 1, AppleUiRenderer.borderSubtle());
 
-        // Crisp Brand Mark
-        AppleUiRenderer.drawRoundedRect(g, wx + 11, wy + 8, 3.5f, 15, 1.8f, accent);
-        AppleUiRenderer.drawBoldText(g, "Ye", wx + 19, wy + 10, 10.2f, AppleUiRenderer.textPrimary());
+        // Brand Mark
+        AppleUiRenderer.drawRoundedRect(g, wx + 10, wy + (hdrH - 13) / 2f, 3.2f, 13, 1.6f, accent);
+        AppleUiRenderer.drawBoldText(g, "Ye", wx + 17, YeHdFont.vCenterY(wy, hdrH, mouseUnlocked ? 10.0f : 9.0f), mouseUnlocked ? 10.0f : 9.0f, AppleUiRenderer.textPrimary());
 
-        // 3 Clean Top Tabs: 功能 / HUD / 设置
-        int tx = wx + 46;
+        // 4 Top Tabs: 功能 | HUD | 设置 | 好友 (Registered at zPriority = 2 so scrolled cards NEVER intercept them!)
+        int tx = wx + (mouseUnlocked ? 44 : 36);
         TopSection[] secs = TopSection.values();
         int targetTabX = tx;
-        int targetTabW = 54;
+        int targetTabW = 48;
         int[] tabXs = new int[secs.length];
         int[] tabWs = new int[secs.length];
+        float tabFont = mouseUnlocked ? 8.9f : 8.0f;
+        int tabH = mouseUnlocked ? 20 : 16;
+        int tabY = wy + (hdrH - tabH) / 2;
 
         for (int i = 0; i < secs.length; i++) {
             String lbl = secs[i].label();
-            int tw = Math.max(48, YeHdFont.width(lbl, 9.0f, true) + 20);
+            int tw = Math.max(mouseUnlocked ? 46 : 36, YeHdFont.width(lbl, tabFont, true) + (mouseUnlocked ? 18 : 12));
             tabXs[i] = tx;
             tabWs[i] = tw;
             if (secs[i] == activeSection) {
                 targetTabX = tx;
                 targetTabW = tw;
             }
-            tx += tw + 6;
+            tx += tw + (mouseUnlocked ? 5 : 3);
         }
 
-        if (tabIndicatorX < 0) {
+        if (tabIndicatorX < 0 || mech) {
             tabIndicatorX = targetTabX;
             tabIndicatorW = targetTabW;
         } else {
             tabIndicatorX = AppleUiRenderer.smooth(tabIndicatorX, targetTabX, 22.0f, dt);
             tabIndicatorW = AppleUiRenderer.smooth(tabIndicatorW, targetTabW, 22.0f, dt);
         }
-        AppleUiRenderer.drawRoundedRect(g, tabIndicatorX, wy + 6, tabIndicatorW, 20, 6.5f, accent);
+        AppleUiRenderer.drawRoundedRect(g, tabIndicatorX, tabY, tabIndicatorW, tabH, mech ? 0 : 6.0f, accent);
 
         for (int i = 0; i < secs.length; i++) {
             TopSection sec = secs[i];
             int bx = tabXs[i], bw = tabWs[i];
             boolean sel = (sec == activeSection);
-            boolean hov = mouseUnlocked && inBounds(mouseX, mouseY, bx, wy + 6, bw, 20);
+            boolean hov = mouseUnlocked && !hasModalOpen() && inBounds(mouseX, mouseY, bx, tabY, bw, tabH);
             if (!sel && hov) {
-                AppleUiRenderer.drawRoundedRect(g, bx, wy + 6, bw, 20, 6.5f, AppleUiRenderer.bgCardHover());
+                AppleUiRenderer.drawRoundedRect(g, bx, tabY, bw, tabH, mech ? 0 : 6.0f, AppleUiRenderer.bgCardHover());
             }
-            AppleUiRenderer.drawCenteredSmooth(g, sec.label(), bx + bw * 0.5f, wy + 10.5f, 9.0f,
-                    sel ? AppleUiRenderer.TEXT_PRIMARY : (hov ? AppleUiRenderer.textPrimary() : AppleUiRenderer.textSecondary()), sel);
-            HIT_RECTS.add(new HitRect(bx, wy + 6, bw, 20, () -> switchSection(sec), null, null));
+            YeHdFont.drawCenteredInBox(g, sec.label(), bx, tabY, bw, tabH, tabFont,
+                    sel ? 0xFFFFFFFF : (hov ? AppleUiRenderer.textPrimary() : AppleUiRenderer.textSecondary()), false, sel);
+            HIT_RECTS.add(new HitRect(bx, tabY, bw, tabH, () -> switchSection(sec), null, null, 2));
         }
 
-        String hint = mouseUnlocked
-                ? (ConfigManager.tr("档案: ", "Profile: ") + ConfigManager.getActiveProfile())
-                : (keyName(ConfigManager.getMouseUnlockKey()) + ConfigManager.tr(" 鼠标 · 空格详情", " Mouse · Space"));
-        int hintW = YeHdFont.width(hint, 8.2f, false);
-        if (tx + hintW + 14 < wx + WIN_W) {
-            YeHdFont.draw(g, hint, wx + WIN_W - 12 - hintW, wy + 11, 8.2f, AppleUiRenderer.textTertiary(), false, false);
+        if (mouseUnlocked) {
+            String profBadge = ConfigManager.tr("档案: ", "Profile: ") + ConfigManager.getActiveProfile();
+            int pw = YeHdFont.width(profBadge, 8.2f, false);
+            if (tx + pw + 16 < wx + winW) {
+                YeHdFont.draw(g, profBadge, wx + winW - 12 - pw, YeHdFont.vCenterY(wy, hdrH, 8.2f), 8.2f, AppleUiRenderer.textTertiary(), false, false);
+            }
         }
 
-        int bodyX = wx + 11 + Math.round(pageSlide);
-        int bodyY = wy + 36;
-        int bodyW = WIN_W - 22;
-        int bodyH = WIN_H - 44;
+        int padX = mouseUnlocked ? 12 : 8;
+        int bodyX = wx + padX + Math.round(pageSlide);
+        int bodyY = wy + hdrH + 5;
+        int bodyW = winW - padX * 2;
+        int bodyH = winH - hdrH - 10;
 
-        g.enableScissor(wx + 6, bodyY - 2, wx + WIN_W - 6, wy + WIN_H - 6);
-        if (activeModule != null && activeSection != TopSection.SETTINGS) {
-            renderModuleDetail(g, font, bodyX, bodyY, bodyW, bodyH, mouseX, mouseY, mouseUnlocked, accent);
+        // Strict Scissor AT bodyY (zero card bleed above bodyY!)
+        g.enableScissor(wx + 4, bodyY, wx + winW - 4, bodyY + bodyH);
+        if (activeModule != null && (activeSection == TopSection.FEATURES || activeSection == TopSection.HUD)) {
+            renderModuleDetail(g, mc.font, bodyX, bodyY, bodyW, bodyH, mouseX, mouseY, mouseUnlocked, accent);
         } else if (activeSection == TopSection.FEATURES) {
-            renderUnifiedFeaturesPage(g, bodyX, bodyY, bodyW, bodyH, mouseX, mouseY, mouseUnlocked, accent);
+            renderUnifiedFeaturesPage(g, bodyX, bodyY, bodyW, bodyH, gridCols, mouseX, mouseY, mouseUnlocked, accent);
         } else if (activeSection == TopSection.HUD) {
-            renderHudDashboardPage(g, bodyX, bodyY, bodyW, bodyH, mouseX, mouseY, mouseUnlocked, accent);
-        } else {
+            renderHudDashboardPage(g, bodyX, bodyY, bodyW, bodyH, gridCols, mouseX, mouseY, mouseUnlocked, accent);
+        } else if (activeSection == TopSection.SETTINGS) {
             renderSettingsTab(g, bodyX, bodyY, bodyW, bodyH, mouseX, mouseY, mouseUnlocked, accent);
+        } else {
+            renderFriendsTab(g, bodyX, bodyY, bodyW, bodyH, mouseX, mouseY, mouseUnlocked, accent);
         }
         g.disableScissor();
 
-        if (openDropdown != null && mouseUnlocked) {
-            renderDropdown(g, openDropdown, mouseX, mouseY, accent);
-        }
-        if (soundDropdownOpen && mouseUnlocked) {
-            renderSoundDropdown(g, mouseX, mouseY, accent);
+        // Overlays & Modals (higher Z-priority!)
+        if (mouseUnlocked) {
+            if (openDropdown != null) {
+                renderDropdown(g, openDropdown, mouseX, mouseY, accent);
+            }
+            if (soundDropdownOpen) {
+                renderSoundDropdown(g, mouseX, mouseY, accent);
+            }
+            if (openColorSetting != null || openThemeCustomColor) {
+                renderColorPickerPopover(g, sw, sh, mouseX, mouseY, accent);
+            }
+            if (tutorialModalOpen) {
+                renderTutorialModal(g, sw, sh, accent);
+            }
+            if (YePickerModal.isOpen()) {
+                YePickerModal.render(g, sw, sh, mouseX, mouseY, accent, HIT_RECTS);
+            }
+            if (confirmMessage != null) {
+                renderConfirmationModal(g, sw, sh, mouseX, mouseY, accent);
+            }
         }
 
-        // Crisp Toast Notification Pill
+        renderToastOnly(g, sw, sh);
+    }
+
+    private static boolean hasModalOpen() {
+        return YePickerModal.isOpen() || confirmMessage != null || tutorialModalOpen;
+    }
+
+    private static void renderToastOnly(GuiGraphics g, int sw, int sh) {
         long rem = toastUntilMs - System.currentTimeMillis();
-        if (rem > 0 && !toastText.isEmpty()) {
-            float alpha = Math.min(1.0f, rem / 300.0f);
-            int tw = YeHdFont.width(toastText, 8.6f, true) + 24;
-            int txBox = wx + (WIN_W - tw) / 2;
-            int tyBox = Math.max(4, wy - 24);
-            AppleUiRenderer.drawRoundedRect(g, txBox, tyBox, tw, 20, 7, AppleUiRenderer.withAlpha(0xF20D121D, alpha));
-            AppleUiRenderer.drawRoundedOutline(g, txBox, tyBox, tw, 20, 7, 1.2f, AppleUiRenderer.withAlpha(toastColor, alpha));
-            YeHdFont.drawCentered(g, toastText, txBox + tw * 0.5f, tyBox + 5.0f, 8.6f,
-                    AppleUiRenderer.withAlpha(toastColor, alpha), false, true);
-        }
+        if (rem <= 0 || toastText.isEmpty()) return;
+        float alpha = Math.min(1.0f, rem / 280.0f);
+        int tw = YeHdFont.width(toastText, 8.6f, true) + 24;
+        int txBox = (sw - tw) / 2;
+        int tyBox = 14;
+        int rad = AppleUiRenderer.isMechanical() ? 0 : 7;
+        AppleUiRenderer.drawRoundedRect(g, txBox, tyBox, tw, 20, rad, AppleUiRenderer.withAlpha(0xF20B101B, alpha));
+        AppleUiRenderer.drawRoundedOutline(g, txBox, tyBox, tw, 20, rad, 1.2f, AppleUiRenderer.withAlpha(toastColor, alpha));
+        YeHdFont.drawCenteredInBox(g, toastText, txBox, tyBox, tw, 20, 8.6f, AppleUiRenderer.withAlpha(toastColor, alpha), false, true);
     }
 
     private static void switchSection(TopSection sec) {
         if (activeSection == sec && activeModule == null) return;
         playClick();
-        pageSlide = (sec.ordinal() >= activeSection.ordinal()) ? 16.0f : -16.0f;
+        pageSlide = (sec.ordinal() >= activeSection.ordinal()) ? 14.0f : -14.0f;
         activeSection = sec;
         activeModule = null;
         closeOverlays();
@@ -309,58 +425,76 @@ public final class YeQuickMenu {
         targetScroll = 0.0;
     }
 
-    private static List<Module> getAllFeatureModulesOrdered() {
+    private static List<Module> getOrderedFeatureModulesForNav() {
         List<Module> all = new ArrayList<>();
+        // 1) Pinned first
         for (Category cat : FEATURE_CATEGORIES) {
-            all.addAll(ModuleManager.getByCategory(cat));
+            for (Module m : ModuleManager.getByCategory(cat)) {
+                if (ConfigManager.isPinned(m)) all.add(m);
+            }
+        }
+        // 2) Favorites folder
+        for (Category cat : FEATURE_CATEGORIES) {
+            for (Module m : ModuleManager.getByCategory(cat)) {
+                if (!ConfigManager.isPinned(m) && ConfigManager.isFavorite(m)) all.add(m);
+            }
+        }
+        // 3) Categories
+        for (Category cat : FEATURE_CATEGORIES) {
+            for (Module m : ModuleManager.getByCategory(cat)) {
+                if (!ConfigManager.isPinned(m)) all.add(m);
+            }
         }
         return all;
     }
 
-    /**
-     * Unified Single-Page Vertical Scroll for ALL Feature Categories (玩家模型 / 视觉渲染 / 特定功能)!
-     * Zero top-right dots, silky smooth vertical scrolling, razor-sharp typography!
-     */
-    private static void renderUnifiedFeaturesPage(GuiGraphics g, int x, int y, int w, int h,
-                                                  int mx, int my, boolean mouseUnlocked, int accent) {
-        List<Module> flatList = getAllFeatureModulesOrdered();
-        if (selectedIndex >= flatList.size()) selectedIndex = Math.max(0, flatList.size() - 1);
+    // ==================== 1. FEATURES PAGE (PINNED + FAVORITES FOLDER + 3 CATEGORIES) ====================
 
-        int gap = 6;
-        int cellW = (w - 6 - (GRID_COLS - 1) * gap) / GRID_COLS;
-        int cellH = 38;
+    private static void renderUnifiedFeaturesPage(GuiGraphics g, int x, int y, int w, int h, int cols,
+                                                  int mx, int my, boolean mouseUnlocked, int accent) {
+        List<Module> navList = getOrderedFeatureModulesForNav();
+        if (selectedIndex >= navList.size()) selectedIndex = Math.max(0, navList.size() - 1);
+
+        int gap = mouseUnlocked ? 6 : 4;
+        int cellW = (w - 6 - (cols - 1) * gap) / cols;
+        int cellH = mouseUnlocked ? 40 : 28;
         int rowStep = cellH + gap;
 
         int startRy = y - (int) Math.round(scrollOffset);
         int ry = startRy;
         int globalIdx = 0;
 
+        // A. Pinned Modules at very top!
+        List<Module> pinned = new ArrayList<>();
+        List<Module> favs = new ArrayList<>();
         for (Category cat : FEATURE_CATEGORIES) {
-            List<Module> mods = ModuleManager.getByCategory(cat);
+            for (Module m : ModuleManager.getByCategory(cat)) {
+                if (ConfigManager.isPinned(m)) pinned.add(m);
+                if (ConfigManager.isFavorite(m)) favs.add(m);
+            }
+        }
+
+        if (!pinned.isEmpty()) {
+            ry = drawGroupGrid(g, ConfigManager.tr("置顶", "Pinned"), pinned, x, ry, w, cols, cellW, cellH, gap, rowStep,
+                    y, h, mx, my, mouseUnlocked, globalIdx, accent);
+            globalIdx += pinned.size();
+        }
+
+        // B. Favorites Folder Section
+        if (!favs.isEmpty()) {
+            List<Module> nonDupFavs = favs.stream().filter(m -> !ConfigManager.isPinned(m)).toList();
+            ry = drawGroupGrid(g, ConfigManager.tr("收藏夹", "Favorites"), favs, x, ry, w, cols, cellW, cellH, gap, rowStep,
+                    y, h, mx, my, mouseUnlocked, globalIdx, 0xFFFACC15);
+            globalIdx += nonDupFavs.size();
+        }
+
+        // C. Standard 3 Feature Categories (excluding pinned so pinned stays cleanly at top)
+        for (Category cat : FEATURE_CATEGORIES) {
+            List<Module> mods = ModuleManager.getByCategory(cat).stream().filter(m -> !ConfigManager.isPinned(m)).toList();
             if (mods.isEmpty()) continue;
-
-            // Section Header Divider
-            if (ry + 18 >= y - 4 && ry <= y + h + 4) {
-                AppleUiRenderer.drawRoundedRect(g, x + 2, ry + 3, 3, 10, 1.5f, accent);
-                AppleUiRenderer.drawBoldText(g, cat.label(), x + 9, ry + 2.5f, 8.8f, AppleUiRenderer.textSecondary());
-                int titleW = YeHdFont.width(cat.label(), 8.8f, true);
-                g.fill(x + 14 + titleW, ry + 8, x + w - 8, ry + 9, AppleUiRenderer.borderSubtle());
-            }
-            ry += 18;
-
-            for (int i = 0; i < mods.size(); i++) {
-                Module m = mods.get(i);
-                int col = i % GRID_COLS;
-                int row = i / GRID_COLS;
-                int cx = x + col * (cellW + gap);
-                int rawCy = ry + row * rowStep;
-                boolean keySel = !mouseUnlocked && (globalIdx == selectedIndex);
-                renderModuleCardCell(g, m, cx, rawCy, cellW, cellH, y, h, mx, my, mouseUnlocked, keySel, accent);
-                globalIdx++;
-            }
-
-            int rows = (mods.size() + GRID_COLS - 1) / GRID_COLS;
-            ry += rows * rowStep + 6;
+            ry = drawGroupGrid(g, cat.label(), mods, x, ry, w, cols, cellW, cellH, gap, rowStep,
+                    y, h, mx, my, mouseUnlocked, globalIdx, accent);
+            globalIdx += mods.size();
         }
 
         int contentH = Math.max(0, (ry - startRy) - 4);
@@ -368,11 +502,33 @@ public final class YeQuickMenu {
         drawScrollbar(g, x + w - 2, y, h, contentH, accent);
     }
 
-    /**
-     * Dedicated HUD Dashboard Tab:
-     * Every HUD component is its own card (left-click toggles visibility, right-click opens its rich settings!).
-     */
-    private static void renderHudDashboardPage(GuiGraphics g, int x, int y, int w, int h,
+    private static int drawGroupGrid(GuiGraphics g, String title, List<Module> mods, int x, int ry, int w, int cols,
+                                     int cellW, int cellH, int gap, int rowStep, int clipY, int clipH,
+                                     int mx, int my, boolean mouseUnlocked, int startGlobalIdx, int barCol) {
+        if (ry + 16 >= clipY && ry <= clipY + clipH) {
+            AppleUiRenderer.drawRoundedRect(g, x + 2, ry + 3, 3, 10, 1.5f, barCol);
+            AppleUiRenderer.drawBoldText(g, title, x + 9, YeHdFont.vCenterY(ry, 16, 8.6f), 8.6f, AppleUiRenderer.textSecondary());
+            int titleW = YeHdFont.width(title, 8.6f, true);
+            g.fill(x + 14 + titleW, ry + 8, x + w - 8, ry + 9, AppleUiRenderer.borderSubtle());
+        }
+        ry += 17;
+
+        for (int i = 0; i < mods.size(); i++) {
+            Module m = mods.get(i);
+            int col = i % cols;
+            int row = i / cols;
+            int cx = x + col * (cellW + gap);
+            int rawCy = ry + row * rowStep;
+            boolean keySel = !mouseUnlocked && ((startGlobalIdx + i) == selectedIndex);
+            renderModuleCardCell(g, m, cx, rawCy, cellW, cellH, clipY, clipH, mx, my, mouseUnlocked, keySel, ConfigManager.getAccentColor());
+        }
+        int rows = (mods.size() + cols - 1) / cols;
+        return ry + rows * rowStep + 5;
+    }
+
+    // ==================== 2. HUD DASHBOARD PAGE ====================
+
+    private static void renderHudDashboardPage(GuiGraphics g, int x, int y, int w, int h, int cols,
                                                int mx, int my, boolean mouseUnlocked, int accent) {
         List<Module> hudMods = ModuleManager.getByCategory(Category.HUD);
         if (selectedIndex >= hudMods.size()) selectedIndex = Math.max(0, hudMods.size() - 1);
@@ -381,45 +537,43 @@ public final class YeQuickMenu {
         int ry = startRy;
         int rowW = w - 6;
 
-        // Top HUD Helper Banner + Reset All Positions Button
-        if (ry + 24 >= y - 4 && ry <= y + h + 4) {
-            AppleUiRenderer.drawRoundedRect(g, x, ry, rowW, 22, 6, AppleUiRenderer.bgCard());
-            AppleUiRenderer.drawRoundedOutline(g, x, ry, rowW, 22, 6, 1.0f, AppleUiRenderer.borderSubtle());
-            String tip = ConfigManager.tr("提示：按住左键拖拽屏幕HUD吸附 · 右键屏幕HUD或卡片直达专属设置",
-                    "Tip: Drag HUD on screen to snap · Right-click any HUD to configure");
-            YeHdFont.draw(g, YeHdFont.clipToWidth(tip, 8.2f, false, rowW - 88), x + 8, ry + 6, 8.2f, AppleUiRenderer.textSecondary(), false, false);
+        if (mouseUnlocked && ry + 22 >= y && ry <= y + h) {
+            AppleUiRenderer.drawRoundedRect(g, x, ry, rowW, 21, 6, AppleUiRenderer.bgCard());
+            AppleUiRenderer.drawRoundedOutline(g, x, ry, rowW, 21, 6, 1.0f, AppleUiRenderer.borderSubtle());
+            String desc = ConfigManager.tr("屏幕四角、四边中点与正中央设有自动磁吸锚点", "9-zone magnetic alignment anchors on screen edges & center");
+            YeHdFont.draw(g, YeHdFont.clipToWidth(desc, 8.2f, false, rowW - 88), x + 8, YeHdFont.vCenterY(ry, 21, 8.2f), 8.2f, AppleUiRenderer.textSecondary(), false, false);
 
             int btnW = 76;
             int btnX = x + rowW - btnW - 4;
-            AppleUiRenderer.drawRoundedRect(g, btnX, ry + 3, btnW, 16, 4.5f, accent);
-            AppleUiRenderer.drawCenteredSmooth(g, ConfigManager.tr("重置全部位置", "Reset All"), btnX + btnW * 0.5f, ry + 6, 8.0f, AppleUiRenderer.TEXT_PRIMARY, true);
-            if (ry + 22 > y && ry < y + h) {
-                HIT_RECTS.add(new HitRect(btnX, ry + 3, btnW, 16, () -> {
-                    playClick();
+            AppleUiRenderer.drawRoundedRect(g, btnX, ry + 3, btnW, 15, 4.5f, accent);
+            YeHdFont.drawCenteredInBox(g, ConfigManager.tr("重置全部位置", "Reset All"), btnX, ry + 3, btnW, 15, 7.9f, 0xFFFFFFFF, false, true);
+            addClippedHit(btnX, ry + 3, btnW, 15, y, y + h, () -> {
+                playClick();
+                requestConfirmation(ConfigManager.tr("确定重置全部 HUD 组件的屏幕位置吗？", "Reset all HUD positions?"), () -> {
                     ConfigManager.resetHudSlotsDefault();
                     ConfigManager.saveAsync();
                     showToast(ConfigManager.tr("已恢复全部 HUD 默认布局", "Reset all HUD positions"), accent);
-                }, null, null));
-            }
+                });
+            }, null, null, null);
+            ry += 26;
         }
-        ry += 28;
 
-        int gap = 6;
-        int cellW = (w - 6 - (GRID_COLS - 1) * gap) / GRID_COLS;
-        int cellH = 40;
+        int gap = mouseUnlocked ? 6 : 4;
+        int cellW = (w - 6 - (cols - 1) * gap) / cols;
+        int cellH = mouseUnlocked ? 40 : 28;
         int rowStep = cellH + gap;
 
         for (int i = 0; i < hudMods.size(); i++) {
             Module m = hudMods.get(i);
-            int col = i % GRID_COLS;
-            int row = i / GRID_COLS;
+            int col = i % cols;
+            int row = i / cols;
             int cx = x + col * (cellW + gap);
             int rawCy = ry + row * rowStep;
             boolean keySel = !mouseUnlocked && (i == selectedIndex);
             renderModuleCardCell(g, m, cx, rawCy, cellW, cellH, y, h, mx, my, mouseUnlocked, keySel, accent);
         }
 
-        int rows = (hudMods.size() + GRID_COLS - 1) / GRID_COLS;
+        int rows = (hudMods.size() + cols - 1) / cols;
         ry += rows * rowStep + 4;
 
         int contentH = Math.max(0, ry - startRy);
@@ -429,37 +583,83 @@ public final class YeQuickMenu {
 
     private static void renderModuleCardCell(GuiGraphics g, Module m, int cx, int rawCy, int cellW, int cellH,
                                              int clipY, int clipH, int mx, int my, boolean mouseUnlocked, boolean keySel, int accent) {
-        boolean hovered = mouseUnlocked && openDropdown == null && inBounds(mx, my, cx, rawCy, cellW, cellH);
+        if (rawCy + cellH < clipY || rawCy > clipY + clipH) return;
+
+        boolean hovered = mouseUnlocked && !hasModalOpen() && openDropdown == null
+                && mx >= cx && mx <= cx + cellW && my >= Math.max(clipY, rawCy) && my <= Math.min(clipY + clipH, rawCy + cellH);
         float hovAnim = AppleUiRenderer.animChannel("mhov_" + m.getId(), (hovered || keySel) ? 1.0f : 0.0f, 18.0f);
         float actAnim = AppleUiRenderer.animChannel("mact_" + m.getId(), m.isEnabled() ? 1.0f : 0.0f, 16.0f);
-        int cy = rawCy - Math.round(hovAnim * 1.2f);
-
-        if (cy + cellH < clipY - 2 || cy > clipY + clipH + 2) return;
+        int cy = rawCy - Math.round(hovAnim * 1.0f);
 
         AppleUiRenderer.drawElevatedCard(g, cx, cy, cellW, cellH, 7, actAnim, hovAnim, accent);
         if (keySel) {
-            AppleUiRenderer.drawRoundedOutline(g, cx, cy, cellW, cellH, 7, 1.8f, 0xFFFFFFFF);
+            AppleUiRenderer.drawRoundedOutline(g, cx, cy, cellW, cellH, 7, 1.6f, 0xFFFFFFFF);
         }
 
         String rawName = ConfigManager.english ? m.getSubtitle() : m.getName();
-        String name = YeHdFont.clipToWidth(rawName, 9.0f, true, cellW - 10);
-        int txtCol = m.isEnabled() ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary();
-        AppleUiRenderer.drawCenteredSmooth(g, name, cx + cellW * 0.5f, cy + 8.5f, 9.0f, txtCol, true);
+        int txtCol = (m.isEnabled() && !AppleUiRenderer.isMechanical()) ? 0xFFFFFFFF : AppleUiRenderer.textPrimary();
 
-        String sub = m.getKeybind() > 0 ? ("[" + keyName(m.getKeybind()) + "]")
-                : (m.isEnabled() ? ConfigManager.tr("已开启", "Enabled") : ConfigManager.tr("已关闭", "Disabled"));
-        int subCol = m.isEnabled() ? 0xD8FFFFFF : AppleUiRenderer.textTertiary();
-        AppleUiRenderer.drawCenteredSmooth(g, sub, cx + cellW * 0.5f, cy + 22.5f, 7.8f, subCol, false);
+        if (!mouseUnlocked) {
+            // Compact Arrow-UI card
+            String name = YeHdFont.clipToWidth(rawName, 8.2f, true, cellW - 8);
+            YeHdFont.drawCenteredInBox(g, name, cx, cy, cellW, cellH, 8.2f, txtCol, false, true);
+            return;
+        }
 
-        if (rawCy + cellH > clipY + 2 && rawCy < clipY + clipH - 2) {
-            HIT_RECTS.add(new HitRect(cx, rawCy, cellW, cellH,
+        // Large Mouse-UI card with Crisp Vector Icon + Optical Centered Name & Subtitle + Hover Favorite/Pin Micro-Actions!
+        int iconCol = (m.isEnabled() && !AppleUiRenderer.isMechanical()) ? 0xEEFFFFFF : accent;
+        AppleUiRenderer.drawModuleIcon(g, m, cx + 8, cy + 8, 11, iconCol);
+
+        String name = YeHdFont.clipToWidth(rawName, 8.9f, true, cellW - 38);
+        YeHdFont.draw(g, name, cx + 23, cy + 7.0f, 8.9f, txtCol, false, true);
+
+        String sub = m.getKeybind() > 0 ? ("[" + KeyCombo.format(m.getKeybind()) + "]")
+                : (m.isEnabled() ? ConfigManager.tr("开启", "On") : ConfigManager.tr("关闭", "Off"));
+        int subCol = (m.isEnabled() && !AppleUiRenderer.isMechanical()) ? 0xD8FFFFFF : AppleUiRenderer.textTertiary();
+        YeHdFont.draw(g, sub, cx + 23, cy + 22.0f, 7.7f, subCol, false, false);
+
+        // Favorite (★) & Pin (▲) badges on right side when hovered or active
+        boolean fav = ConfigManager.isFavorite(m);
+        boolean pin = ConfigManager.isPinned(m);
+        if (hovered || fav || pin) {
+            int starX = cx + cellW - 14;
+            int pinX = cx + cellW - 26;
+            if (hovered || pin) {
+                YeHdFont.draw(g, "▲", pinX, cy + 6.5f, 7.2f, pin ? 0xFF38BDF8 : 0x7794A3B8, false, true);
+                addClippedHit(pinX - 2, rawCy + 3, 12, 14, clipY, clipH, () -> {
+                    playClick();
+                    ConfigManager.togglePinned(m);
+                }, null, null, null);
+            }
+            if (hovered || fav) {
+                YeHdFont.draw(g, "★", starX, cy + 6.0f, 7.8f, fav ? 0xFFFACC15 : 0x7794A3B8, false, true);
+                addClippedHit(starX - 2, rawCy + 3, 13, 14, clipY, clipH, () -> {
+                    playClick();
+                    ConfigManager.toggleFavorite(m);
+                }, null, null, null);
+            }
+        }
+
+        // Main card hit rect (added BEFORE micro-buttons? Wait: YeMouseScreen sorts higher zPriority first, or iterates reverse for equal zPriority!
+        // Since micro-buttons were added BEFORE main card, let's put main card BEFORE micro-buttons or give micro-buttons zPriority = 1!)
+        addClippedHit(cx, rawCy, cellW - (hovered ? 28 : 0), cellH, clipY, clipH,
+                () -> {
+                    playClick();
+                    m.toggle();
+                    ConfigManager.saveAsync();
+                },
+                () -> openModuleDetail(m),
+                null, null);
+        if (hovered) {
+            // Lower half of right edge still toggles/opens detail cleanly
+            addClippedHit(cx + cellW - 28, rawCy + 18, 28, cellH - 18, clipY, clipH,
                     () -> {
                         playClick();
                         m.toggle();
                         ConfigManager.saveAsync();
                     },
                     () -> openModuleDetail(m),
-                    null));
+                    null, null);
         }
     }
 
@@ -467,185 +667,161 @@ public final class YeQuickMenu {
         playClick();
         activeModule = m;
         closeOverlays();
-        pageSlide = 16.0f;
+        pageSlide = 14.0f;
         selectedIndex = 0;
         scrollOffset = 0.0;
         targetScroll = 0.0;
     }
 
-    /**
-     * Module Detail Inspector:
-     * - Real 3D / High-DPI Live Preview Card at top
-     * - Automatic 2-Column Balanced Table Layout when a module has >= 4 settings!
-     */
+    // ==================== 3. MODULE DETAIL INSPECTOR (UPPER FUNCTIONAL / LOWER DISPLAY & COLOR) ====================
+
     private static void renderModuleDetail(GuiGraphics g, Font font, int x, int y, int w, int h,
                                            int mx, int my, boolean mouseUnlocked, int accent) {
-        boolean backHov = mouseUnlocked && inBounds(mx, my, x, y, 32, 18);
-        AppleUiRenderer.drawElevatedCard(g, x, y, 32, 18, 6, 0f, backHov ? 1f : 0f, accent);
-        AppleUiRenderer.drawCenteredSmooth(g, "←", x + 16, y + 4.0f, 9.5f, AppleUiRenderer.textPrimary(), true);
-        HIT_RECTS.add(new HitRect(x, y, 32, 18, () -> {
+        boolean backHov = mouseUnlocked && inBounds(mx, my, x, y, 28, 18);
+        AppleUiRenderer.drawElevatedCard(g, x, y, 28, 18, 5, 0f, backHov ? 1f : 0f, accent);
+        YeHdFont.drawCenteredInBox(g, "←", x, y, 28, 18, 9.2f, AppleUiRenderer.textPrimary(), false, true);
+        HIT_RECTS.add(new HitRect(x, y, 28, 18, () -> {
             playClick();
             activeModule = null;
             closeOverlays();
-            pageSlide = -16.0f;
+            pageSlide = -14.0f;
             selectedIndex = 0;
             scrollOffset = 0.0;
             targetScroll = 0.0;
-        }, null, null));
+        }, null, null, 2));
 
         String mName = ConfigManager.english ? activeModule.getSubtitle() : activeModule.getName();
-        AppleUiRenderer.drawBoldText(g, mName, x + 38, y + 4.5f, 9.6f, AppleUiRenderer.textPrimary());
+        AppleUiRenderer.drawBoldText(g, mName, x + 34, YeHdFont.vCenterY(y, 18, 9.5f), 9.5f, AppleUiRenderer.textPrimary());
 
-        // Per-module Keybind Pill
-        boolean listeningThis = (listeningModuleKey == activeModule);
-        String kbText = listeningThis ? ConfigManager.tr("请按键...", "Press...")
-                : (ConfigManager.tr("快捷键: ", "Key: ") + (activeModule.getKeybind() > 0 ? keyName(activeModule.getKeybind()) : ConfigManager.tr("无", "None")));
-        int kbW = Math.max(48, YeHdFont.width(kbText, 8.2f, false) + 14);
-        int kbX = x + w - 34 - kbW - 5;
-        AppleUiRenderer.drawRoundedRect(g, kbX, y + 1, kbW, 16, 5, listeningThis ? 0xFFEF4444 : AppleUiRenderer.bgCardHover());
-        AppleUiRenderer.drawCenteredSmooth(g, kbText, kbX + kbW * 0.5f, y + 4.2f, 8.2f,
-                listeningThis ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textSecondary(), false);
-        HIT_RECTS.add(new HitRect(kbX, y + 1, kbW, 16,
-                () -> {
-                    playClick();
-                    listeningModuleKey = (listeningModuleKey == activeModule) ? null : activeModule;
-                    listeningKeySlot = 0;
-                },
-                () -> {
-                    playClick();
-                    activeModule.setKeybind(-1);
-                    listeningModuleKey = null;
-                }, null));
+        int rightCursor = x + w - 34;
 
-        // Single-Module Reset Pill
-        String rstTxt = ConfigManager.tr("重置", "Reset");
-        int rstW = Math.max(36, YeHdFont.width(rstTxt, 8.2f, false) + 12);
-        int rstX = kbX - rstW - 5;
-        boolean rstHov = mouseUnlocked && inBounds(mx, my, rstX, y + 1, rstW, 16);
-        AppleUiRenderer.drawRoundedRect(g, rstX, y + 1, rstW, 16, 5, rstHov ? 0xFFE11D48 : AppleUiRenderer.bgCardHover());
-        AppleUiRenderer.drawCenteredSmooth(g, rstTxt, rstX + rstW * 0.5f, y + 4.2f, 8.2f,
-                rstHov ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textSecondary(), false);
-        HIT_RECTS.add(new HitRect(rstX, y + 1, rstW, 16, () -> {
-            playClick();
-            activeModule.resetToDefault();
-            openDropdown = null;
-            showToast(ConfigManager.tr("已将「" + mName + "」恢复默认", "Reset " + mName), 0xFF38BDF8);
-        }, null, null));
-
+        // Enable Switch at far right
         float mSwitch = AppleUiRenderer.animChannel("dsw_" + activeModule.getId(), activeModule.isEnabled() ? 1f : 0f, 18f);
         AppleUiRenderer.drawPillSwitch(g, x + w - 30, y + 2, 30, 15, mSwitch, accent);
         HIT_RECTS.add(new HitRect(x + w - 30, y + 2, 30, 15, () -> {
             playClick();
             activeModule.toggle();
             ConfigManager.saveAsync();
-        }, null, null));
+        }, null, null, 2));
 
-        int listY = y + 23;
-        int listH = h - 23;
+        if (mouseUnlocked) {
+            // 1) Module Keybind Pill (Single or Combo!)
+            String kbId = "mod_kb_" + activeModule.getId();
+            boolean listeningKb = kbId.equals(activeKeybindId);
+            String kbText = listeningKb ? liveBindPrompt()
+                    : (ConfigManager.tr("键: ", "Key: ") + KeyCombo.format(activeModule.getKeybind()));
+            int kbW = Math.max(46, YeHdFont.width(kbText, 8.0f, false) + 12);
+            rightCursor -= (kbW + 5);
+            int kbX = rightCursor;
+            AppleUiRenderer.drawRoundedRect(g, kbX, y + 1, kbW, 16, 5, listeningKb ? 0xFFEF4444 : AppleUiRenderer.bgCardHover());
+            YeHdFont.drawCenteredInBox(g, kbText, kbX, y + 1, kbW, 16, 8.0f, listeningKb ? 0xFFFFFFFF : AppleUiRenderer.textSecondary(), false, false);
+            HIT_RECTS.add(new HitRect(kbX, y + 1, kbW, 16,
+                    () -> startKeybindListen(kbId, activeModule::setKeybind),
+                    () -> { playClick(); activeModule.setKeybind(-1); stopKeybindListen(); }, null, 2));
+
+            // 2) Quick Preset Cycle Key Pill (for Wings, Filters, Shaders, Sky, etc.!)
+            if (activeModule.hasCycleablePreset()) {
+                String cycId = "mod_cyc_" + activeModule.getId();
+                boolean listeningCyc = cycId.equals(activeKeybindId);
+                String cycTxt = listeningCyc ? liveBindPrompt()
+                        : (ConfigManager.tr("切效: ", "Next: ") + KeyCombo.format(activeModule.getPresetCycleKey()));
+                int cycW = Math.max(48, YeHdFont.width(cycTxt, 8.0f, false) + 12);
+                rightCursor -= (cycW + 5);
+                int cycX = rightCursor;
+                AppleUiRenderer.drawRoundedRect(g, cycX, y + 1, cycW, 16, 5, listeningCyc ? 0xFFEF4444 : AppleUiRenderer.bgCardHover());
+                YeHdFont.drawCenteredInBox(g, cycTxt, cycX, y + 1, cycW, 16, 8.0f, listeningCyc ? 0xFFFFFFFF : AppleUiRenderer.textSecondary(), false, false);
+                HIT_RECTS.add(new HitRect(cycX, y + 1, cycW, 16,
+                        () -> startKeybindListen(cycId, activeModule::setPresetCycleKey),
+                        () -> { playClick(); activeModule.setPresetCycleKey(-1); stopKeybindListen(); }, null, 2));
+            }
+
+            // 3) Reset Button (with Confirmation Modal!)
+            String rstTxt = ConfigManager.tr("重置", "Reset");
+            int rstW = Math.max(34, YeHdFont.width(rstTxt, 8.0f, false) + 12);
+            rightCursor -= (rstW + 5);
+            int rstX = rightCursor;
+            boolean rstHov = inBounds(mx, my, rstX, y + 1, rstW, 16);
+            AppleUiRenderer.drawRoundedRect(g, rstX, y + 1, rstW, 16, 5, rstHov ? 0xFFE11D48 : AppleUiRenderer.bgCardHover());
+            YeHdFont.drawCenteredInBox(g, rstTxt, rstX, y + 1, rstW, 16, 8.0f, rstHov ? 0xFFFFFFFF : AppleUiRenderer.textSecondary(), false, false);
+            HIT_RECTS.add(new HitRect(rstX, y + 1, rstW, 16, () -> {
+                playClick();
+                Module target = activeModule;
+                requestConfirmation(ConfigManager.tr("确定将「" + mName + "」重置为默认参数吗？", "Reset " + mName + " to default?"), () -> {
+                    target.resetToDefault();
+                    openDropdown = null;
+                    showToast(ConfigManager.tr("已恢复默认: " + mName, "Reset " + mName), accent);
+                });
+            }, null, null, 2));
+
+            // 4) Favorite & Pin quick toggles
+            boolean fav = ConfigManager.isFavorite(activeModule);
+            rightCursor -= 22;
+            int favX = rightCursor;
+            AppleUiRenderer.drawRoundedRect(g, favX, y + 1, 18, 16, 5, AppleUiRenderer.bgCardHover());
+            YeHdFont.drawCenteredInBox(g, "★", favX, y + 1, 18, 16, 8.4f, fav ? 0xFFFACC15 : AppleUiRenderer.textTertiary(), false, true);
+            HIT_RECTS.add(new HitRect(favX, y + 1, 18, 16, () -> { playClick(); ConfigManager.toggleFavorite(activeModule); }, null, null, 2));
+
+            boolean pin = ConfigManager.isPinned(activeModule);
+            rightCursor -= 22;
+            int pinX = rightCursor;
+            AppleUiRenderer.drawRoundedRect(g, pinX, y + 1, 18, 16, 5, AppleUiRenderer.bgCardHover());
+            YeHdFont.drawCenteredInBox(g, "▲", pinX, y + 1, 18, 16, 8.0f, pin ? 0xFF38BDF8 : AppleUiRenderer.textTertiary(), false, true);
+            HIT_RECTS.add(new HitRect(pinX, y + 1, 18, 16, () -> { playClick(); ConfigManager.togglePinned(activeModule); }, null, null, 2));
+        }
+
+        int listY = y + 22;
+        int listH = h - 22;
         int rowW = w - 6;
 
         List<Setting<?>> rawSettings = getDisplaySettings(activeModule);
-        List<Setting<?>> settings = new ArrayList<>();
+        List<Setting<?>> funcSettings = new ArrayList<>();
+        List<Setting<?>> dispSettings = new ArrayList<>();
+        List<Setting<?>> flatNavSettings = new ArrayList<>();
+
         for (Setting<?> s : rawSettings) {
             if ((activeModule instanceof CustomCapeModule && s.getId().equals("selectedCape"))
                     || (activeModule instanceof CustomSkinModule && s.getId().equals("selectedSkin"))) {
                 continue;
             }
-            settings.add(s);
+            if (s.isDisplayGroup()) dispSettings.add(s);
+            else funcSettings.add(s);
         }
-        if (selectedIndex >= settings.size()) selectedIndex = Math.max(0, settings.size() - 1);
+        flatNavSettings.addAll(funcSettings);
+        flatNavSettings.addAll(dispSettings);
+        if (selectedIndex >= flatNavSettings.size()) selectedIndex = Math.max(0, flatNavSettings.size() - 1);
 
         g.enableScissor(x - 1, listY, x + w + 1, listY + listH);
         int startRy = listY - (int) Math.round(scrollOffset);
         int ry = startRy;
 
-        ry += YePreviewRenderer.renderModulePreviewCard(g, font, activeModule, x, ry, rowW);
-
-        // Multi-column Cape & 73-Skin Gallery
-        if (activeModule instanceof CustomCapeModule cm) {
-            List<CapeManager.CapeEntry> capes = CapeManager.getAllCapes();
-            int colW = (rowW - 5) / 2;
-            for (int i = 0; i < capes.size(); i++) {
-                CapeManager.CapeEntry ce = capes.get(i);
-                int cx = x + (i % 2) * (colW + 5);
-                int cy = ry + (i / 2) * 23;
-                if (cy + 20 >= listY && cy <= listY + listH) {
-                    boolean sel = ce.id().equals(cm.selectedCape.get());
-                    boolean hov = mouseUnlocked && openDropdown == null && inBounds(mx, my, cx, cy, colW, 20);
-                    AppleUiRenderer.drawElevatedCard(g, cx, cy, colW, 20, 5, sel ? 1f : 0f, hov ? 1f : 0f, accent);
-                    g.blit(RenderPipelines.GUI_TEXTURED, ce.textureId(), cx + 5, cy + 2, 1.0f, 1.0f, 10, 16, 10, 16, 64, 32);
-                    YeHdFont.draw(g, YeHdFont.clipToWidth(ce.displayName(), 8.4f, sel, colW - 22), cx + 19, cy + 5.5f, 8.4f,
-                            sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary(), false, sel);
-                    if (cy + 20 > listY + 2 && cy < listY + listH - 2) {
-                        HIT_RECTS.add(new HitRect(cx, cy, colW, 20, () -> {
-                            playClick();
-                            cm.selectedCape.set(ce.id());
-                            cm.setEnabled(true);
-                            ConfigManager.saveAsync();
-                        }, null, null));
-                    }
-                }
-            }
-            ry += ((capes.size() + 1) / 2) * 23 + 3;
-        } else if (activeModule instanceof CustomSkinModule sm) {
-            List<SkinManager.SkinEntry> skins = SkinManager.getAllSkins();
-            int cols = 3;
-            int gap = 4;
-            int colW = (rowW - (cols - 1) * gap) / cols;
-            for (int i = 0; i < skins.size(); i++) {
-                SkinManager.SkinEntry se = skins.get(i);
-                int c = i % cols;
-                int cx = x + c * (colW + gap);
-                int cy = ry + (i / cols) * 23;
-                if (cy + 20 >= listY && cy <= listY + listH) {
-                    boolean sel = se.id().equals(sm.selectedSkin.get());
-                    boolean hov = mouseUnlocked && openDropdown == null && inBounds(mx, my, cx, cy, colW, 20);
-                    AppleUiRenderer.drawElevatedCard(g, cx, cy, colW, 20, 5, sel ? 1f : 0f, hov ? 1f : 0f, accent);
-                    g.blit(RenderPipelines.GUI_TEXTURED, se.textureId(), cx + 4, cy + 2, 8.0f, 8.0f, 16, 16, 8, 8, 64, 64);
-                    g.blit(RenderPipelines.GUI_TEXTURED, se.textureId(), cx + 4, cy + 2, 40.0f, 8.0f, 16, 16, 8, 8, 64, 64);
-                    String sName = YeHdFont.clipToWidth(se.displayName(), 8.0f, sel, colW - 25);
-                    YeHdFont.draw(g, sName, cx + 23, cy + 5.5f, 8.0f,
-                            sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary(), false, sel);
-                    if (cy + 20 > listY + 2 && cy < listY + listH - 2) {
-                        HIT_RECTS.add(new HitRect(cx, cy, colW, 20, () -> {
-                            playClick();
-                            sm.selectedSkin.set(se.id());
-                            sm.setEnabled(true);
-                            ConfigManager.saveAsync();
-                        }, null, null));
-                    }
-                }
-            }
-            ry += ((skins.size() + cols - 1) / cols) * 23 + 3;
+        if (mouseUnlocked) {
+            ry += YePreviewRenderer.renderModulePreviewCard(g, font, activeModule, x, ry, rowW);
         }
 
-        // 2-Column Balanced Table Layout when >= 4 settings!
-        boolean twoCol = settings.size() >= 4;
-        if (!twoCol) {
-            for (int i = 0; i < settings.size(); i++) {
-                Setting<?> s = settings.get(i);
-                int cellH = (s instanceof DoubleSetting) ? 29 : 22;
-                renderSettingCell(g, s, x, ry, rowW, cellH, listY, listH, mx, my, mouseUnlocked, !mouseUnlocked && i == selectedIndex, accent, false);
-                ry += cellH + 4;
-            }
-        } else {
-            int colGap = 6;
-            int colW = (rowW - colGap) / 2;
-            for (int i = 0; i < settings.size(); i += 2) {
-                Setting<?> sL = settings.get(i);
-                Setting<?> sR = (i + 1 < settings.size()) ? settings.get(i + 1) : null;
-                int hL = (sL instanceof DoubleSetting) ? 29 : 23;
-                int hR = (sR instanceof DoubleSetting) ? 29 : 23;
-                int rowH = (sR == null) ? hL : Math.max(hL, hR);
+        // Cape & Skin Galleries
+        if (activeModule instanceof CustomCapeModule cm) {
+            ry = renderCapeGallery(g, cm, x, ry, rowW, listY, listH, mx, my, mouseUnlocked, accent);
+        } else if (activeModule instanceof CustomSkinModule sm) {
+            ry = renderSkinGallery(g, sm, x, ry, rowW, listY, listH, mx, my, mouseUnlocked, accent);
+        } else if (activeModule instanceof BlockSearchModule bsm && mouseUnlocked) {
+            ry = renderBlockSearchResultsPanel(g, bsm, x, ry, rowW, listY, listH, mx, my, accent);
+        }
 
-                if (sR == null) {
-                    renderSettingCell(g, sL, x, ry, rowW, rowH, listY, listH, mx, my, mouseUnlocked, !mouseUnlocked && i == selectedIndex, accent, false);
-                } else {
-                    renderSettingCell(g, sL, x, ry, colW, rowH, listY, listH, mx, my, mouseUnlocked, !mouseUnlocked && i == selectedIndex, accent, true);
-                    renderSettingCell(g, sR, x + colW + colGap, ry, colW, rowH, listY, listH, mx, my, mouseUnlocked, !mouseUnlocked && (i + 1) == selectedIndex, accent, true);
-                }
-                ry += rowH + 4;
+        // Upper Section: 功能参数
+        if (!funcSettings.isEmpty()) {
+            if (mouseUnlocked && !dispSettings.isEmpty()) {
+                ry = drawSettingSectionHeader(g, ConfigManager.tr("功能设置", "Function Settings"), x, ry, rowW, listY, listH, accent);
             }
+            ry = renderSettingsBlock(g, funcSettings, flatNavSettings, x, ry, rowW, listY, listH, mx, my, mouseUnlocked, accent);
+        }
+
+        // Lower Section: 显示与色彩
+        if (!dispSettings.isEmpty()) {
+            if (mouseUnlocked && !funcSettings.isEmpty()) {
+                ry += 3;
+                ry = drawSettingSectionHeader(g, ConfigManager.tr("显示与色彩", "Display & Color"), x, ry, rowW, listY, listH, 0xFFA855F7);
+            }
+            ry = renderSettingsBlock(g, dispSettings, flatNavSettings, x, ry, rowW, listY, listH, mx, my, mouseUnlocked, accent);
         }
 
         int contentH = (ry - startRy) + 4;
@@ -654,40 +830,93 @@ public final class YeQuickMenu {
         g.disableScissor();
     }
 
+    private static int drawSettingSectionHeader(GuiGraphics g, String label, int x, int ry, int rowW, int clipY, int clipH, int barCol) {
+        if (ry + 15 >= clipY && ry <= clipY + clipH) {
+            AppleUiRenderer.drawRoundedRect(g, x + 1, ry + 2, 2.8f, 9.5f, 1.4f, barCol);
+            YeHdFont.draw(g, label, x + 7, YeHdFont.vCenterY(ry, 14, 8.2f), 8.2f, AppleUiRenderer.textSecondary(), false, true);
+            int tw = YeHdFont.width(label, 8.2f, true);
+            g.fill(x + 12 + tw, ry + 7, x + rowW - 4, ry + 8, AppleUiRenderer.borderSubtle());
+        }
+        return ry + 15;
+    }
+
+    private static int renderSettingsBlock(GuiGraphics g, List<Setting<?>> group, List<Setting<?>> allNav,
+                                           int x, int ry, int rowW, int listY, int listH,
+                                           int mx, int my, boolean mouseUnlocked, int accent) {
+        boolean twoCol = mouseUnlocked && group.size() >= 2;
+        if (!twoCol) {
+            for (Setting<?> s : group) {
+                int navIdx = allNav.indexOf(s);
+                int cellH = (s instanceof DoubleSetting) ? 28 : 22;
+                renderSettingCell(g, s, x, ry, rowW, cellH, listY, listH, mx, my, mouseUnlocked, !mouseUnlocked && navIdx == selectedIndex, accent, false);
+                ry += cellH + 4;
+            }
+        } else {
+            int colGap = 6;
+            int colW = (rowW - colGap) / 2;
+            for (int i = 0; i < group.size(); i += 2) {
+                Setting<?> sL = group.get(i);
+                Setting<?> sR = (i + 1 < group.size()) ? group.get(i + 1) : null;
+                int hL = (sL instanceof DoubleSetting) ? 28 : 23;
+                int hR = (sR instanceof DoubleSetting) ? 28 : 23;
+                int rowH = (sR == null) ? hL : Math.max(hL, hR);
+
+                if (sR == null) {
+                    renderSettingCell(g, sL, x, ry, rowW, rowH, listY, listH, mx, my, true, false, accent, false);
+                } else {
+                    renderSettingCell(g, sL, x, ry, colW, rowH, listY, listH, mx, my, true, false, accent, true);
+                    renderSettingCell(g, sR, x + colW + colGap, ry, colW, rowH, listY, listH, mx, my, true, false, accent, true);
+                }
+                ry += rowH + 4;
+            }
+        }
+        return ry;
+    }
+
     private static void renderSettingCell(GuiGraphics g, Setting<?> s, int cx, int cy, int cw, int ch,
                                           int clipY, int clipH, int mx, int my, boolean mouseUnlocked,
                                           boolean keySel, int accent, boolean compactCol) {
-        if (cy + ch < clipY - 2 || cy > clipY + clipH + 2) return;
+        if (cy + ch < clipY || cy > clipY + clipH) return;
 
-        boolean hov = mouseUnlocked && openDropdown == null && inBounds(mx, my, cx, cy, cw, ch);
+        boolean hov = mouseUnlocked && !hasModalOpen() && openDropdown == null
+                && mx >= cx && mx <= cx + cw && my >= Math.max(clipY, cy) && my <= Math.min(clipY + clipH, cy + ch);
         float hProg = AppleUiRenderer.animChannel("shov_" + activeModule.getId() + "_" + s.getId(), (hov || keySel) ? 1f : 0f, 18f);
         AppleUiRenderer.drawElevatedCard(g, cx, cy, cw, ch, 6, 0f, hProg, accent);
         if (keySel) {
             AppleUiRenderer.drawRoundedOutline(g, cx, cy, cw, ch, 6, 1.5f, accent);
         }
 
-        boolean inClip = cy + ch > clipY + 2 && cy < clipY + clipH - 2;
-        float labelSize = compactCol ? 8.3f : 8.7f;
+        float labelSize = compactCol ? 8.3f : 8.6f;
 
         if (s instanceof BoolSetting bs) {
             String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, cw - 42);
-            YeHdFont.draw(g, lbl, cx + 7, cy + (ch - 9) * 0.5f, labelSize, AppleUiRenderer.textPrimary(), false, false);
+            YeHdFont.draw(g, lbl, cx + 7, YeHdFont.vCenterY(cy, ch, labelSize), labelSize, AppleUiRenderer.textPrimary(), false, false);
             float bProg = AppleUiRenderer.animChannel("bsw_" + activeModule.getId() + "_" + bs.getId(), bs.get() ? 1f : 0f, 18f);
             AppleUiRenderer.drawPillSwitch(g, cx + cw - 33, cy + (ch - 14) / 2, 27, 14, bProg, accent);
-            if (inClip) {
-                HIT_RECTS.add(new HitRect(cx, cy, cw, ch, () -> {
-                    playClick();
-                    openDropdown = null;
-                    bs.toggle();
-                    ConfigManager.saveAsync();
-                }, null, null));
-            }
+            addClippedHit(cx, cy, cw, ch, clipY, clipY + clipH, () -> {
+                playClick();
+                openDropdown = null;
+                bs.toggle();
+                ConfigManager.saveAsync();
+            }, null, null, null);
         } else if (s instanceof DoubleSetting ds) {
-            String vt = formatDouble(ds.get());
-            float vtW = YeHdFont.widthF(vt, labelSize, true);
+            String numKey = "ds_" + activeModule.getId() + "_" + ds.getId();
+            boolean editingThis = (textInputKind == 5 && numKey.equals(activeNumberKey));
+            String vt = editingThis ? (textInputBuffer + "|") : formatDouble(ds.get(), ds.getStep());
+            float vtW = Math.max(24f, YeHdFont.widthF(vt, labelSize, true));
             String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, cw - vtW - 18);
-            YeHdFont.draw(g, lbl, cx + 7, cy + 4.5f, labelSize, AppleUiRenderer.textPrimary(), false, false);
-            YeHdFont.draw(g, vt, cx + cw - 7 - vtW, cy + 4.5f, labelSize, accent, false, true);
+            YeHdFont.draw(g, lbl, cx + 7, cy + 3.8f, labelSize, AppleUiRenderer.textPrimary(), false, false);
+
+            int numBoxX = Math.round(cx + cw - 9 - vtW);
+            if (editingThis) {
+                AppleUiRenderer.drawRoundedRect(g, numBoxX - 3, cy + 2, vtW + 6, 13, 3, 0xEE080C16);
+                AppleUiRenderer.drawRoundedOutline(g, numBoxX - 3, cy + 2, vtW + 6, 13, 3, 1.0f, accent);
+            }
+            YeHdFont.draw(g, vt, numBoxX, cy + 3.8f, labelSize, editingThis ? 0xFFFFFFFF : accent, false, true);
+
+            // Double-clicking the numeric readout opens inline manual keyboard input!
+            addClippedHit(numBoxX - 4, cy + 1, Math.round(vtW) + 8, 14, clipY, clipY + clipH,
+                    null, null, null, () -> startNumberEdit(numKey, formatDouble(ds.get(), ds.getStep()), ds::set));
 
             int bw = cw - 14;
             int bx = cx + 7;
@@ -698,51 +927,727 @@ public final class YeQuickMenu {
             float fillW = Math.max(3.6f, bw * pct);
             AppleUiRenderer.drawRoundedRect(g, bx, by, fillW, 3.6f, 1.8f, accent);
             AppleUiRenderer.drawCircle(g, bx + fillW - 4.0f, by - 2.2f, 8.0f, 0xFFFFFFFF);
-            if (inClip) {
-                HIT_RECTS.add(new HitRect(bx - 3, by - 7, bw + 6, 16, null, null, ds));
-            }
+            addClippedHit(bx - 3, by - 6, bw + 6, 14, clipY, clipY + clipH, null, null, new SliderBinding() {
+                @Override public double getMin() { return ds.getMin(); }
+                @Override public double getMax() { return ds.getMax(); }
+                @Override public void setValue(double v) { ds.set(v); }
+            }, null);
         } else if (s instanceof EnumSetting<?> es) {
             String val = enumLabel(es.get()) + " ▾";
-            int maxBtnW = compactCol ? (cw / 2 + 12) : (cw / 2 + 24);
-            int bw = Math.min(maxBtnW, Math.max(compactCol ? 64 : 78, YeHdFont.width(val, 8.1f, false) + 14));
+            int maxBtnW = compactCol ? (cw / 2 + 16) : (cw / 2 + 28);
+            int bw = Math.min(maxBtnW, Math.max(compactCol ? 64 : 78, YeHdFont.width(val, 8.0f, false) + 14));
             int bx = cx + cw - 5 - bw;
             int by = cy + (ch - 16) / 2;
 
             String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, cw - bw - 14);
-            YeHdFont.draw(g, lbl, cx + 7, cy + (ch - 9) * 0.5f, labelSize, AppleUiRenderer.textPrimary(), false, false);
+            YeHdFont.draw(g, lbl, cx + 7, YeHdFont.vCenterY(cy, ch, labelSize), labelSize, AppleUiRenderer.textPrimary(), false, false);
 
             boolean isOpen = (openDropdown == es);
             AppleUiRenderer.drawRoundedRect(g, bx, by, bw, 16, 5, isOpen ? accent : AppleUiRenderer.bgCardHover());
-            AppleUiRenderer.drawCenteredSmooth(g, YeHdFont.clipToWidth(val, 8.1f, false, bw - 8), bx + bw * 0.5f, by + 3.8f, 8.1f,
-                    isOpen ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary(), false);
-            if (inClip) {
-                HIT_RECTS.add(new HitRect(bx, by, bw, 16, () -> {
-                    playClick();
-                    if (openDropdown == es) {
-                        openDropdown = null;
-                    } else {
-                        openDropdown = es;
-                        dropScroll = 0.0;
-                        dropX = bx;
-                        dropY = by + 18;
-                        dropW = Math.max(bw, 108);
-                    }
-                }, null, null));
-            }
-        } else if (s instanceof ActionSetting as) {
-            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, cw - 52);
-            YeHdFont.draw(g, lbl, cx + 7, cy + (ch - 9) * 0.5f, labelSize, AppleUiRenderer.textPrimary(), false, false);
-            int bx = cx + cw - 45;
+            YeHdFont.drawCenteredInBox(g, YeHdFont.clipToWidth(val, 8.0f, false, bw - 8), bx, by, bw, 16, 8.0f,
+                    isOpen ? 0xFFFFFFFF : AppleUiRenderer.textPrimary(), false, false);
+            addClippedHit(bx, by, bw, 16, clipY, clipY + clipH, () -> {
+                playClick();
+                if (openDropdown == es) openDropdown = null;
+                else {
+                    openDropdown = es;
+                    dropScroll = 0.0;
+                    dropX = bx;
+                    dropY = by + 18;
+                    dropW = Math.max(bw, 114);
+                }
+            }, null, null, null);
+        } else if (s instanceof ColorSetting cs) {
+            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, cw - 72);
+            YeHdFont.draw(g, lbl, cx + 7, YeHdFont.vCenterY(cy, ch, labelSize), labelSize, AppleUiRenderer.textPrimary(), false, false);
+            int bx = cx + cw - 66;
             int by = cy + (ch - 16) / 2;
-            AppleUiRenderer.drawRoundedRect(g, bx, by, 40, 16, 5, accent);
-            AppleUiRenderer.drawCenteredSmooth(g, ConfigManager.tr("执行", "Run"), bx + 20, by + 3.8f, 8.1f, AppleUiRenderer.TEXT_PRIMARY, true);
-            if (inClip) {
-                HIT_RECTS.add(new HitRect(bx, by, 40, 16, () -> {
+            AppleUiRenderer.drawRoundedRect(g, bx, by, 61, 16, 5, AppleUiRenderer.bgCardHover());
+            AppleUiRenderer.drawRoundedRect(g, bx + 3, by + 3, 10, 10, 3, cs.getArgb());
+            YeHdFont.draw(g, cs.getHex(), bx + 16, YeHdFont.vCenterY(by, 16, 7.6f), 7.6f, AppleUiRenderer.textPrimary(), false, true);
+            addClippedHit(bx, by, 61, 16, clipY, clipY + clipH, () -> {
+                playClick();
+                openThemeCustomColor = false;
+                openColorSetting = (openColorSetting == cs) ? null : cs;
+                pickerX = bx - 80;
+                pickerY = by + 18;
+            }, null, null, null);
+        } else if (s instanceof KeybindSetting ks) {
+            String kid = "ks_" + activeModule.getId() + "_" + ks.getId();
+            boolean listening = kid.equals(activeKeybindId);
+            String kVal = listening ? liveBindPrompt() : ks.formatKey();
+            int bw = Math.max(52, YeHdFont.width(kVal, 8.0f, false) + 12);
+            int bx = cx + cw - 5 - bw;
+            int by = cy + (ch - 16) / 2;
+            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, cw - bw - 14);
+            YeHdFont.draw(g, lbl, cx + 7, YeHdFont.vCenterY(cy, ch, labelSize), labelSize, AppleUiRenderer.textPrimary(), false, false);
+            AppleUiRenderer.drawRoundedRect(g, bx, by, bw, 16, 5, listening ? 0xFFEF4444 : AppleUiRenderer.bgCardHover());
+            YeHdFont.drawCenteredInBox(g, kVal, bx, by, bw, 16, 8.0f, listening ? 0xFFFFFFFF : accent, false, true);
+            addClippedHit(bx, by, bw, 16, clipY, clipY + clipH,
+                    () -> startKeybindListen(kid, ks::set),
+                    () -> { playClick(); ks.set(-1); stopKeybindListen(); }, null, null);
+        } else if (s instanceof StringSetting ss) {
+            boolean editing = (textInputKind == 4 && activeStringSetting == ss);
+            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, cw * 0.42f);
+            YeHdFont.draw(g, lbl, cx + 7, YeHdFont.vCenterY(cy, ch, labelSize), labelSize, AppleUiRenderer.textPrimary(), false, false);
+            int bx = cx + Math.round(cw * 0.44f);
+            int bw = cw - Math.round(cw * 0.44f) - 5;
+            int by = cy + (ch - 16) / 2;
+            AppleUiRenderer.drawRoundedRect(g, bx, by, bw, 16, 4, 0xCC090D16);
+            AppleUiRenderer.drawRoundedOutline(g, bx, by, bw, 16, 4, 1.0f, editing ? accent : AppleUiRenderer.borderSubtle());
+            String txt = editing ? (textInputBuffer + "|") : ss.get();
+            YeHdFont.draw(g, YeHdFont.clipToWidth(txt, 7.9f, false, bw - 8), bx + 5, YeHdFont.vCenterY(by, 16, 7.9f), 7.9f, 0xFFF8FAFC, false, false);
+            addClippedHit(bx, by, bw, 16, clipY, clipY + clipH, () -> {
+                playClick();
+                commitInlineInputIfNumber();
+                textInputKind = 4;
+                activeStringSetting = ss;
+                textInputBuffer = ss.get();
+            }, null, null, null);
+        } else if (s instanceof ActionSetting as) {
+            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, cw - 54);
+            YeHdFont.draw(g, lbl, cx + 7, YeHdFont.vCenterY(cy, ch, labelSize), labelSize, AppleUiRenderer.textPrimary(), false, false);
+            int bx = cx + cw - 47;
+            int by = cy + (ch - 16) / 2;
+            AppleUiRenderer.drawRoundedRect(g, bx, by, 42, 16, 5, accent);
+            YeHdFont.drawCenteredInBox(g, ConfigManager.tr("打开", "Open"), bx, by, 42, 16, 8.0f, 0xFFFFFFFF, false, true);
+            addClippedHit(bx, by, 42, 16, clipY, clipY + clipH, () -> {
+                playClick();
+                as.trigger();
+            }, null, null, null);
+        }
+    }
+
+    private static int renderCapeGallery(GuiGraphics g, CustomCapeModule cm, int x, int ry, int rowW, int listY, int listH,
+                                         int mx, int my, boolean mouseUnlocked, int accent) {
+        List<CapeManager.CapeEntry> capes = CapeManager.getAllCapes();
+        int cols = mouseUnlocked ? 3 : 2;
+        int gap = 5;
+        int colW = (rowW - (cols - 1) * gap) / cols;
+        for (int i = 0; i < capes.size(); i++) {
+            CapeManager.CapeEntry ce = capes.get(i);
+            int cx = x + (i % cols) * (colW + gap);
+            int cy = ry + (i / cols) * 23;
+            if (cy + 20 >= listY && cy <= listY + listH) {
+                boolean sel = ce.id().equals(cm.selectedCape.get());
+                boolean hov = mouseUnlocked && inBounds(mx, my, cx, cy, colW, 20);
+                AppleUiRenderer.drawElevatedCard(g, cx, cy, colW, 20, 5, sel ? 1f : 0f, hov ? 1f : 0f, accent);
+                g.blit(RenderPipelines.GUI_TEXTURED, ce.textureId(), cx + 5, cy + 2, 1.0f, 1.0f, 10, 16, 10, 16, 64, 32);
+                YeHdFont.draw(g, YeHdFont.clipToWidth(ce.displayName(), 8.2f, sel, colW - 22), cx + 19, YeHdFont.vCenterY(cy, 20, 8.2f), 8.2f,
+                        sel ? 0xFFFFFFFF : AppleUiRenderer.textPrimary(), false, sel);
+                addClippedHit(cx, cy, colW, 20, listY, listY + listH, () -> {
                     playClick();
-                    as.trigger();
-                }, null, null));
+                    cm.selectedCape.set(ce.id());
+                    cm.setEnabled(true);
+                    ConfigManager.saveAsync();
+                }, null, null, null);
             }
         }
+        return ry + ((capes.size() + cols - 1) / cols) * 23 + 4;
+    }
+
+    private static int renderSkinGallery(GuiGraphics g, CustomSkinModule sm, int x, int ry, int rowW, int listY, int listH,
+                                         int mx, int my, boolean mouseUnlocked, int accent) {
+        List<SkinManager.SkinEntry> skins = SkinManager.getAllSkins();
+        int cols = mouseUnlocked ? 4 : 3;
+        int gap = 4;
+        int colW = (rowW - (cols - 1) * gap) / cols;
+        for (int i = 0; i < skins.size(); i++) {
+            SkinManager.SkinEntry se = skins.get(i);
+            int cx = x + (i % cols) * (colW + gap);
+            int cy = ry + (i / cols) * 23;
+            if (cy + 20 >= listY && cy <= listY + listH) {
+                boolean sel = se.id().equals(sm.selectedSkin.get());
+                boolean hov = mouseUnlocked && inBounds(mx, my, cx, cy, colW, 20);
+                AppleUiRenderer.drawElevatedCard(g, cx, cy, colW, 20, 5, sel ? 1f : 0f, hov ? 1f : 0f, accent);
+                g.blit(RenderPipelines.GUI_TEXTURED, se.textureId(), cx + 4, cy + 2, 8.0f, 8.0f, 16, 16, 8, 8, 64, 64);
+                g.blit(RenderPipelines.GUI_TEXTURED, se.textureId(), cx + 4, cy + 2, 40.0f, 8.0f, 16, 16, 8, 8, 64, 64);
+                YeHdFont.draw(g, YeHdFont.clipToWidth(se.displayName(), 7.9f, sel, colW - 24), cx + 23, YeHdFont.vCenterY(cy, 20, 7.9f), 7.9f,
+                        sel ? 0xFFFFFFFF : AppleUiRenderer.textPrimary(), false, sel);
+                addClippedHit(cx, cy, colW, 20, listY, listY + listH, () -> {
+                    playClick();
+                    sm.selectedSkin.set(se.id());
+                    sm.setEnabled(true);
+                    ConfigManager.saveAsync();
+                }, null, null, null);
+            }
+        }
+        return ry + ((skins.size() + cols - 1) / cols) * 23 + 4;
+    }
+
+    private static int renderBlockSearchResultsPanel(GuiGraphics g, BlockSearchModule bsm, int x, int ry, int rowW,
+                                                     int listY, int listH, int mx, int my, int accent) {
+        List<BlockSearchModule.SearchResult> res = bsm.getResults();
+        if (res.isEmpty()) return ry;
+
+        ry = drawSettingSectionHeader(g, "实时搜索坐标结果 (" + res.size() + " 处)", x, ry, rowW, listY, listH, 0xFF22D3EE);
+        int showCount = Math.min(24, res.size());
+        for (int i = 0; i < showCount; i++) {
+            BlockSearchModule.SearchResult r = res.get(i);
+            if (ry + 19 >= listY && ry <= listY + listH) {
+                boolean pinned = r.pos().equals(bsm.getPinnedTarget());
+                AppleUiRenderer.drawElevatedCard(g, x, ry, rowW, 18, 4, pinned ? 1f : 0f, 0f, accent);
+                String line = String.format(Locale.ROOT, "%s  [%d, %d, %d]  %.1fm",
+                        r.blockName(), r.pos().getX(), r.pos().getY(), r.pos().getZ(), r.distance());
+                YeHdFont.draw(g, line, x + 7, YeHdFont.vCenterY(ry, 18, 8.0f), 8.0f, 0xFFF8FAFC, false, pinned);
+
+                int pinBtnX = x + rowW - 96;
+                AppleUiRenderer.drawRoundedRect(g, pinBtnX, ry + 2, 42, 14, 3.5f, AppleUiRenderer.bgCardHover());
+                YeHdFont.drawCenteredInBox(g, pinned ? "已锁定" : "追踪", pinBtnX, ry + 2, 42, 14, 7.6f, accent, false, true);
+                addClippedHit(pinBtnX, ry + 2, 42, 14, listY, listY + listH, () -> {
+                    playClick();
+                    bsm.setPinnedTarget(pinned ? null : r.pos());
+                }, null, null, null);
+
+                int gotoBtnX = x + rowW - 50;
+                AppleUiRenderer.drawRoundedRect(g, gotoBtnX, ry + 2, 46, 14, 3.5f, accent);
+                YeHdFont.drawCenteredInBox(g, "前往", gotoBtnX, ry + 2, 46, 14, 7.6f, 0xFFFFFFFF, false, true);
+                addClippedHit(gotoBtnX, ry + 2, 46, 14, listY, listY + listH, () -> {
+                    playClick();
+                    bsm.navigateBaritoneTo(r.pos());
+                }, null, null, null);
+            }
+            ry += 20;
+        }
+        return ry + 4;
+    }
+
+    // ==================== 4. SETTINGS TAB (THEME & COLOR AT TOP, CONFIG AT BOTTOM!) ====================
+
+    private static void renderSettingsTab(GuiGraphics g, int x, int y, int w, int h,
+                                          int mx, int my, boolean mouseUnlocked, int accent) {
+        int startRy = y - (int) Math.round(scrollOffset);
+        int ry = startRy;
+        int rowW = w - 6;
+        int halfW = (rowW - 6) / 2;
+        int rxCol = x + halfW + 6;
+
+        // ---- TOP: APPEARANCE, THEME COLOR & SOUND ----
+        ry = drawSettingSectionHeader(g, ConfigManager.tr("界面风格、主题色与音效", "Style, Theme Color & Sound"), x, ry, rowW, y, h, accent);
+
+        // Row 1: UI Style Persona (丝滑风 vs 机械风) + Material Theme (深色 / 浅色 / 高斯玻璃)
+        AppleUiRenderer.drawElevatedCard(g, x, ry, halfW, 22, 6, 0f, (mouseUnlocked && inBounds(mx, my, x, ry, halfW, 22)) ? 1f : 0f, accent);
+        YeHdFont.draw(g, ConfigManager.tr("界面流派", "UI Style"), x + 8, YeHdFont.vCenterY(ry, 22, 8.5f), 8.5f, AppleUiRenderer.textPrimary(), false, false);
+        String stLbl = ConfigManager.english ? ConfigManager.uiStyle.en : ConfigManager.uiStyle.zh;
+        AppleUiRenderer.drawRoundedRect(g, x + halfW - 56, ry + 3, 50, 16, 5, accent);
+        YeHdFont.drawCenteredInBox(g, stLbl, x + halfW - 56, ry + 3, 50, 16, 8.1f, 0xFFFFFFFF, false, true);
+        addClippedHit(x, ry, halfW, 22, y, y + h, () -> {
+            playClick();
+            ConfigManager.uiStyle = (ConfigManager.uiStyle == ConfigManager.UiStyle.SILKY)
+                    ? ConfigManager.UiStyle.MECHANICAL : ConfigManager.UiStyle.SILKY;
+            ConfigManager.saveAsync();
+        }, null, null, null);
+
+        AppleUiRenderer.drawElevatedCard(g, rxCol, ry, halfW, 22, 6, 0f, (mouseUnlocked && inBounds(mx, my, rxCol, ry, halfW, 22)) ? 1f : 0f, accent);
+        YeHdFont.draw(g, ConfigManager.tr("外观主题", "Theme"), rxCol + 8, YeHdFont.vCenterY(ry, 22, 8.5f), 8.5f, AppleUiRenderer.textPrimary(), false, false);
+        String thLbl = ConfigManager.english ? ConfigManager.uiTheme.en : ConfigManager.uiTheme.zh;
+        AppleUiRenderer.drawRoundedRect(g, rxCol + halfW - 60, ry + 3, 54, 16, 5, accent);
+        YeHdFont.drawCenteredInBox(g, thLbl, rxCol + halfW - 60, ry + 3, 54, 16, 8.1f, 0xFFFFFFFF, false, true);
+        addClippedHit(rxCol, ry, halfW, 22, y, y + h, () -> { playClick(); AppleUiRenderer.cycleUiTheme(); }, null, null, null);
+        ry += 26;
+
+        // Row 2: Panel Opacity Slider (with double-click exact input!) + Font Switch (自带字体 vs 客户端字体)
+        renderCustomSliderCard(g, x, ry, halfW, ConfigManager.tr("面板不透明度", "UI Opacity"), "ui_opacity",
+                Math.round(ConfigManager.uiOpacity * 100) + "%",
+                ConfigManager.uiOpacity, 0.25, 1.00,
+                v -> { ConfigManager.uiOpacity = (float) Math.max(0.25, Math.min(1.0, v)); ConfigManager.saveAsync(); },
+                vPct -> { ConfigManager.uiOpacity = (float) Math.max(0.25, Math.min(1.0, vPct > 1.5 ? vPct / 100.0 : vPct)); ConfigManager.saveAsync(); },
+                y, h, mx, my, mouseUnlocked, accent);
+
+        AppleUiRenderer.drawElevatedCard(g, rxCol, ry, halfW, 28, 6, 0f, (mouseUnlocked && inBounds(mx, my, rxCol, ry, halfW, 28)) ? 1f : 0f, accent);
+        YeHdFont.draw(g, ConfigManager.tr("界面字体", "UI Font"), rxCol + 8, YeHdFont.vCenterY(ry, 28, 8.5f), 8.5f, AppleUiRenderer.textPrimary(), false, false);
+        String fntLbl = ConfigManager.useClientFont ? ConfigManager.tr("客户端字体", "Client") : ConfigManager.tr("自带字体", "Built-in");
+        AppleUiRenderer.drawRoundedRect(g, rxCol + halfW - 64, ry + 6, 58, 16, 5, accent);
+        YeHdFont.drawCenteredInBox(g, fntLbl, rxCol + halfW - 64, ry + 6, 58, 16, 8.0f, 0xFFFFFFFF, false, true);
+        addClippedHit(rxCol, ry, halfW, 28, y, y + h, () -> {
+            playClick();
+            ConfigManager.useClientFont = !ConfigManager.useClientFont;
+            ConfigManager.saveAsync();
+        }, null, null, null);
+        ry += 32;
+
+        // Theme Color Swatches + Draggable Custom Picker Button
+        ConfigManager.ThemeAccent[] accents = ConfigManager.ThemeAccent.values();
+        int cw = (rowW - (accents.length - 1) * 5) / accents.length;
+        for (int i = 0; i < accents.length; i++) {
+            ConfigManager.ThemeAccent ta = accents[i];
+            int cx = x + i * (cw + 5);
+            int swArgb = (ta == ConfigManager.ThemeAccent.CUSTOM) ? ConfigManager.getCustomAccentArgb() : ta.argb;
+            boolean sel = ConfigManager.themeAccent == ta;
+            boolean hov = mouseUnlocked && inBounds(mx, my, cx, ry, cw, 22);
+            AppleUiRenderer.drawElevatedCard(g, cx, ry, cw, 22, 6, sel ? 1f : 0f, hov ? 1f : 0f, swArgb);
+            if (!sel) {
+                AppleUiRenderer.drawCircle(g, cx + 6, ry + 6, 10, swArgb);
+            }
+            String label = ConfigManager.english ? ta.en : ta.zh;
+            YeHdFont.drawCenteredInBox(g, label, cx + (sel ? 0 : 8), ry, cw - (sel ? 0 : 8), 22, 8.2f,
+                    sel ? 0xFFFFFFFF : AppleUiRenderer.textPrimary(), false, sel);
+            int finalRy = ry;
+            addClippedHit(cx, ry, cw, 22, y, y + h, () -> {
+                playClick();
+                ConfigManager.themeAccent = ta;
+                if (ta == ConfigManager.ThemeAccent.CUSTOM) {
+                    openColorSetting = null;
+                    openThemeCustomColor = !openThemeCustomColor;
+                    pickerX = Math.max(x, cx - 70);
+                    pickerY = finalRy + 24;
+                } else {
+                    openThemeCustomColor = false;
+                }
+                ConfigManager.saveAsync();
+            }, null, null, null);
+        }
+        ry += 27;
+
+        // Row 3: UI Button Sound (4 Checked Options!) + UI Sound Volume Slider (0% ~ 125% + Double-Click Input!)
+        AppleUiRenderer.drawElevatedCard(g, x, ry, halfW, 28, 6, 0f, (mouseUnlocked && inBounds(mx, my, x, ry, halfW, 28)) ? 1f : 0f, accent);
+        YeHdFont.draw(g, ConfigManager.tr("按键音效", "Click Sound"), x + 8, YeHdFont.vCenterY(ry, 28, 8.5f), 8.5f, AppleUiRenderer.textPrimary(), false, false);
+        String sndLbl = enumLabel(ConfigManager.uiClickSound) + " ▾";
+        int sbw = Math.min(halfW - 64, Math.max(76, YeHdFont.width(sndLbl, 8.0f, false) + 12));
+        int sbx = x + halfW - 5 - sbw;
+        AppleUiRenderer.drawRoundedRect(g, sbx, ry + 6, sbw, 16, 5, soundDropdownOpen ? accent : AppleUiRenderer.bgCardHover());
+        YeHdFont.drawCenteredInBox(g, sndLbl, sbx, ry + 6, sbw, 16, 8.0f, soundDropdownOpen ? 0xFFFFFFFF : AppleUiRenderer.textPrimary(), false, false);
+        int finalSndRy = ry;
+        addClippedHit(sbx, ry + 6, sbw, 16, y, y + h, () -> {
+            soundDropdownOpen = !soundDropdownOpen;
+            soundDropX = sbx;
+            soundDropY = finalSndRy + 24;
+            soundDropW = Math.max(sbw, 106);
+            playClick();
+        }, null, null, null);
+
+        renderCustomSliderCard(g, rxCol, ry, halfW, ConfigManager.tr("按键音量", "Sound Vol"), "ui_snd_vol",
+                Math.round(ConfigManager.uiSoundVolume * 100) + "%",
+                ConfigManager.uiSoundVolume, 0.0, 1.25,
+                v -> { ConfigManager.uiSoundVolume = (float) Math.max(0.0, Math.min(1.25, v)); ConfigManager.saveAsync(); },
+                vPct -> { ConfigManager.uiSoundVolume = (float) Math.max(0.0, Math.min(1.25, vPct > 1.5 ? vPct / 100.0 : vPct)); playClick(); ConfigManager.saveAsync(); },
+                y, h, mx, my, mouseUnlocked, accent);
+        ry += 32;
+
+        // Row 4: Arrow UI Key + Mouse UI Key (Combo & Single supported!)
+        renderGlobalKeybindCard(g, x, ry, halfW, ConfigManager.tr("方向键UI快捷键", "Arrow UI Key"), "glob_menu_key",
+                ConfigManager.getMenuKey(), ConfigManager::setMenuKey, y, h, mx, my, mouseUnlocked, accent);
+        renderGlobalKeybindCard(g, rxCol, ry, halfW, ConfigManager.tr("鼠标UI快捷键", "Mouse UI Key"), "glob_mouse_key",
+                ConfigManager.getMouseUnlockKey(), ConfigManager::setMouseUnlockKey, y, h, mx, my, mouseUnlocked, accent);
+        ry += 26;
+
+        // Row 5: Language + Built-in Tutorial Guide!
+        AppleUiRenderer.drawElevatedCard(g, x, ry, halfW, 22, 6, 0f, (mouseUnlocked && inBounds(mx, my, x, ry, halfW, 22)) ? 1f : 0f, accent);
+        YeHdFont.draw(g, ConfigManager.tr("界面语言", "Language"), x + 8, YeHdFont.vCenterY(ry, 22, 8.5f), 8.5f, AppleUiRenderer.textPrimary(), false, false);
+        String lVal = ConfigManager.english ? "English" : "简体中文";
+        AppleUiRenderer.drawRoundedRect(g, x + halfW - 58, ry + 3, 52, 16, 5, accent);
+        YeHdFont.drawCenteredInBox(g, lVal, x + halfW - 58, ry + 3, 52, 16, 8.1f, 0xFFFFFFFF, false, true);
+        addClippedHit(x, ry, halfW, 22, y, y + h, () -> {
+            playClick();
+            ConfigManager.english = !ConfigManager.english;
+            ConfigManager.saveAsync();
+        }, null, null, null);
+
+        drawActionBtn(g, rxCol, ry + 1, halfW, ConfigManager.tr("查看操作与快捷键使用教程", "Open Controls Tutorial"),
+                mx, my, mouseUnlocked, accent, y, h, () -> { playClick(); tutorialModalOpen = true; });
+        ry += 28;
+
+        // ---- BOTTOM: CONFIG / PROFILES MANAGER ----
+        ry = drawSettingSectionHeader(g,
+                ConfigManager.tr("配置档案管理 · 当前账号: " + ConfigManager.getCurrentAccountName() + " (" + ConfigManager.getActiveProfile() + ")",
+                        "Config Profiles · " + ConfigManager.getActiveProfile()),
+                x, ry, rowW, y, h, 0xFF34D399);
+
+        List<String> profiles = ConfigManager.listAvailableProfiles();
+        int pCols = 4;
+        int pGap = 5;
+        int pCellW = (rowW - (pCols - 1) * pGap) / pCols;
+        for (int i = 0; i < profiles.size(); i++) {
+            String pName = profiles.get(i);
+            int pcx = x + (i % pCols) * (pCellW + pGap);
+            int pcy = ry + (i / pCols) * 21;
+            boolean sel = pName.equalsIgnoreCase(ConfigManager.getActiveProfile());
+            boolean hov = mouseUnlocked && inBounds(mx, my, pcx, pcy, pCellW, 18);
+            AppleUiRenderer.drawElevatedCard(g, pcx, pcy, pCellW, 18, 5, sel ? 1f : 0f, hov ? 1f : 0f, accent);
+            String disp = pName.equalsIgnoreCase(ConfigManager.DEFAULT_PROFILE)
+                    ? ConfigManager.tr("default·默认", "default")
+                    : YeHdFont.clipToWidth(pName, 8.1f, sel, pCellW - 8);
+            YeHdFont.drawCenteredInBox(g, disp, pcx, pcy, pCellW, 18, 8.1f, sel ? 0xFFFFFFFF : AppleUiRenderer.textPrimary(), false, sel);
+            addClippedHit(pcx, pcy, pCellW, 18, y, y + h, () -> {
+                playClick();
+                textInputKind = 0;
+                ConfigManager.switchToProfile(pName, true);
+                showToast(ConfigManager.tr("已切换档案: ", "Switched: ") + pName, accent);
+            }, null, null, null);
+        }
+        ry += ((profiles.size() + pCols - 1) / pCols) * 21 + 4;
+
+        if (textInputKind == 1 || textInputKind == 2) {
+            AppleUiRenderer.drawRoundedRect(g, x, ry, rowW, 22, 6, 0xEE090D16);
+            AppleUiRenderer.drawRoundedOutline(g, x, ry, rowW, 22, 6, 1.2f, accent);
+            String prefix = (textInputKind == 1) ? ConfigManager.tr("新建名称: ", "New Name: ") : ConfigManager.tr("重命名为: ", "Rename: ");
+            YeHdFont.draw(g, prefix + textInputBuffer + "|", x + 8, YeHdFont.vCenterY(ry, 22, 8.5f), 8.5f, 0xFFF8FAFC, false, false);
+            int okX = x + rowW - 44;
+            AppleUiRenderer.drawRoundedRect(g, okX, ry + 3, 40, 16, 4.5f, accent);
+            YeHdFont.drawCenteredInBox(g, ConfigManager.tr("确定", "OK"), okX, ry + 3, 40, 16, 8.1f, 0xFFFFFFFF, false, true);
+            addClippedHit(okX, ry + 3, 40, 16, y, y + h, YeQuickMenu::confirmTextInput, null, null, null);
+            ry += 26;
+        }
+
+        int thirdW = (rowW - 10) / 3;
+        drawActionBtn(g, x, ry, thirdW, ConfigManager.tr("+ 新建档案", "+ New Profile"), mx, my, mouseUnlocked, accent, y, h, () -> {
+            playClick();
+            textInputKind = 1;
+            textInputBuffer = ConfigManager.getCurrentAccountName() + "_pvp";
+        });
+        drawActionBtn(g, x + thirdW + 5, ry, thirdW, ConfigManager.tr("重命名档案", "Rename"), mx, my, mouseUnlocked, accent, y, h, () -> {
+            playClick();
+            if (ConfigManager.getActiveProfile().equalsIgnoreCase(ConfigManager.DEFAULT_PROFILE)) {
+                showToast(ConfigManager.tr("默认档案不可重命名", "Cannot rename default"), 0xFFEF4444);
+            } else {
+                textInputKind = 2;
+                textInputBuffer = ConfigManager.getActiveProfile();
+            }
+        });
+        drawActionBtn(g, x + (thirdW + 5) * 2, ry, thirdW, ConfigManager.tr("设为新号模板", "Set Template"), mx, my, mouseUnlocked, accent, y, h, () -> {
+            playClick();
+            ConfigManager.saveCurrentAsDefaultTemplate();
+            showToast(ConfigManager.tr("已设为新账号默认模板", "Saved template"), 0xFF22C55E);
+        });
+        ry += 23;
+
+        drawActionBtn(g, x, ry, thirdW, ConfigManager.tr("复制配置码", "Copy Code"), mx, my, mouseUnlocked, accent, y, h, () -> {
+            playClick();
+            String code = ConfigManager.exportShareCodeToClipboard();
+            if (code != null) showToast(ConfigManager.tr("已复制配置码", "Copied share code"), 0xFF22C55E);
+        });
+        drawActionBtn(g, x + thirdW + 5, ry, thirdW, ConfigManager.tr("粘贴配置码", "Paste Code"), mx, my, mouseUnlocked, accent, y, h, () -> {
+            playClick();
+            if (ConfigManager.importShareCodeFromClipboard()) showToast(ConfigManager.tr("已导入配置码", "Imported code"), 0xFF22C55E);
+            else showToast(ConfigManager.tr("剪贴板无有效配置码", "Invalid clipboard code"), 0xFFEF4444);
+        });
+        drawActionBtn(g, x + (thirdW + 5) * 2, ry, thirdW, ConfigManager.tr("恢复出厂默认", "Factory Reset"), mx, my, mouseUnlocked, accent, y, h, () -> {
+            playClick();
+            requestConfirmation(ConfigManager.tr("确定将当前配置档案恢复为出厂默认设置吗？", "Reset current profile to factory default?"), () -> {
+                ConfigManager.resetCurrentToFactoryDefault();
+                showToast(ConfigManager.tr("已恢复出厂默认", "Reset to factory default"), accent);
+            });
+        });
+        ry += 23;
+
+        drawActionBtn(g, x, ry, halfW, ConfigManager.tr("打开配置文件夹", "Open Configs Dir"), mx, my, mouseUnlocked, accent, y, h, () -> {
+            playClick();
+            ConfigManager.openConfigsFolder();
+        });
+        drawActionBtn(g, rxCol, ry, halfW, ConfigManager.tr("重置全部HUD位置", "Reset HUD Pos"), mx, my, mouseUnlocked, accent, y, h, () -> {
+            playClick();
+            requestConfirmation(ConfigManager.tr("确定重置所有 HUD 组件坐标吗？", "Reset all HUD positions?"), () -> {
+                ConfigManager.resetHudSlotsDefault();
+                ConfigManager.saveAsync();
+                showToast(ConfigManager.tr("已重置全部 HUD 坐标", "Reset positions"), accent);
+            });
+        });
+        ry += 24;
+
+        int contentH = ry - startRy;
+        maxScroll = Math.max(0.0, contentH - h);
+        drawScrollbar(g, x + w - 2, y, h, contentH, accent);
+    }
+
+    // ==================== 5. DEDICATED FRIENDS TAB (RIGHT OF SETTINGS!) ====================
+
+    private static void renderFriendsTab(GuiGraphics g, int x, int y, int w, int h,
+                                         int mx, int my, boolean mouseUnlocked, int accent) {
+        int startRy = y - (int) Math.round(scrollOffset);
+        int ry = startRy;
+        int rowW = w - 6;
+        int halfW = (rowW - 6) / 2;
+        int rxCol = x + halfW + 6;
+
+        // 1. Add Friend by ID Input Bar
+        ry = drawSettingSectionHeader(g, ConfigManager.tr("添加好友与近距中键开关", "Add Friends & Middle-Click"), x, ry, rowW, y, h, 0xFF34D399);
+
+        boolean typingId = (textInputKind == 3);
+        int inpW = rowW - 76;
+        AppleUiRenderer.drawRoundedRect(g, x, ry, inpW, 21, 5, 0xDD090D16);
+        AppleUiRenderer.drawRoundedOutline(g, x, ry, inpW, 21, 5, 1.1f, typingId ? accent : AppleUiRenderer.borderSubtle());
+        String idPrompt = typingId ? (textInputBuffer + "|")
+                : (textInputBuffer.isEmpty() ? ConfigManager.tr("点击输入玩家 ID 名称...", "Click to enter player ID...") : textInputBuffer);
+        YeHdFont.draw(g, idPrompt, x + 8, YeHdFont.vCenterY(ry, 21, 8.4f), 8.4f,
+                (!typingId && textInputBuffer.isEmpty()) ? AppleUiRenderer.textTertiary() : 0xFFF8FAFC, false, false);
+        addClippedHit(x, ry, inpW, 21, y, y + h, () -> {
+            playClick();
+            commitInlineInputIfNumber();
+            textInputKind = 3;
+        }, () -> textInputBuffer = "", null, null);
+
+        int addBtnX = x + inpW + 5;
+        AppleUiRenderer.drawRoundedRect(g, addBtnX, ry, 71, 21, 5, 0xFF10B981);
+        YeHdFont.drawCenteredInBox(g, ConfigManager.tr("+ 添加好友", "+ Add"), addBtnX, ry, 71, 21, 8.3f, 0xFFFFFFFF, false, true);
+        addClippedHit(addBtnX, ry, 71, 21, y, y + h, YeQuickMenu::confirmTextInput, null, null, null);
+        ry += 26;
+
+        // 2. Middle-Click Close-Range Friend Toggle + Max Distance Slider!
+        AppleUiRenderer.drawElevatedCard(g, x, ry, halfW, 28, 6, 0f, (mouseUnlocked && inBounds(mx, my, x, ry, halfW, 28)) ? 1f : 0f, accent);
+        YeHdFont.draw(g, ConfigManager.tr("中键近距加删好友", "Middle-Click Friend"), x + 8, YeHdFont.vCenterY(ry, 28, 8.5f), 8.5f, AppleUiRenderer.textPrimary(), false, false);
+        float mcfAnim = AppleUiRenderer.animChannel("mcf_sw", FriendManager.middleClickAdd ? 1f : 0f, 18f);
+        AppleUiRenderer.drawPillSwitch(g, x + halfW - 34, ry + 7, 27, 14, mcfAnim, accent);
+        addClippedHit(x, ry, halfW, 28, y, y + h, () -> {
+            playClick();
+            FriendManager.middleClickAdd = !FriendManager.middleClickAdd;
+            FriendManager.save();
+        }, null, null, null);
+
+        renderCustomSliderCard(g, rxCol, ry, halfW, ConfigManager.tr("中键最大距离", "Max Click Dist"), "friend_mc_dist",
+                String.format(Locale.ROOT, "%.1fm", FriendManager.middleClickMaxDist),
+                FriendManager.middleClickMaxDist, 2.0, 16.0,
+                v -> { FriendManager.middleClickMaxDist = Math.round(v * 2.0) / 2.0; FriendManager.save(); },
+                v -> { FriendManager.middleClickMaxDist = Math.max(2.0, Math.min(16.0, v)); FriendManager.save(); },
+                y, h, mx, my, mouseUnlocked, accent);
+        ry += 33;
+
+        // 3. Nearby Players in World (1-Click Quick Toggle!)
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level != null && mc.player != null) {
+            List<? extends Player> nearby = mc.level.players().stream()
+                    .filter(p -> p != mc.player && !p.isSpectator())
+                    .sorted((a, b) -> Float.compare(mc.player.distanceTo(a), mc.player.distanceTo(b)))
+                    .toList();
+            if (!nearby.isEmpty()) {
+                ry = drawSettingSectionHeader(g, ConfigManager.tr("周围在线玩家 (点击一键加删)", "Nearby Players"), x, ry, rowW, y, h, accent);
+                int cols = 3, gap = 5, cw = (rowW - (cols - 1) * gap) / cols;
+                for (int i = 0; i < nearby.size(); i++) {
+                    Player p = nearby.get(i);
+                    String nm = p.getGameProfile().name();
+                    boolean isFr = FriendManager.isFriend(nm);
+                    int cx = x + (i % cols) * (cw + gap);
+                    int cy = ry + (i / cols) * 23;
+                    if (cy + 19 >= y && cy <= y + h) {
+                        AppleUiRenderer.drawElevatedCard(g, cx, cy, cw, 19, 5, isFr ? 1f : 0f, 0f, 0xFF10B981);
+                        String txt = String.format(Locale.ROOT, "%s (%.1fm)", nm, mc.player.distanceTo(p));
+                        YeHdFont.drawCenteredInBox(g, YeHdFont.clipToWidth(txt, 8.0f, isFr, cw - 8), cx, cy, cw, 19, 8.0f,
+                                isFr ? 0xFFFFFFFF : AppleUiRenderer.textPrimary(), false, isFr);
+                        addClippedHit(cx, cy, cw, 19, y, y + h, () -> {
+                            playClick();
+                            FriendManager.toggleFriend(nm);
+                        }, null, null, null);
+                    }
+                }
+                ry += ((nearby.size() + cols - 1) / cols) * 23 + 4;
+            }
+        }
+
+        // 4. Current Friends Whitelist
+        List<String> friends = FriendManager.getFriends();
+        ry = drawSettingSectionHeader(g, ConfigManager.tr("当前好友白名单 (" + friends.size() + " 人)", "Friends List (" + friends.size() + ")"), x, ry, rowW, y, h, 0xFF34D399);
+
+        if (friends.isEmpty()) {
+            YeHdFont.draw(g, ConfigManager.tr("暂无好友，可在上方输入 ID 添加或开启近距中键添加", "No friends added yet"),
+                    x + 6, ry + 4, 8.2f, AppleUiRenderer.textTertiary(), false, false);
+            ry += 22;
+        } else {
+            int cols = 3, gap = 5, cw = (rowW - (cols - 1) * gap) / cols;
+            for (int i = 0; i < friends.size(); i++) {
+                String fn = friends.get(i);
+                int cx = x + (i % cols) * (cw + gap);
+                int cy = ry + (i / cols) * 23;
+                if (cy + 19 >= y && cy <= y + h) {
+                    AppleUiRenderer.drawElevatedCard(g, cx, cy, cw, 19, 5, 0f, (mouseUnlocked && inBounds(mx, my, cx, cy, cw, 19)) ? 1f : 0f, 0xFFEF4444);
+                    YeHdFont.draw(g, YeHdFont.clipToWidth(fn, 8.1f, true, cw - 22), cx + 7, YeHdFont.vCenterY(cy, 19, 8.1f), 8.1f, 0xFF34D399, false, true);
+                    YeHdFont.draw(g, "×", cx + cw - 13, YeHdFont.vCenterY(cy, 19, 8.8f), 8.8f, 0xFFF87171, false, true);
+                    addClippedHit(cx, cy, cw, 19, y, y + h, () -> {
+                        playClick();
+                        FriendManager.removeFriend(fn);
+                    }, null, null, null);
+                }
+            }
+            ry += ((friends.size() + cols - 1) / cols) * 23 + 5;
+
+            drawActionBtn(g, x, ry, 118, ConfigManager.tr("清空全部好友", "Clear All Friends"), mx, my, mouseUnlocked, 0xFFEF4444, y, h, () -> {
+                playClick();
+                requestConfirmation(ConfigManager.tr("确定清空全部好友白名单吗？", "Clear all friends?"), () -> {
+                    FriendManager.clearFriends();
+                    showToast(ConfigManager.tr("已清空好友列表", "Cleared friends"), 0xFFEF4444);
+                });
+            });
+            ry += 24;
+        }
+
+        int contentH = ry - startRy;
+        maxScroll = Math.max(0.0, contentH - h);
+        drawScrollbar(g, x + w - 2, y, h, contentH, accent);
+    }
+
+    // ==================== HELPER WIDGETS & MODALS ====================
+
+    private static void renderCustomSliderCard(GuiGraphics g, int cx, int cy, int cw, String title, String numKey,
+                                               String formattedVal, double curVal, double min, double max,
+                                               DoubleConsumer onSlide, DoubleConsumer onManualInput,
+                                               int clipY, int clipH, int mx, int my, boolean mouseUnlocked, int accent) {
+        if (cy + 28 < clipY || cy > clipY + clipH) return;
+        boolean hov = mouseUnlocked && inBounds(mx, my, cx, cy, cw, 28);
+        AppleUiRenderer.drawElevatedCard(g, cx, cy, cw, 28, 6, 0f, hov ? 1f : 0f, accent);
+
+        boolean editing = (textInputKind == 5 && numKey.equals(activeNumberKey));
+        String vt = editing ? (textInputBuffer + "|") : formattedVal;
+        float vtW = Math.max(24f, YeHdFont.widthF(vt, 8.4f, true));
+        YeHdFont.draw(g, title, cx + 8, cy + 3.8f, 8.4f, AppleUiRenderer.textPrimary(), false, false);
+
+        int numX = Math.round(cx + cw - 8 - vtW);
+        if (editing) {
+            AppleUiRenderer.drawRoundedRect(g, numX - 3, cy + 2, vtW + 6, 13, 3, 0xEE080C16);
+            AppleUiRenderer.drawRoundedOutline(g, numX - 3, cy + 2, vtW + 6, 13, 3, 1.0f, accent);
+        }
+        YeHdFont.draw(g, vt, numX, cy + 3.8f, 8.4f, editing ? 0xFFFFFFFF : accent, false, true);
+        addClippedHit(numX - 4, cy + 1, Math.round(vtW) + 8, 14, clipY, clipY + clipH,
+                null, null, null, () -> startNumberEdit(numKey, formattedVal.replace("%", "").replace("m", ""), onManualInput));
+
+        int bw = cw - 16, bx = cx + 8, by = cy + 20;
+        float pct = (float) ((curVal - min) / Math.max(0.0001, max - min));
+        AppleUiRenderer.drawRoundedRect(g, bx, by, bw, 3.6f, 1.8f, AppleUiRenderer.lightTheme ? 0xFFCBD5E1 : 0xFF283142);
+        float fillW = Math.max(3.6f, bw * Math.max(0f, Math.min(1f, pct)));
+        AppleUiRenderer.drawRoundedRect(g, bx, by, fillW, 3.6f, 1.8f, accent);
+        AppleUiRenderer.drawCircle(g, bx + fillW - 4.0f, by - 2.2f, 8.0f, 0xFFFFFFFF);
+        addClippedHit(bx - 3, by - 6, bw + 6, 14, clipY, clipY + clipH, null, null, new SliderBinding() {
+            @Override public double getMin() { return min; }
+            @Override public double getMax() { return max; }
+            @Override public void setValue(double v) { onSlide.accept(v); }
+        }, null);
+    }
+
+    private static void renderGlobalKeybindCard(GuiGraphics g, int cx, int cy, int cw, String title, String kid,
+                                                int currentKey, java.util.function.IntConsumer setter,
+                                                int clipY, int clipH, int mx, int my, boolean mouseUnlocked, int accent) {
+        if (cy + 22 < clipY || cy > clipY + clipH) return;
+        boolean listening = kid.equals(activeKeybindId);
+        AppleUiRenderer.drawElevatedCard(g, cx, cy, cw, 22, 6, 0f, (mouseUnlocked && inBounds(mx, my, cx, cy, cw, 22)) ? 1f : 0f, accent);
+        YeHdFont.draw(g, title, cx + 8, YeHdFont.vCenterY(cy, 22, 8.4f), 8.4f, AppleUiRenderer.textPrimary(), false, false);
+        String txt = listening ? liveBindPrompt() : KeyCombo.format(currentKey);
+        int bw = Math.max(52, YeHdFont.width(txt, 8.0f, true) + 12);
+        int bx = cx + cw - 5 - bw;
+        AppleUiRenderer.drawRoundedRect(g, bx, cy + 3, bw, 16, 5, listening ? 0xFFEF4444 : accent);
+        YeHdFont.drawCenteredInBox(g, txt, bx, cy + 3, bw, 16, 8.0f, 0xFFFFFFFF, false, true);
+        addClippedHit(cx, cy, cw, 22, clipY, clipY + clipH,
+                () -> startKeybindListen(kid, setter),
+                () -> { playClick(); stopKeybindListen(); }, null, null);
+    }
+
+    private static void renderColorPickerPopover(GuiGraphics g, int sw, int sh, int mx, int my, int accent) {
+        int boxW = pickerW + 16;
+        int boxH = pickerSvH + 54;
+        int px = Math.max(8, Math.min(sw - boxW - 8, pickerX));
+        int py = Math.max(8, Math.min(sh - boxH - 8, pickerY));
+        pickerX = px;
+        pickerY = py;
+
+        float h, s, b;
+        String hex;
+        if (openColorSetting != null) {
+            h = openColorSetting.getHue();
+            s = openColorSetting.getSat();
+            b = openColorSetting.getBri();
+            hex = openColorSetting.getHex();
+        } else {
+            h = ConfigManager.customAccentHue;
+            s = ConfigManager.customAccentSat;
+            b = ConfigManager.customAccentBri;
+            hex = String.format(Locale.ROOT, "#%06X", ConfigManager.getCustomAccentArgb() & 0x00FFFFFF);
+        }
+
+        AppleUiRenderer.drawElevatedWindow(g, px, py, boxW, boxH, AppleUiRenderer.isMechanical() ? 0 : 8);
+        AppleUiRenderer.drawRoundedOutline(g, px, py, boxW, boxH, AppleUiRenderer.isMechanical() ? 0 : 8, 1.4f, accent);
+        HIT_RECTS.add(new HitRect(px, py, boxW, boxH, () -> {}, null, null, 5));
+
+        int svX = px + 8, svY = py + 8;
+        int hueY = svY + pickerSvH + 7;
+        AppleUiRenderer.drawHsvPicker(g, svX, svY, pickerW, pickerSvH, hueY, 9, h, s, b);
+
+        // Hex display + Done button
+        int footY = hueY + 14;
+        boolean editingHex = (textInputKind == 6);
+        AppleUiRenderer.drawRoundedRect(g, svX, footY, 76, 16, 4, 0xDD080C15);
+        AppleUiRenderer.drawRoundedOutline(g, svX, footY, 76, 16, 4, 1.0f, editingHex ? accent : AppleUiRenderer.borderSubtle());
+        YeHdFont.drawCenteredInBox(g, editingHex ? (textInputBuffer + "|") : hex, svX, footY, 76, 16, 7.9f, 0xFFF8FAFC, false, true);
+        HIT_RECTS.add(new HitRect(svX, footY, 76, 16, () -> {
+            playClick();
+            textInputKind = 6;
+            textInputBuffer = hex;
+        }, null, null, 6));
+
+        int doneX = svX + pickerW - 44;
+        AppleUiRenderer.drawRoundedRect(g, doneX, footY, 44, 16, 4, accent);
+        YeHdFont.drawCenteredInBox(g, ConfigManager.tr("确定", "Done"), doneX, footY, 44, 16, 7.9f, 0xFFFFFFFF, false, true);
+        HIT_RECTS.add(new HitRect(doneX, footY, 44, 16, () -> {
+            playClick();
+            openColorSetting = null;
+            openThemeCustomColor = false;
+            if (textInputKind == 6) textInputKind = 0;
+        }, null, null, 6));
+    }
+
+    private static void renderConfirmationModal(GuiGraphics g, int sw, int sh, int mx, int my, int accent) {
+        g.fill(0, 0, sw, sh, 0x9204070E);
+        int mw = 264, mh = 94;
+        int x = (sw - mw) / 2, y = (sh - mh) / 2;
+        int rad = AppleUiRenderer.isMechanical() ? 0 : 10;
+
+        HIT_RECTS.add(new HitRect(0, 0, sw, sh, () -> { confirmMessage = null; confirmAction = null; }, null, null, 14));
+        HIT_RECTS.add(new HitRect(x, y, mw, mh, () -> {}, null, null, 15));
+
+        AppleUiRenderer.drawElevatedWindow(g, x, y, mw, mh, rad);
+        AppleUiRenderer.drawRoundedOutline(g, x, y, mw, mh, rad, 1.4f, 0xFFEF4444);
+
+        YeHdFont.drawCentered(g, ConfigManager.tr("确认操作", "Confirm Reset"), x + mw * 0.5f, y + 12, 9.6f, 0xFFF87171, false, true);
+        YeHdFont.drawCentered(g, YeHdFont.clipToWidth(confirmMessage, 8.4f, false, mw - 20), x + mw * 0.5f, y + 34, 8.4f, AppleUiRenderer.textPrimary(), false, false);
+
+        int btnW = 88, btnY = y + mh - 28;
+        int cancelX = x + 34;
+        AppleUiRenderer.drawRoundedRect(g, cancelX, btnY, btnW, 19, AppleUiRenderer.isMechanical() ? 0 : 5, AppleUiRenderer.bgCardHover());
+        YeHdFont.drawCenteredInBox(g, ConfigManager.tr("取消", "Cancel"), cancelX, btnY, btnW, 19, 8.4f, AppleUiRenderer.textPrimary(), false, false);
+        HIT_RECTS.add(new HitRect(cancelX, btnY, btnW, 19, () -> {
+            playClick();
+            confirmMessage = null;
+            confirmAction = null;
+        }, null, null, 16));
+
+        int okX = x + mw - 34 - btnW;
+        AppleUiRenderer.drawRoundedRect(g, okX, btnY, btnW, 19, AppleUiRenderer.isMechanical() ? 0 : 5, 0xFFEF4444);
+        YeHdFont.drawCenteredInBox(g, ConfigManager.tr("确定重置", "Confirm"), okX, btnY, btnW, 19, 8.4f, 0xFFFFFFFF, false, true);
+        HIT_RECTS.add(new HitRect(okX, btnY, btnW, 19, () -> {
+            playClick();
+            Runnable act = confirmAction;
+            confirmMessage = null;
+            confirmAction = null;
+            if (act != null) act.run();
+        }, null, null, 16));
+    }
+
+    private static void renderTutorialModal(GuiGraphics g, int sw, int sh, int accent) {
+        g.fill(0, 0, sw, sh, 0x8C04070E);
+        int mw = 376, mh = 216;
+        int x = (sw - mw) / 2, y = (sh - mh) / 2;
+        int rad = AppleUiRenderer.isMechanical() ? 0 : 10;
+
+        HIT_RECTS.add(new HitRect(0, 0, sw, sh, () -> tutorialModalOpen = false, null, null, 9));
+        HIT_RECTS.add(new HitRect(x, y, mw, mh, () -> {}, null, null, 9));
+
+        AppleUiRenderer.drawElevatedWindow(g, x, y, mw, mh, rad);
+        YeHdFont.draw(g, ConfigManager.tr("Ye 模组快捷操作教程", "Ye Mod Quick Guide"), x + 14, y + 10, 9.6f, accent, false, true);
+
+        String[] lines = {
+                "1. 界面呼出：按「" + KeyCombo.format(ConfigManager.getMenuKey()) + "」开关右下角便携方向键面板；按「" + KeyCombo.format(ConfigManager.getMouseUnlockKey()) + "」开关居中鼠标大面板。",
+                "2. 模块控制：左键卡片开关功能，右键卡片进入详细参数；点击 ★ 加入收藏夹，点击 ▲ 置顶。",
+                "3. 快捷键绑定：支持单键、鼠标侧键或 Ctrl/Shift/Alt 组合键；右键快捷键按钮可清除绑定。",
+                "4. 精确数值输入：在任意滑条或音量的数字上「双击左键」，即可直接键盘输入精确数值并回车确认。",
+                "5. HUD 排版：打开鼠标面板时，在屏幕上直接左键拖动任意 HUD 自动磁吸，右键屏幕 HUD 直达其专属设置。",
+                "6. 放大镜与调速：按住放大镜键滑动滚轮无级缩放视野；按住飞行调速键滑动滚轮实时调节飞行速度。",
+                "7. 好友系统：可在顶部「好友」页输入 ID 添加，或开启近距中键对身边玩家按鼠标中键一键加删好友。"
+        };
+        float ry = y + 32;
+        for (String ln : lines) {
+            YeHdFont.draw(g, YeHdFont.clipToWidth(ln, 8.1f, false, mw - 28), x + 14, ry, 8.1f, AppleUiRenderer.textPrimary(), false, false);
+            ry += 20;
+        }
+
+        int closeX = x + (mw - 86) / 2;
+        AppleUiRenderer.drawRoundedRect(g, closeX, y + mh - 26, 86, 18, AppleUiRenderer.isMechanical() ? 0 : 5, accent);
+        YeHdFont.drawCenteredInBox(g, ConfigManager.tr("我知道了", "Got It"), closeX, y + mh - 26, 86, 18, 8.3f, 0xFFFFFFFF, false, true);
+        HIT_RECTS.add(new HitRect(closeX, y + mh - 26, 86, 18, () -> { playClick(); tutorialModalOpen = false; }, null, null, 10));
     }
 
     private static <E extends Enum<E>> void renderDropdown(GuiGraphics g, EnumSetting<E> es, int mx, int my, int accent) {
@@ -761,6 +1666,7 @@ public final class YeQuickMenu {
 
         AppleUiRenderer.drawElevatedWindow(g, dx, dy, dropW, boxH, 7);
         AppleUiRenderer.drawRoundedOutline(g, dx, dy, dropW, boxH, 7, 1.4f, accent);
+        HIT_RECTS.add(new HitRect(dx, dy, dropW, boxH, () -> {}, null, null, 5));
 
         g.enableScissor(dx + 1, dy + 2, dx + dropW - 1, dy + boxH - 2);
         for (int i = 0; i < vals.length; i++) {
@@ -773,22 +1679,23 @@ public final class YeQuickMenu {
             int bg = sel ? accent : (hov ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
             AppleUiRenderer.drawRoundedRect(g, dx + 3, iy, dropW - 6, itemH - 1, 4.5f, bg);
             int swOff = YePreviewRenderer.renderOptionSwatch(g, opt, dx + 6, iy + 3, 11);
-            YeHdFont.draw(g, enumLabel(opt), dx + 7 + swOff, iy + (itemH - 9) * 0.5f, 8.3f,
-                    sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary(), false, sel);
-            if (iy >= dy && iy + itemH <= dy + boxH + 2) {
-                HIT_RECTS.add(new HitRect(dx + 3, iy, dropW - 6, itemH, () -> {
+            YeHdFont.draw(g, enumLabel(opt), dx + 7 + swOff, YeHdFont.vCenterY(iy, itemH - 1, 8.2f), 8.2f,
+                    sel ? 0xFFFFFFFF : AppleUiRenderer.textPrimary(), false, sel);
+            int ct = Math.max(dy + 2, iy), cb = Math.min(dy + boxH - 2, iy + itemH);
+            if (cb > ct) {
+                HIT_RECTS.add(new HitRect(dx + 3, ct, dropW - 6, cb - ct, () -> {
                     es.set(opt);
                     openDropdown = null;
                     playClick();
                     ConfigManager.saveAsync();
-                }, null, null));
+                }, null, null, 6));
             }
         }
         g.disableScissor();
     }
 
     private static void renderSoundDropdown(GuiGraphics g, int mx, int my, int accent) {
-        YeSoundPresets.SoundType[] vals = YeSoundPresets.SoundType.values();
+        YeSoundPresets.UiSoundType[] vals = YeSoundPresets.UiSoundType.values();
         int itemH = 18;
         int boxH = vals.length * itemH + 6;
         int sh = Minecraft.getInstance().getWindow().getGuiScaledHeight();
@@ -796,288 +1703,131 @@ public final class YeQuickMenu {
 
         AppleUiRenderer.drawElevatedWindow(g, soundDropX, dy, soundDropW, boxH, 7);
         AppleUiRenderer.drawRoundedOutline(g, soundDropX, dy, soundDropW, boxH, 7, 1.4f, accent);
+        HIT_RECTS.add(new HitRect(soundDropX, dy, soundDropW, boxH, () -> {}, null, null, 5));
 
         for (int i = 0; i < vals.length; i++) {
-            YeSoundPresets.SoundType st = vals[i];
+            YeSoundPresets.UiSoundType st = vals[i];
             int iy = dy + 3 + i * itemH;
             boolean sel = (st == ConfigManager.uiClickSound);
             boolean hov = inBounds(mx, my, soundDropX + 3, iy, soundDropW - 6, itemH);
             int bg = sel ? accent : (hov ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
             AppleUiRenderer.drawRoundedRect(g, soundDropX + 3, iy, soundDropW - 6, itemH - 1, 4.5f, bg);
-            YeHdFont.draw(g, enumLabel(st), soundDropX + 8, iy + 4.5f, 8.3f,
-                    sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary(), false, sel);
+            YeHdFont.draw(g, enumLabel(st), soundDropX + 8, YeHdFont.vCenterY(iy, itemH - 1, 8.2f), 8.2f,
+                    sel ? 0xFFFFFFFF : AppleUiRenderer.textPrimary(), false, sel);
             HIT_RECTS.add(new HitRect(soundDropX + 3, iy, soundDropW - 6, itemH, () -> {
                 ConfigManager.uiClickSound = st;
                 soundDropdownOpen = false;
                 playClick();
                 ConfigManager.saveAsync();
-            }, null, null));
+            }, null, null, 6));
         }
-    }
-
-    private static void renderSettingsTab(GuiGraphics g, int x, int y, int w, int h,
-                                          int mx, int my, boolean mouseUnlocked, int accent) {
-        int startRy = y - (int) Math.round(scrollOffset);
-        int ry = startRy;
-        int rowW = w - 6;
-        int halfW = (rowW - 6) / 2;
-
-        // 1. Multi-Profile Manager
-        String hdr = ConfigManager.tr(
-                "配置档案 · 账号: " + ConfigManager.getCurrentAccountName() + " (当前: " + ConfigManager.getActiveProfile() + ")",
-                "Profiles · User: " + ConfigManager.getCurrentAccountName() + " (" + ConfigManager.getActiveProfile() + ")");
-        AppleUiRenderer.drawBoldText(g, hdr, x + 2, ry, 8.6f, AppleUiRenderer.textSecondary());
-        ry += 14;
-
-        List<String> profiles = ConfigManager.listAvailableProfiles();
-        int pCols = 4;
-        int pGap = 5;
-        int pCellW = (rowW - (pCols - 1) * pGap) / pCols;
-        for (int i = 0; i < profiles.size(); i++) {
-            String pName = profiles.get(i);
-            int pcx = x + (i % pCols) * (pCellW + pGap);
-            int pcy = ry + (i / pCols) * 21;
-            boolean sel = pName.equalsIgnoreCase(ConfigManager.getActiveProfile());
-            boolean hov = mouseUnlocked && !soundDropdownOpen && inBounds(mx, my, pcx, pcy, pCellW, 18);
-            AppleUiRenderer.drawElevatedCard(g, pcx, pcy, pCellW, 18, 5, sel ? 1f : 0f, hov ? 1f : 0f, accent);
-            String disp = pName.equalsIgnoreCase(ConfigManager.DEFAULT_PROFILE)
-                    ? ConfigManager.tr("default·默认", "default")
-                    : YeHdFont.clipToWidth(pName, 8.2f, sel, pCellW - 8);
-            AppleUiRenderer.drawCenteredSmooth(g, disp, pcx + pCellW * 0.5f, pcy + 4.5f, 8.2f,
-                    sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary(), sel);
-            if (pcy + 18 > y && pcy < y + h) {
-                HIT_RECTS.add(new HitRect(pcx, pcy, pCellW, 18, () -> {
-                    playClick();
-                    profileInputMode = 0;
-                    ConfigManager.switchToProfile(pName, true);
-                    showToast(ConfigManager.tr("已切换配置: ", "Switched: ") + pName, accent);
-                }, null, null));
-            }
-        }
-        ry += ((profiles.size() + pCols - 1) / pCols) * 21 + 3;
-
-        if (profileInputMode != 0) {
-            AppleUiRenderer.drawRoundedRect(g, x, ry, rowW, 22, 6, 0xEE090D16);
-            AppleUiRenderer.drawRoundedOutline(g, x, ry, rowW, 22, 6, 1.2f, accent);
-            String prefix = (profileInputMode == 1) ? ConfigManager.tr("新建名称: ", "New Name: ") : ConfigManager.tr("重命名为: ", "Rename: ");
-            String cursor = ((System.currentTimeMillis() / 450L) % 2 == 0) ? "|" : "";
-            YeHdFont.draw(g, prefix + profileInputBuffer + cursor, x + 8, ry + 6.5f, 8.6f, 0xFFF8FAFC, false, false);
-
-            int okX = x + rowW - 44;
-            AppleUiRenderer.drawRoundedRect(g, okX, ry + 3, 40, 16, 4.5f, accent);
-            AppleUiRenderer.drawCenteredSmooth(g, ConfigManager.tr("确定", "OK"), okX + 20, ry + 6.8f, 8.2f, AppleUiRenderer.TEXT_PRIMARY, true);
-            if (ry + 22 > y && ry < y + h) {
-                HIT_RECTS.add(new HitRect(okX, ry + 3, 40, 16, YeQuickMenu::confirmProfileInput, null, null));
-            }
-            ry += 26;
-        }
-
-        int thirdW = (rowW - 10) / 3;
-        drawActionBtn(g, x, ry, thirdW, ConfigManager.tr("+ 新建档案", "+ New Profile"), mx, my, mouseUnlocked, accent, y, h, () -> {
-            playClick();
-            profileInputMode = 1;
-            profileInputBuffer = ConfigManager.getCurrentAccountName() + "_pvp";
-        });
-        drawActionBtn(g, x + thirdW + 5, ry, thirdW, ConfigManager.tr("重命名档案", "Rename"), mx, my, mouseUnlocked, accent, y, h, () -> {
-            playClick();
-            if (ConfigManager.getActiveProfile().equalsIgnoreCase(ConfigManager.DEFAULT_PROFILE)) {
-                showToast(ConfigManager.tr("出厂 default 不可重命名", "Cannot rename default"), 0xFFEF4444);
-            } else {
-                profileInputMode = 2;
-                profileInputBuffer = ConfigManager.getActiveProfile();
-            }
-        });
-        drawActionBtn(g, x + (thirdW + 5) * 2, ry, thirdW, ConfigManager.tr("设为新号模板", "Set Template"), mx, my, mouseUnlocked, accent, y, h, () -> {
-            playClick();
-            ConfigManager.saveCurrentAsDefaultTemplate();
-            showToast(ConfigManager.tr("✓ 已设为新玩家默认模板", "Saved template"), 0xFF22C55E);
-        });
-        ry += 22;
-
-        drawActionBtn(g, x, ry, thirdW, ConfigManager.tr("复制配置码", "Copy Code"), mx, my, mouseUnlocked, accent, y, h, () -> {
-            playClick();
-            String code = ConfigManager.exportShareCodeToClipboard();
-            if (code != null) showToast(ConfigManager.tr("✓ 已复制配置码 (" + code.length() + "字)", "Copied share code"), 0xFF22C55E);
-        });
-        drawActionBtn(g, x + thirdW + 5, ry, thirdW, ConfigManager.tr("粘贴配置码", "Paste Code"), mx, my, mouseUnlocked, accent, y, h, () -> {
-            playClick();
-            if (ConfigManager.importShareCodeFromClipboard()) showToast(ConfigManager.tr("✓ 已导入剪贴板配置!", "Imported share code"), 0xFF22C55E);
-            else showToast(ConfigManager.tr("剪贴板无有效 YE1 配置码", "Invalid clipboard code"), 0xFFEF4444);
-        });
-        drawActionBtn(g, x + (thirdW + 5) * 2, ry, thirdW, ConfigManager.tr("恢复出厂默认", "Factory Reset"), mx, my, mouseUnlocked, accent, y, h, () -> {
-            playClick();
-            ConfigManager.resetCurrentToFactoryDefault();
-            showToast(ConfigManager.tr("✓ 已恢复出厂默认", "Reset to factory default"), 0xFF38BDF8);
-        });
-        ry += 22;
-
-        drawActionBtn(g, x, ry, rowW, ConfigManager.tr("打开 configs 配置目录 (查看/备份各玩家 .json)", "Open configs Folder"), mx, my, mouseUnlocked, accent, y, h, () -> {
-            playClick();
-            ConfigManager.openConfigsFolder();
-        });
-        ry += 25;
-
-        // 2. 2-Column UI, Sound & Hotkey Settings
-        AppleUiRenderer.drawBoldText(g, ConfigManager.tr("界面、音效与快捷键", "Appearance, Sound & Hotkeys"), x + 2, ry, 8.6f, AppleUiRenderer.textSecondary());
-        ry += 14;
-
-        // Row A: Appearance (Left) + Language (Right)
-        AppleUiRenderer.drawElevatedCard(g, x, ry, halfW, 22, 6, 0f, (mouseUnlocked && inBounds(mx, my, x, ry, halfW, 22)) ? 1f : 0f, accent);
-        YeHdFont.draw(g, ConfigManager.tr("外观模式", "Theme"), x + 8, ry + 6.5f, 8.5f, AppleUiRenderer.textPrimary(), false, false);
-        String tVal = ConfigManager.lightTheme ? ConfigManager.tr("浅色", "Light") : ConfigManager.tr("深色", "Dark");
-        AppleUiRenderer.drawRoundedRect(g, x + halfW - 50, ry + 3, 44, 16, 5, accent);
-        AppleUiRenderer.drawCenteredSmooth(g, tVal, x + halfW - 28, ry + 6.5f, 8.2f, AppleUiRenderer.TEXT_PRIMARY, true);
-        if (ry + 22 > y && ry < y + h) {
-            HIT_RECTS.add(new HitRect(x, ry, halfW, 22, () -> { playClick(); AppleUiRenderer.toggleTheme(); }, null, null));
-        }
-
-        int rxCol = x + halfW + 6;
-        AppleUiRenderer.drawElevatedCard(g, rxCol, ry, halfW, 22, 6, 0f, (mouseUnlocked && inBounds(mx, my, rxCol, ry, halfW, 22)) ? 1f : 0f, accent);
-        YeHdFont.draw(g, ConfigManager.tr("界面语言", "Language"), rxCol + 8, ry + 6.5f, 8.5f, AppleUiRenderer.textPrimary(), false, false);
-        String lVal = ConfigManager.english ? "English" : "简体中文";
-        AppleUiRenderer.drawRoundedRect(g, rxCol + halfW - 58, ry + 3, 52, 16, 5, accent);
-        AppleUiRenderer.drawCenteredSmooth(g, lVal, rxCol + halfW - 32, ry + 6.5f, 8.2f, AppleUiRenderer.TEXT_PRIMARY, true);
-        if (ry + 22 > y && ry < y + h) {
-            HIT_RECTS.add(new HitRect(rxCol, ry, halfW, 22, () -> {
-                playClick();
-                ConfigManager.english = !ConfigManager.english;
-                ConfigManager.saveAsync();
-            }, null, null));
-        }
-        ry += 26;
-
-        // Row B: Custom Button Sound (Left) + Button Sound Volume Cycle (Right)
-        AppleUiRenderer.drawElevatedCard(g, x, ry, halfW, 22, 6, 0f, (mouseUnlocked && inBounds(mx, my, x, ry, halfW, 22)) ? 1f : 0f, accent);
-        YeHdFont.draw(g, ConfigManager.tr("按键音效", "Click Sound"), x + 8, ry + 6.5f, 8.5f, AppleUiRenderer.textPrimary(), false, false);
-        String sndLbl = enumLabel(ConfigManager.uiClickSound) + " ▾";
-        int sbw = Math.min(halfW - 64, Math.max(72, YeHdFont.width(sndLbl, 8.1f, false) + 12));
-        int sbx = x + halfW - 5 - sbw;
-        AppleUiRenderer.drawRoundedRect(g, sbx, ry + 3, sbw, 16, 5, soundDropdownOpen ? accent : AppleUiRenderer.bgCardHover());
-        AppleUiRenderer.drawCenteredSmooth(g, sndLbl, sbx + sbw * 0.5f, ry + 6.8f, 8.1f,
-                soundDropdownOpen ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary(), false);
-        if (ry + 22 > y && ry < y + h) {
-            int finalRy = ry;
-            HIT_RECTS.add(new HitRect(sbx, ry + 3, sbw, 16, () -> {
-                soundDropdownOpen = !soundDropdownOpen;
-                soundDropX = sbx;
-                soundDropY = finalRy + 21;
-                soundDropW = Math.max(sbw, 104);
-                playClick();
-            }, null, null));
-        }
-
-        AppleUiRenderer.drawElevatedCard(g, rxCol, ry, halfW, 22, 6, 0f, (mouseUnlocked && inBounds(mx, my, rxCol, ry, halfW, 22)) ? 1f : 0f, accent);
-        YeHdFont.draw(g, ConfigManager.tr("按键音量", "Sound Vol"), rxCol + 8, ry + 6.5f, 8.5f, AppleUiRenderer.textPrimary(), false, false);
-        String volStr = Math.round(ConfigManager.uiSoundVolume * 100) + "%";
-        AppleUiRenderer.drawRoundedRect(g, rxCol + halfW - 50, ry + 3, 44, 16, 5, AppleUiRenderer.bgCardHover());
-        AppleUiRenderer.drawCenteredSmooth(g, volStr, rxCol + halfW - 28, ry + 6.5f, 8.2f, accent, true);
-        if (ry + 22 > y && ry < y + h) {
-            HIT_RECTS.add(new HitRect(rxCol, ry, halfW, 22, () -> {
-                float next = ConfigManager.uiSoundVolume + 0.25f;
-                if (next > 1.30f) next = 0.25f;
-                ConfigManager.uiSoundVolume = next;
-                playClick();
-                ConfigManager.saveAsync();
-            }, null, null));
-        }
-        ry += 26;
-
-        // Row C: Arrow UI Hotkey (Left) + Mouse UI Hotkey (Right)
-        AppleUiRenderer.drawElevatedCard(g, x, ry, halfW, 22, 6, 0f, (mouseUnlocked && inBounds(mx, my, x, ry, halfW, 22)) ? 1f : 0f, accent);
-        YeHdFont.draw(g, ConfigManager.tr("方向键UI", "Arrow UI"), x + 8, ry + 6.5f, 8.5f, AppleUiRenderer.textPrimary(), false, false);
-        String mkVal = listeningKeySlot == 1 ? ConfigManager.tr("请按键...", "Press...") : keyName(ConfigManager.getMenuKey());
-        AppleUiRenderer.drawRoundedRect(g, x + halfW - 56, ry + 3, 50, 16, 5, listeningKeySlot == 1 ? 0xFFEF4444 : accent);
-        AppleUiRenderer.drawCenteredSmooth(g, mkVal, x + halfW - 31, ry + 6.5f, 8.2f, AppleUiRenderer.TEXT_PRIMARY, true);
-        if (ry + 22 > y && ry < y + h) {
-            HIT_RECTS.add(new HitRect(x, ry, halfW, 22, () -> {
-                playClick();
-                listeningModuleKey = null;
-                listeningKeySlot = (listeningKeySlot == 1) ? 0 : 1;
-            }, null, null));
-        }
-
-        AppleUiRenderer.drawElevatedCard(g, rxCol, ry, halfW, 22, 6, 0f, (mouseUnlocked && inBounds(mx, my, rxCol, ry, halfW, 22)) ? 1f : 0f, accent);
-        YeHdFont.draw(g, ConfigManager.tr("鼠标UI", "Mouse UI"), rxCol + 8, ry + 6.5f, 8.5f, AppleUiRenderer.textPrimary(), false, false);
-        String umVal = listeningKeySlot == 2 ? ConfigManager.tr("请按键...", "Press...") : keyName(ConfigManager.getMouseUnlockKey());
-        AppleUiRenderer.drawRoundedRect(g, rxCol + halfW - 56, ry + 3, 50, 16, 5, listeningKeySlot == 2 ? 0xFFEF4444 : accent);
-        AppleUiRenderer.drawCenteredSmooth(g, umVal, rxCol + halfW - 31, ry + 6.5f, 8.2f, AppleUiRenderer.TEXT_PRIMARY, true);
-        if (ry + 22 > y && ry < y + h) {
-            HIT_RECTS.add(new HitRect(rxCol, ry, halfW, 22, () -> {
-                playClick();
-                listeningModuleKey = null;
-                listeningKeySlot = (listeningKeySlot == 2) ? 0 : 2;
-            }, null, null));
-        }
-        ry += 26;
-
-        // Theme Color Swatches
-        AppleUiRenderer.drawBoldText(g, ConfigManager.tr("主题色", "Theme Color"), x + 2, ry, 8.6f, AppleUiRenderer.textSecondary());
-        ry += 14;
-        ConfigManager.ThemeAccent[] accents = ConfigManager.ThemeAccent.values();
-        int cw = (rowW - 25) / 6;
-        for (int i = 0; i < accents.length; i++) {
-            ConfigManager.ThemeAccent ta = accents[i];
-            int cx = x + i * (cw + 5);
-            boolean sel = ConfigManager.themeAccent == ta;
-            boolean hov = mouseUnlocked && inBounds(mx, my, cx, ry, cw, 22);
-            AppleUiRenderer.drawElevatedCard(g, cx, ry, cw, 22, 6, sel ? 1f : 0f, hov ? 1f : 0f, ta.argb);
-            if (!sel) {
-                AppleUiRenderer.drawCircle(g, cx + 6, ry + 6, 10, ta.argb);
-            }
-            String label = ConfigManager.english ? ta.en : ta.zh;
-            AppleUiRenderer.drawCenteredSmooth(g, label, cx + cw * 0.5f + (sel ? 0 : 5), ry + 6.5f, 8.4f,
-                    sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary(), sel);
-            if (ry + 22 > y && ry < y + h) {
-                HIT_RECTS.add(new HitRect(cx, ry, cw, 22, () -> {
-                    playClick();
-                    ConfigManager.themeAccent = ta;
-                    ConfigManager.saveAsync();
-                }, null, null));
-            }
-        }
-        ry += 27;
-
-        drawActionBtn(g, x, ry, rowW, ConfigManager.tr("重置主面板与所有 HUD 窗口坐标", "Reset Menu & HUD Positions"), mx, my, mouseUnlocked, accent, y, h, () -> {
-            playClick();
-            ConfigManager.widgetX = -1;
-            ConfigManager.widgetY = -1;
-            ConfigManager.resetHudSlotsDefault();
-            ConfigManager.saveAsync();
-            showToast(ConfigManager.tr("已重置窗口与 HUD 坐标", "Reset positions"), accent);
-        });
-        ry += 24;
-
-        int contentH = ry - startRy;
-        maxScroll = Math.max(0.0, contentH - h);
-        drawScrollbar(g, x + w - 2, y, h, contentH, accent);
     }
 
     private static void drawActionBtn(GuiGraphics g, int x, int y, int w, String text,
                                       int mx, int my, boolean mouseUnlocked, int accent, int clipY, int clipH, Runnable onClick) {
-        boolean hov = mouseUnlocked && !soundDropdownOpen && inBounds(mx, my, x, y, w, 19);
+        if (y + 19 < clipY || y > clipY + clipH) return;
+        boolean hov = mouseUnlocked && !hasModalOpen() && !soundDropdownOpen && inBounds(mx, my, x, y, w, 19);
         AppleUiRenderer.drawElevatedCard(g, x, y, w, 19, 5, 0f, hov ? 1f : 0f, accent);
-        AppleUiRenderer.drawCenteredSmooth(g, text, x + w * 0.5f, y + 5.0f, 8.2f, AppleUiRenderer.textPrimary(), false);
-        if (y + 19 > clipY && y < clipY + clipH) {
-            HIT_RECTS.add(new HitRect(x, y, w, 19, onClick, null, null));
+        YeHdFont.drawCenteredInBox(g, text, x, y, w, 19, 8.1f, AppleUiRenderer.textPrimary(), false, false);
+        addClippedHit(x, y, w, 19, clipY, clipY + clipH, onClick, null, null, null);
+    }
+
+    // ==================== INLINE INPUT & KEYBIND RECORDING HELPERS ====================
+
+    private static void startKeybindListen(String id, java.util.function.IntConsumer consumer) {
+        playClick();
+        if (id.equals(activeKeybindId)) {
+            stopKeybindListen();
+        } else {
+            activeKeybindId = id;
+            activeKeybindConsumer = consumer;
+            pendingModifierKeyAlone = -1;
         }
     }
 
-    public static void confirmProfileInput() {
+    public static void stopKeybindListen() {
+        activeKeybindId = "";
+        activeKeybindConsumer = null;
+        pendingModifierKeyAlone = -1;
+    }
+
+    private static String liveBindPrompt() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null && mc.getWindow() != null) {
+            return KeyCombo.formatPendingModifiers(mc.getWindow().handle());
+        }
+        return ConfigManager.tr("请按键...", "Press...");
+    }
+
+    private static void startNumberEdit(String key, String initVal, DoubleConsumer setter) {
         playClick();
-        String name = profileInputBuffer.trim();
-        if (!name.isEmpty()) {
-            if (profileInputMode == 1) {
-                String created = ConfigManager.createNewProfile(name);
-                showToast(ConfigManager.tr("✓ 已新建并切换: ", "Created: ") + created, 0xFF22C55E);
-            } else if (profileInputMode == 2) {
-                if (ConfigManager.renameActiveProfile(name)) {
-                    showToast(ConfigManager.tr("✓ 已重命名为: ", "Renamed: ") + ConfigManager.getActiveProfile(), 0xFF22C55E);
-                } else {
-                    showToast(ConfigManager.tr("重命名失败", "Rename failed"), 0xFFEF4444);
+        commitInlineInputIfNumber();
+        textInputKind = 5;
+        activeNumberKey = key;
+        activeNumberSetter = setter;
+        textInputBuffer = initVal;
+    }
+
+    public static void commitInlineInputIfNumber() {
+        if (textInputKind == 5 && activeNumberSetter != null) {
+            try {
+                String clean = textInputBuffer.trim().replace("%", "").replace("m", "");
+                if (!clean.isEmpty()) {
+                    double parsed = Double.parseDouble(clean);
+                    activeNumberSetter.accept(parsed);
+                }
+            } catch (Exception ignored) {}
+            textInputKind = 0;
+            activeNumberSetter = null;
+            activeNumberKey = "";
+        }
+    }
+
+    public static void confirmTextInput() {
+        playClick();
+        String val = textInputBuffer.trim();
+        if (textInputKind == 1) {
+            if (!val.isEmpty()) {
+                String created = ConfigManager.createNewProfile(val);
+                showToast(ConfigManager.tr("已新建档案: ", "Created: ") + created, 0xFF22C55E);
+            }
+            textInputKind = 0;
+        } else if (textInputKind == 2) {
+            if (!val.isEmpty() && ConfigManager.renameActiveProfile(val)) {
+                showToast(ConfigManager.tr("已重命名为: ", "Renamed: ") + ConfigManager.getActiveProfile(), 0xFF22C55E);
+            }
+            textInputKind = 0;
+        } else if (textInputKind == 3) {
+            if (!val.isEmpty()) {
+                FriendManager.addFriend(val);
+                showToast(ConfigManager.tr("已添加好友: ", "Added Friend: ") + val, 0xFF34D399);
+                textInputBuffer = "";
+            }
+            textInputKind = 0;
+        } else if (textInputKind == 4 && activeStringSetting != null) {
+            activeStringSetting.set(textInputBuffer);
+            activeStringSetting = null;
+            textInputKind = 0;
+        } else if (textInputKind == 5) {
+            commitInlineInputIfNumber();
+        } else if (textInputKind == 6) {
+            if (openColorSetting != null) {
+                openColorSetting.setHex(val);
+            } else if (openThemeCustomColor) {
+                String clean = val.startsWith("#") ? val.substring(1) : val;
+                if (clean.length() == 6) {
+                    try {
+                        int rgb = Integer.parseInt(clean, 16);
+                        float[] hsb = Color.RGBtoHSB((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, null);
+                        ConfigManager.customAccentHue = hsb[0];
+                        ConfigManager.customAccentSat = hsb[1];
+                        ConfigManager.customAccentBri = hsb[2];
+                        ConfigManager.saveAsync();
+                    } catch (Exception ignored) {}
                 }
             }
+            textInputKind = 0;
         }
-        profileInputMode = 0;
     }
 
     private static void drawScrollbar(GuiGraphics g, int barX, int viewY, int viewH, int contentH, int accent) {
@@ -1115,45 +1865,20 @@ public final class YeQuickMenu {
         return raw.substring(0, 1).toUpperCase(Locale.ROOT) + raw.substring(1).toLowerCase(Locale.ROOT);
     }
 
-    public static String keyName(int key) {
-        if (key <= 0) return ConfigManager.tr("无", "None");
-        if (key >= GLFW.GLFW_KEY_F1 && key <= GLFW.GLFW_KEY_F25) {
-            return "F" + (key - GLFW.GLFW_KEY_F1 + 1);
-        }
-        return switch (key) {
-            case GLFW.GLFW_KEY_RIGHT_SHIFT -> "RShift";
-            case GLFW.GLFW_KEY_LEFT_SHIFT -> "LShift";
-            case GLFW.GLFW_KEY_RIGHT_CONTROL -> "RCtrl";
-            case GLFW.GLFW_KEY_LEFT_CONTROL -> "LCtrl";
-            case GLFW.GLFW_KEY_RIGHT_ALT -> "RAlt";
-            case GLFW.GLFW_KEY_LEFT_ALT -> "LAlt";
-            case GLFW.GLFW_KEY_TAB -> "Tab";
-            case GLFW.GLFW_KEY_CAPS_LOCK -> "Caps";
-            default -> {
-                String n = GLFW.glfwGetKeyName(key, 0);
-                yield n != null ? n.toUpperCase(Locale.ROOT) : ("K" + key);
-            }
-        };
-    }
-
     public static boolean handleEsc() {
         if (!open) return false;
         playClick();
-        if (profileInputMode != 0) { profileInputMode = 0; return true; }
-        if (listeningModuleKey != null) { listeningModuleKey = null; return true; }
+        if (confirmMessage != null) { confirmMessage = null; confirmAction = null; return true; }
+        if (tutorialModalOpen) { tutorialModalOpen = false; return true; }
+        if (YePickerModal.isOpen()) { YePickerModal.close(); return true; }
+        if (textInputKind != 0) { commitInlineInputIfNumber(); textInputKind = 0; return true; }
+        if (activeKeybindConsumer != null) { stopKeybindListen(); return true; }
+        if (openColorSetting != null || openThemeCustomColor) { openColorSetting = null; openThemeCustomColor = false; return true; }
         if (openDropdown != null) { openDropdown = null; return true; }
         if (soundDropdownOpen) { soundDropdownOpen = false; return true; }
-        if (activeSection != TopSection.SETTINGS && activeModule != null) {
+        if ((activeSection == TopSection.FEATURES || activeSection == TopSection.HUD) && activeModule != null) {
             activeModule = null;
-            pageSlide = -16.0f;
-            selectedIndex = 0;
-            scrollOffset = 0.0;
-            targetScroll = 0.0;
-            return true;
-        }
-        if (activeSection != TopSection.FEATURES) {
-            activeSection = TopSection.FEATURES;
-            pageSlide = -16.0f;
+            pageSlide = -14.0f;
             selectedIndex = 0;
             scrollOffset = 0.0;
             targetScroll = 0.0;
@@ -1178,21 +1903,22 @@ public final class YeQuickMenu {
     public static void onKeyNav(int action) {
         if (!open) return;
         playClick();
-        if (activeSection != TopSection.SETTINGS) {
+        int cols = 3; // Compact Arrow-UI uses 3 columns
+        if (activeSection == TopSection.FEATURES || activeSection == TopSection.HUD) {
             if (activeModule == null) {
                 List<Module> mods = (activeSection == TopSection.FEATURES)
-                        ? getAllFeatureModulesOrdered()
+                        ? getOrderedFeatureModulesForNav()
                         : ModuleManager.getByCategory(Category.HUD);
-                if (action == 0 && selectedIndex >= GRID_COLS) selectedIndex -= GRID_COLS;
-                else if (action == 1 && selectedIndex + GRID_COLS < mods.size()) selectedIndex += GRID_COLS;
+                if (action == 0 && selectedIndex >= cols) selectedIndex -= cols;
+                else if (action == 1 && selectedIndex + cols < mods.size()) selectedIndex += cols;
                 else if (action == 2) {
-                    if (selectedIndex % GRID_COLS == 0 && activeSection.ordinal() > 0) {
+                    if (selectedIndex % cols == 0 && activeSection.ordinal() > 0) {
                         switchSection(TopSection.values()[activeSection.ordinal() - 1]);
                         return;
                     } else if (selectedIndex > 0) selectedIndex--;
                 } else if (action == 3) {
-                    if ((selectedIndex % GRID_COLS == GRID_COLS - 1 || selectedIndex == mods.size() - 1)
-                            && activeSection.ordinal() < TopSection.SETTINGS.ordinal()) {
+                    if ((selectedIndex % cols == cols - 1 || selectedIndex == mods.size() - 1)
+                            && activeSection.ordinal() < TopSection.values().length - 1) {
                         switchSection(TopSection.values()[activeSection.ordinal() + 1]);
                         return;
                     } else if (selectedIndex < mods.size() - 1) selectedIndex++;
@@ -1205,15 +1931,15 @@ public final class YeQuickMenu {
                     handleEsc();
                 }
 
-                int row = selectedIndex / GRID_COLS;
-                double rowTop = row * 46.0;
+                int row = selectedIndex / cols;
+                double rowTop = row * 34.0;
+                int viewH = COMPACT_H - 36;
                 if (rowTop < targetScroll) targetScroll = rowTop;
-                else if (rowTop + 52 > targetScroll + (WIN_H - 44)) targetScroll = rowTop + 52 - (WIN_H - 44);
+                else if (rowTop + 42 > targetScroll + viewH) targetScroll = rowTop + 42 - viewH;
             } else {
                 List<Setting<?>> sets = getDisplaySettings(activeModule);
-                if (action == 5) {
-                    handleEsc();
-                } else if (action == 0 && selectedIndex > 0) selectedIndex--;
+                if (action == 5) handleEsc();
+                else if (action == 0 && selectedIndex > 0) selectedIndex--;
                 else if (action == 1 && selectedIndex < sets.size() - 1) selectedIndex++;
                 else if (!sets.isEmpty()) {
                     Setting<?> s = sets.get(selectedIndex);
@@ -1231,8 +1957,10 @@ public final class YeQuickMenu {
                     }
                 }
             }
-        } else if (action == 2) {
-            switchSection(TopSection.HUD);
+        } else if (action == 2 && activeSection.ordinal() > 0) {
+            switchSection(TopSection.values()[activeSection.ordinal() - 1]);
+        } else if (action == 3 && activeSection.ordinal() < TopSection.values().length - 1) {
+            switchSection(TopSection.values()[activeSection.ordinal() + 1]);
         } else if (action == 5) {
             handleEsc();
         }
@@ -1241,19 +1969,25 @@ public final class YeQuickMenu {
     public static List<HitRect> getHitRects() { return HIT_RECTS; }
 
     public static void addScroll(double mouseX, double mouseY, double delta) {
+        if (YePickerModal.isOpen()) {
+            YePickerModal.onScroll(delta);
+            return;
+        }
         if (openDropdown != null && inBounds(mouseX, mouseY, dropX, Math.max(0, dropY - 220), dropW, 440)) {
             dropScroll = Math.max(0.0, dropScroll - delta * 18.0);
             return;
         }
-        targetScroll = Math.max(0.0, Math.min(maxScroll, targetScroll - delta * 24.0));
+        targetScroll = Math.max(0.0, Math.min(maxScroll, targetScroll - delta * 26.0));
     }
 
     private static boolean inBounds(double mx, double my, int x, int y, int w, int h) {
         return mx >= x && mx <= x + w && my >= y && my <= y + h;
     }
 
-    private static String formatDouble(double v) {
-        if (Math.abs(v - Math.round(v)) < 0.001) return String.valueOf((long) Math.round(v));
+    private static String formatDouble(double v, double step) {
+        if (step >= 1.0 && Math.abs(v - Math.round(v)) < 0.001) return String.valueOf((long) Math.round(v));
+        if (step < 0.01) return String.format(Locale.ROOT, "%.3f", v);
+        if (step >= 0.1 - 1e-6 && Math.abs(v * 10 - Math.round(v * 10)) < 0.01) return String.format(Locale.ROOT, "%.1f", v);
         return String.format(Locale.ROOT, "%.2f", v);
     }
 }

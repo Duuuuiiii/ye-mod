@@ -52,7 +52,7 @@ public class IdleWallpaperModule extends Module {
     private float blend = 0.0f;
 
     public IdleWallpaperModule() {
-        super("idle_wallpaper", "挂机演出", "Idle Show", "静止自动进入灵魂出窍穿插运镜并隐藏UI，动一下即刻恢复", Category.VISUAL);
+        super("idle_wallpaper", "待机动画", "Idle Anim", "静止无操作时自动进入多机位灵魂出窍环绕运镜并隐藏界面与手部，操作即刻恢复", Category.VISUAL);
     }
 
     @Override

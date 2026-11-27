@@ -1,7 +1,7 @@
 package com.ye.mod.core;
 
+import com.ye.mod.ui.YeQuickMenu;
 import net.minecraft.client.Minecraft;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -10,13 +10,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Central registry and lifecycle dispatcher for all Ye modules.
+ * Central registry and lifecycle dispatcher for all Ye modules, supporting single/combo keybinds and quick preset cycling.
  */
 public final class ModuleManager {
     private static final List<Module> MODULES = new ArrayList<>();
     private static final Map<Class<? extends Module>, Module> BY_CLASS = new HashMap<>();
     private static final Map<String, Module> BY_ID = new HashMap<>();
-    private static final Map<Integer, Boolean> PREVIOUS_KEY_STATES = new HashMap<>();
+    private static final Map<String, Boolean> PREV_TOGGLE_DOWN = new HashMap<>();
+    private static final Map<String, Boolean> PREV_CYCLE_DOWN = new HashMap<>();
 
     private ModuleManager() {}
 
@@ -62,21 +63,41 @@ public final class ModuleManager {
         Minecraft mc = Minecraft.getInstance();
         if (mc == null) return;
 
-        if (mc.screen == null && mc.getWindow() != null) {
+        if (mc.getWindow() != null) {
             long handle = mc.getWindow().handle();
+            boolean inGameNoGui = (mc.screen == null);
+
             for (Module m : MODULES) {
                 int key = m.getKeybind();
-                if (key > 0) {
-                    boolean down = GLFW.glfwGetKey(handle, key) == GLFW.GLFW_PRESS;
-                    boolean wasDown = PREVIOUS_KEY_STATES.getOrDefault(key, false);
-                    if (down && !wasDown) {
+                if (key > 0 && !m.isHoldOnlyKeybind()) {
+                    boolean down = KeyCombo.isComboDown(handle, key);
+                    boolean wasDown = PREV_TOGGLE_DOWN.getOrDefault(m.getId(), false);
+                    if (inGameNoGui && down && !wasDown) {
                         m.toggle();
+                        YeQuickMenu.playClick();
                     }
-                    PREVIOUS_KEY_STATES.put(key, down);
+                    PREV_TOGGLE_DOWN.put(m.getId(), down);
+                } else {
+                    PREV_TOGGLE_DOWN.remove(m.getId());
+                }
+
+                int cycKey = m.getPresetCycleKey();
+                if (cycKey > 0 && m.hasCycleablePreset()) {
+                    boolean cDown = KeyCombo.isComboDown(handle, cycKey);
+                    boolean cWas = PREV_CYCLE_DOWN.getOrDefault(m.getId(), false);
+                    if (inGameNoGui && cDown && !cWas) {
+                        String nextLbl = m.cycleNextPreset();
+                        YeQuickMenu.playClick();
+                        if (nextLbl != null) {
+                            YeQuickMenu.showToast((ConfigManager.english ? m.getSubtitle() : m.getName()) + " → " + nextLbl,
+                                    ConfigManager.getAccentColor());
+                        }
+                    }
+                    PREV_CYCLE_DOWN.put(m.getId(), cDown);
+                } else {
+                    PREV_CYCLE_DOWN.remove(m.getId());
                 }
             }
-        } else {
-            PREVIOUS_KEY_STATES.clear();
         }
 
         for (Module m : MODULES) {

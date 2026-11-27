@@ -1,6 +1,7 @@
 package com.ye.mod.modules.visual;
 
 import com.ye.mod.core.Category;
+import com.ye.mod.core.KeyCombo;
 import com.ye.mod.core.Module;
 import com.ye.mod.core.setting.BoolSetting;
 import com.ye.mod.core.setting.DoubleSetting;
@@ -8,36 +9,40 @@ import net.minecraft.client.Minecraft;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * Silky Logarithmic Perspective Zoom (放大镜):
- * - Exponential log-space interpolation so rapid key tapping NEVER stutters or snaps!
- * - Hold Zoom key ('C' by default, or module keybind if bound) + Scroll Wheel to smoothly zoom in/out up to 25x!
- * - Optional auto-reset magnification on release!
+ * Perspective Zoom (放大镜):
+ * Overrides isHoldOnlyKeybind() = true so pressing/holding the zoom hotkey NEVER toggles the module off on odd presses!
  */
 public class ZoomModule extends Module {
     public final DoubleSetting zoomDivisor = addSetting(new DoubleSetting(
             "zoomDivisor", "基础倍率", "按下放大镜时的初始放大倍数", 3.8, 1.5, 12.0, 0.2
-    ));
+    ).functionGroup());
 
     public final DoubleSetting animSpeed = addSetting(new DoubleSetting(
-            "animSpeed", "丝滑速度", "视野推拉阻尼过渡速度", 18.0, 6.0, 32.0, 1.0
-    ));
+            "animSpeed", "变焦速度", "视野推拉过渡速率", 18.0, 6.0, 32.0, 1.0
+    ).functionGroup());
 
     public final BoolSetting scrollAdjust = addSetting(new BoolSetting(
-            "scrollAdjust", "滚轮调节倍率", "按住放大键时滑动滚轮可无级放大/缩小视野", true
-    ));
+            "scrollAdjust", "滚轮调节倍率", "变焦状态下通过滚轮无级缩放视野", true
+    ).functionGroup());
 
     public final BoolSetting resetOnRelease = addSetting(new BoolSetting(
-            "resetOnRelease", "松开重置倍率", "松开放大键后下次再按恢复为基础倍率", true
-    ));
+            "resetOnRelease", "松开重置倍率", "结束变焦后恢复初始倍率", true
+    ).functionGroup());
 
-    private double currentLogDiv = 0.0; // 0.0 = log(1.0) = unzoomed
+    private double currentLogDiv = 0.0;
     private double dynamicScrollDiv = -1.0;
     private boolean wasHolding = false;
     private long lastNs = 0L;
 
     public ZoomModule() {
-        super("zoom", "放大镜", "Zoom", "按住 C 键丝滑无断层变焦，支持滚轮无级放大缩小", Category.VISUAL);
+        super("zoom", "放大镜", "Zoom", "平滑变焦放大远景视野，支持无级倍率调节", Category.VISUAL);
         setEnabled(true, true);
+        setKeybindSilent(GLFW.GLFW_KEY_C);
+    }
+
+    @Override
+    public boolean isHoldOnlyKeybind() {
+        return true;
     }
 
     public boolean isHoldingZoom() {
@@ -45,12 +50,9 @@ public class ZoomModule extends Module {
         Minecraft mc = Minecraft.getInstance();
         if (mc == null || mc.screen != null || mc.getWindow() == null) return false;
         int key = getKeybind() > 0 ? getKeybind() : GLFW.GLFW_KEY_C;
-        return GLFW.glfwGetKey(mc.getWindow().handle(), key) == GLFW.GLFW_PRESS;
+        return KeyCombo.isComboDown(mc.getWindow().handle(), key);
     }
 
-    /**
-     * Intercepts mouse wheel while holding Zoom key! Returns true if consumed.
-     */
     public boolean onMouseScroll(double scrollY) {
         if (!scrollAdjust.get() || scrollY == 0.0 || !isHoldingZoom()) return false;
         if (dynamicScrollDiv < 1.0) {
@@ -84,7 +86,6 @@ public class ZoomModule extends Module {
         double activeDiv = holding ? (dynamicScrollDiv >= 1.0 ? dynamicScrollDiv : zoomDivisor.get()) : 1.0;
         double targetLog = Math.log(Math.max(1.0, activeDiv));
 
-        // Exponential damping in log-FOV space: C1-continuous velocity even under rapid spam-clicking!
         double alpha = 1.0 - Math.exp(-animSpeed.get() * dt);
         currentLogDiv += (targetLog - currentLogDiv) * alpha;
         if (!holding && Math.abs(currentLogDiv) < 0.0008) {

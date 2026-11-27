@@ -47,7 +47,7 @@ public class DamagePopupsModule extends Module {
     private boolean lastWasCrit = false;
 
     public DamagePopupsModule() {
-        super("damage_popups", "伤害飘字", "Damage Popups", "高清矢量伤害数值、暴击标记与连击计数", Category.UTILITY);
+        super("damage_popups", "伤害飘字", "Damage Popups", "实时显示攻击伤害数值、暴击标记与连击计数", Category.UTILITY);
     }
 
     public void onAttack(Entity target) {

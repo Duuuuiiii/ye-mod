@@ -3,8 +3,12 @@ package com.ye.mod;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.ye.mod.core.ConfigManager;
 import com.ye.mod.core.FriendManager;
+import com.ye.mod.core.KeyCombo;
 import com.ye.mod.core.ModuleManager;
+import com.ye.mod.core.YeZhCnDict;
 import com.ye.mod.modules.hud.HudElements;
+import com.ye.mod.modules.player.FlightSpeedModule;
+import com.ye.mod.modules.player.PlayerUiModule;
 import com.ye.mod.modules.player.SmartAfkModule;
 import com.ye.mod.modules.render.AccessoriesModule;
 import com.ye.mod.modules.render.AntiLagModule;
@@ -24,17 +28,22 @@ import com.ye.mod.modules.render.TrajectoryPreviewModule;
 import com.ye.mod.modules.system.BorderlessFullscreenModule;
 import com.ye.mod.modules.system.ChatFilterModule;
 import com.ye.mod.modules.system.PlayerStatsManager;
+import com.ye.mod.modules.system.QuickChatModule;
 import com.ye.mod.modules.visual.AmbienceModule;
+import com.ye.mod.modules.visual.CameraTweaksModule;
 import com.ye.mod.modules.visual.CinematicBarsModule;
 import com.ye.mod.modules.visual.CrosshairModule;
 import com.ye.mod.modules.visual.DamagePopupsModule;
+import com.ye.mod.modules.visual.EnchantGlintModule;
 import com.ye.mod.modules.visual.GlobalColorModule;
 import com.ye.mod.modules.visual.HealthPlatesModule;
 import com.ye.mod.modules.visual.HitCrosshairModule;
 import com.ye.mod.modules.visual.HitFeedbackModule;
 import com.ye.mod.modules.visual.IdleWallpaperModule;
 import com.ye.mod.modules.visual.LowHpVignetteModule;
+import com.ye.mod.modules.visual.MotionBlurModule;
 import com.ye.mod.modules.visual.NoFovModule;
+import com.ye.mod.modules.visual.ShaderPackModule;
 import com.ye.mod.modules.visual.SinCityFilterModule;
 import com.ye.mod.modules.visual.SoulAscendModule;
 import com.ye.mod.modules.visual.SoulRingsModule;
@@ -43,6 +52,8 @@ import com.ye.mod.modules.visual.StepDecalsModule;
 import com.ye.mod.modules.visual.VoxelShatterModule;
 import com.ye.mod.modules.visual.ZoomModule;
 import com.ye.mod.modules.world.AutoLogModule;
+import com.ye.mod.modules.world.BlockEspModule;
+import com.ye.mod.modules.world.BlockSearchModule;
 import com.ye.mod.modules.world.LogoutGhostsModule;
 import com.ye.mod.modules.world.PortalFinderModule;
 import com.ye.mod.modules.world.StashRadarModule;
@@ -64,7 +75,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Client entrypoint for the Ye 1.21.11 Fabric mod (v1.7.2).
+ * Client entrypoint for the Ye 1.21.11 Fabric mod (v1.7.3).
  */
 public class YeClient implements ClientModInitializer {
     private static boolean prevMenuKeyDown = false;
@@ -74,7 +85,9 @@ public class YeClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        // 1. 玩家模型 (PLAYER_MODEL — unified vertical-scroll "功能" page)
+        YeZhCnDict.ensureInitAsync();
+
+        // 1. 玩家模型 (PLAYER_MODEL)
         ModuleManager.register(new DragonWingsModule());
         ModuleManager.register(new FlightModelModule());
         ModuleManager.register(new AccessoriesModule());
@@ -84,8 +97,12 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new BodyScaleModule());
         ModuleManager.register(new SwingSpeedModule());
 
-        // 2. 视觉渲染 (VISUAL — unified vertical-scroll "功能" page)
+        // 2. 视觉渲染 (VISUAL)
         ModuleManager.register(new GlobalColorModule());
+        ModuleManager.register(new ShaderPackModule());
+        ModuleManager.register(new EnchantGlintModule());
+        ModuleManager.register(new MotionBlurModule());
+        ModuleManager.register(new CameraTweaksModule());
         ModuleManager.register(new EntityEspModule());
         ModuleManager.register(new SoulRingsModule());
         ModuleManager.register(new AmbienceModule());
@@ -102,11 +119,16 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new LowHpVignetteModule());
         ModuleManager.register(new ZoomModule());
 
-        // 3. 特定功能 (UTILITY — unified vertical-scroll "功能" page)
+        // 3. 特定功能 (UTILITY)
+        ModuleManager.register(new PlayerUiModule());
+        ModuleManager.register(new FlightSpeedModule());
+        ModuleManager.register(new QuickChatModule());
         ModuleManager.register(new AutoLogModule());
         ModuleManager.register(new HealthPlatesModule());
         ModuleManager.register(new DamagePopupsModule());
         ModuleManager.register(new StashRadarModule());
+        ModuleManager.register(new BlockEspModule());
+        ModuleManager.register(new BlockSearchModule());
         ModuleManager.register(new PortalFinderModule());
         ModuleManager.register(new LavaEspModule());
         ModuleManager.register(new TrajectoryPreviewModule());
@@ -118,7 +140,7 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new ChatFilterModule());
         ModuleManager.register(new SmartAfkModule());
 
-        // 4. 独立 HUD 子模块板块 (Category.HUD — dedicated "HUD" page + screen right-click!)
+        // 4. 独立 HUD 子模块板块 (Category.HUD)
         ModuleManager.register(new HudElements.PotionsHud());
         ModuleManager.register(new HudElements.CoordsHud());
         ModuleManager.register(new HudElements.SpeedHud());
@@ -129,6 +151,7 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new HudElements.InventoryHud());
         ModuleManager.register(new HudElements.NearbyDropsHud());
         ModuleManager.register(new HudElements.ModuleListHud());
+        ModuleManager.register(new HudElements.PlayerViewHud());
         ModuleManager.register(new WthitModule());
 
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
@@ -160,7 +183,7 @@ public class YeClient implements ClientModInitializer {
                         .then(ClientCommandManager.literal("friend")
                                 .executes(ctx -> {
                                     var list = FriendManager.getFriends();
-                                    String msg = list.isEmpty() ? "§7当前白名单为空" : ("§a白名单好友 (" + list.size() + "): §f" + String.join(", ", list));
+                                    String msg = list.isEmpty() ? "§7当前好友列表为空" : ("§a好友列表 (" + list.size() + "): §f" + String.join(", ", list));
                                     ctx.getSource().sendFeedback(Component.literal("§b[Ye] " + msg));
                                     return 1;
                                 })
@@ -169,7 +192,7 @@ public class YeClient implements ClientModInitializer {
                                                 .executes(ctx -> {
                                                     String n = StringArgumentType.getString(ctx, "name");
                                                     FriendManager.addFriend(n);
-                                                    ctx.getSource().sendFeedback(Component.literal("§b[Ye] §a已添加白名单好友: §f" + n));
+                                                    ctx.getSource().sendFeedback(Component.literal("§b[Ye] §a已添加好友: §f" + n));
                                                     return 1;
                                                 })))
                                 .then(ClientCommandManager.literal("remove")
@@ -177,19 +200,20 @@ public class YeClient implements ClientModInitializer {
                                                 .executes(ctx -> {
                                                     String n = StringArgumentType.getString(ctx, "name");
                                                     FriendManager.removeFriend(n);
-                                                    ctx.getSource().sendFeedback(Component.literal("§b[Ye] §e已移除白名单好友: §f" + n));
+                                                    ctx.getSource().sendFeedback(Component.literal("§b[Ye] §e已移除好友: §f" + n));
                                                     return 1;
                                                 })))
                                 .then(ClientCommandManager.literal("clear")
                                         .executes(ctx -> {
                                             FriendManager.clearFriends();
-                                            ctx.getSource().sendFeedback(Component.literal("§b[Ye] §7已清空好友白名单"));
+                                            ctx.getSource().sendFeedback(Component.literal("§b[Ye] §7已清空好友列表"));
                                             return 1;
                                         })))));
 
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
             CapeManager.init();
             SkinManager.init();
+            ShaderPackModule.ensureBundledPacksExtracted();
             if (client.getUser() != null) {
                 ConfigManager.checkAccountSwitch(client.getUser().getName());
             }
@@ -216,49 +240,51 @@ public class YeClient implements ClientModInitializer {
                 }
             }
 
-            if (client.screen == null && client.getWindow() != null) {
+            if (client.getWindow() != null) {
                 long handle = client.getWindow().handle();
+
+                // Unconditionally track F9 & F10 state every tick so closing YeMouseScreen NEVER immediately reopens!
                 int key = ConfigManager.getMenuKey();
-                if (key > 0) {
-                    boolean down = GLFW.glfwGetKey(handle, key) == GLFW.GLFW_PRESS;
-                    if (down && !prevMenuKeyDown) {
+                boolean menuDown = key > 0 && KeyCombo.isComboDown(handle, key);
+                int mKey = ConfigManager.getMouseUnlockKey();
+                boolean mouseDown = mKey > 0 && KeyCombo.isComboDown(handle, mKey);
+
+                if (client.screen == null) {
+                    if (menuDown && !prevMenuKeyDown) {
                         YeQuickMenu.toggleOpen();
                     }
-                    prevMenuKeyDown = down;
-                }
-                int mKey = ConfigManager.getMouseUnlockKey();
-                if (mKey > 0) {
-                    boolean mDown = GLFW.glfwGetKey(handle, mKey) == GLFW.GLFW_PRESS;
-                    if (mDown && !prevMouseKeyDown) {
+                    if (mouseDown && !prevMouseKeyDown) {
                         YeQuickMenu.setOpen(true);
                         YeQuickMenu.playClick();
                         client.setScreen(new YeMouseScreen());
                     }
-                    prevMouseKeyDown = mDown;
-                }
 
-                if (YeQuickMenu.isOpen()) {
-                    pollNav(handle, GLFW.GLFW_KEY_UP, 0);
-                    pollNav(handle, GLFW.GLFW_KEY_KP_8, 0);
-                    pollNav(handle, GLFW.GLFW_KEY_DOWN, 1);
-                    pollNav(handle, GLFW.GLFW_KEY_KP_2, 1);
-                    pollNav(handle, GLFW.GLFW_KEY_LEFT, 2);
-                    pollNav(handle, GLFW.GLFW_KEY_KP_4, 2);
-                    pollNav(handle, GLFW.GLFW_KEY_RIGHT, 3);
-                    pollNav(handle, GLFW.GLFW_KEY_KP_6, 3);
-                    pollNav(handle, GLFW.GLFW_KEY_ENTER, 4);
-                    pollNav(handle, GLFW.GLFW_KEY_KP_ENTER, 4);
-                    pollNav(handle, GLFW.GLFW_KEY_BACKSPACE, 5);
-                    pollNav(handle, GLFW.GLFW_KEY_SPACE, 6);
-                    pollNav(handle, GLFW.GLFW_KEY_KP_ADD, 6);
+                    if (YeQuickMenu.isOpen()) {
+                        pollNav(handle, GLFW.GLFW_KEY_UP, 0);
+                        pollNav(handle, GLFW.GLFW_KEY_KP_8, 0);
+                        pollNav(handle, GLFW.GLFW_KEY_DOWN, 1);
+                        pollNav(handle, GLFW.GLFW_KEY_KP_2, 1);
+                        pollNav(handle, GLFW.GLFW_KEY_LEFT, 2);
+                        pollNav(handle, GLFW.GLFW_KEY_KP_4, 2);
+                        pollNav(handle, GLFW.GLFW_KEY_RIGHT, 3);
+                        pollNav(handle, GLFW.GLFW_KEY_KP_6, 3);
+                        pollNav(handle, GLFW.GLFW_KEY_ENTER, 4);
+                        pollNav(handle, GLFW.GLFW_KEY_KP_ENTER, 4);
+                        pollNav(handle, GLFW.GLFW_KEY_BACKSPACE, 5);
+                        pollNav(handle, GLFW.GLFW_KEY_SPACE, 6);
+                        pollNav(handle, GLFW.GLFW_KEY_KP_ADD, 6);
+                    } else {
+                        PREV_NAV_KEYS.clear();
+                    }
                 } else {
                     PREV_NAV_KEYS.clear();
                 }
-            } else {
-                prevMenuKeyDown = false;
-                prevMouseKeyDown = false;
-                PREV_NAV_KEYS.clear();
+
+                prevMenuKeyDown = menuDown;
+                prevMouseKeyDown = mouseDown;
             }
+
+            FriendManager.onClientTick();
             ModuleManager.onClientTick();
         });
     }

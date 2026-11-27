@@ -5,18 +5,23 @@ import com.ye.mod.core.ConfigManager;
 import com.ye.mod.core.Module;
 import com.ye.mod.core.setting.ActionSetting;
 import com.ye.mod.core.setting.BoolSetting;
+import com.ye.mod.core.setting.ColorSetting;
 import com.ye.mod.core.setting.DoubleSetting;
+import com.ye.mod.core.setting.EnumSetting;
+import com.ye.mod.ui.YeHdFont;
+import com.ye.mod.ui.YeQuickMenu;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gizmos.GizmoStyle;
 import net.minecraft.gizmos.Gizmos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
@@ -25,80 +30,161 @@ import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
 import net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity;
 import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
- * Storage & Stash ESP with Lotus-inspired natural chest filtering,
- * per-type toggles, tracer lines, sound alerts, and draggable HUD slot.
+ * Storage ESP (储存透视):
+ * - Exact Block VoxelShape & Dynamic ShulkerBox Opening Lid Bounding Box (purple box follows opening lid 100%!)
+ * - Exact 14x14x14 inset Chest geometry + Merge Double Chests toggle (合并大箱子边框 vs 分别渲染)
+ * - Per-container independent settings: Color, Box Mode (边框/填充/边框+填充), Tracer (实线/闪烁虚线), Line Width, Blink Hz!
+ * - Searchable Block Matrix Picker for natural chest ignore filter!
  */
 public class StashRadarModule extends Module {
+    public enum ContainerKind {
+        SHULKER("潜影盒", true, 0xFFD946EF, true, LineStyle.SOLID, 2.2, 2.0),
+        CHEST("箱子与木桶", true, 0xFFF59E0B, false, LineStyle.BLINK_DASH, 1.6, 3.0),
+        ENDER_CHEST("末影箱", true, 0xFF38BDF8, false, LineStyle.SOLID, 1.8, 2.0),
+        SPAWNER("刷怪笼", true, 0xFFEF4444, false, LineStyle.BLINK_DASH, 2.0, 4.0),
+        HOPPER("漏斗", false, 0xFF4ADE80, false, LineStyle.SOLID, 1.4, 2.0);
+
+        public final String label;
+        final boolean defOn;
+        final int defColor;
+        final boolean defTracer;
+        final LineStyle defLine;
+        final double defWidth;
+        final double defFreq;
+
+        ContainerKind(String label, boolean defOn, int defColor, boolean defTracer, LineStyle defLine, double defWidth, double defFreq) {
+            this.label = label;
+            this.defOn = defOn;
+            this.defColor = defColor;
+            this.defTracer = defTracer;
+            this.defLine = defLine;
+            this.defWidth = defWidth;
+            this.defFreq = defFreq;
+        }
+    }
+
+    public enum BoxRenderMode {
+        BOTH("边框+填充"),
+        OUTLINE_ONLY("仅边框"),
+        FILL_ONLY("仅填充");
+
+        public final String label;
+        BoxRenderMode(String label) { this.label = label; }
+    }
+
+    public enum LineStyle {
+        SOLID("实线"),
+        DASHED("常亮虚线"),
+        BLINK_DASH("闪烁虚线"),
+        BLINK_SOLID("闪烁实线");
+
+        public final String label;
+        LineStyle(String label) { this.label = label; }
+    }
+
+    public static final class ContainerConfig {
+        public final BoolSetting enabled;
+        public final ColorSetting color;
+        public final EnumSetting<BoxRenderMode> boxMode;
+        public final DoubleSetting fillAlpha;
+        public final BoolSetting tracer;
+        public final EnumSetting<LineStyle> lineStyle;
+        public final DoubleSetting lineWidth;
+        public final DoubleSetting blinkHz;
+
+        ContainerConfig(BoolSetting enabled, ColorSetting color, EnumSetting<BoxRenderMode> boxMode,
+                        DoubleSetting fillAlpha, BoolSetting tracer, EnumSetting<LineStyle> lineStyle,
+                        DoubleSetting lineWidth, DoubleSetting blinkHz) {
+            this.enabled = enabled;
+            this.color = color;
+            this.boxMode = boxMode;
+            this.fillAlpha = fillAlpha;
+            this.tracer = tracer;
+            this.lineStyle = lineStyle;
+            this.lineWidth = lineWidth;
+            this.blinkHz = blinkHz;
+        }
+    }
+
     public final DoubleSetting rangeChunks = addSetting(new DoubleSetting(
-            "rangeChunks", "扫描半径", "扫描周围多少个区块内的容器", 8.0, 2.0, 32.0, 1.0
-    ));
+            "rangeChunks", "扫描半径", "扫描周围多少个区块内的储存方块", 10.0, 2.0, 32.0, 1.0
+    ).functionGroup());
+
+    public final BoolSetting mergeDoubleChests = addSetting(new BoolSetting(
+            "mergeDoubleChests", "合并连体大箱子", "相连的大箱子合并为一个完整边框渲染，关闭则各自独立渲染", true
+    ).functionGroup());
 
     public final BoolSetting ignoreNatural = addSetting(new BoolSetting(
-            "ignoreNatural", "过滤自然箱子", "参考 Lotus 逻辑：检测周围刷怪笼/矿井/神殿/地狱砖等，自动跳过自然箱子", true
-    ));
+            "ignoreNatural", "过滤自然遗迹箱子", "自动跳过刷怪笼、矿井、沙漠神殿、地狱堡垒等自然生成箱子", true
+    ).functionGroup());
 
     public final BoolSetting ignoreNetherBricks = addSetting(new BoolSetting(
-            "ignoreNetherBricks", "过滤地狱砖", "靠近地狱砖/红地狱砖的箱子不渲染", true
-    ));
+            "ignoreNetherBricks", "过滤地狱砖周边", "跳过地狱砖结构旁边的箱子", true
+    ).visible(ignoreNatural::get).functionGroup());
 
-    public final ActionSetting addLookedBlock = addSetting(new ActionSetting(
-            "addLookedBlock", "添加准星方块过滤", "把当前准星指向的方块加入自然箱子过滤列表", () -> {
-                Minecraft mc = Minecraft.getInstance();
-                if (mc.level != null && mc.player != null && mc.hitResult instanceof BlockHitResult bhr && mc.hitResult.getType() == HitResult.Type.BLOCK) {
-                    Block b = mc.level.getBlockState(bhr.getBlockPos()).getBlock();
-                    String id = BuiltInRegistries.BLOCK.getKey(b).toString();
-                    ConfigManager.customRadarIgnoreBlocks.add(id);
-                    ConfigManager.saveAsync();
-                    mc.player.displayClientMessage(Component.literal("§b[Ye雷达] §f已添加过滤方块: §a" + id), false);
-                } else if (mc.player != null) {
-                    mc.player.displayClientMessage(Component.literal("§b[Ye雷达] §c请将准星对准一个方块后再点击添加"), false);
-                }
-            }
-    ));
+    public final BoolSetting soundAlert = addSetting(new BoolSetting(
+            "soundAlert", "新发现提示音", "首次扫描到潜影盒或基地箱子时播放清脆提示音", true
+    ).functionGroup());
 
-    public final ActionSetting clearCustomBlocks = addSetting(new ActionSetting(
-            "clearCustomBlocks", "清空自定义过滤", "清除所有手动添加的过滤方块", () -> {
-                ConfigManager.customRadarIgnoreBlocks.clear();
-                ConfigManager.saveAsync();
-                Minecraft mc = Minecraft.getInstance();
-                if (mc.player != null) {
-                    mc.player.displayClientMessage(Component.literal("§b[Ye雷达] §e已清空自定义过滤方块"), false);
-                }
-            }
-    ));
+    public final EnumSetting<ContainerKind> editingKind = addSetting(new EnumSetting<>(
+            "editingKind", "当前配置容器", "选择下方要单独调节样式、线条与颜色的储存类型", ContainerKind.SHULKER
+    ).functionGroup());
 
-    public final BoolSetting chests = addSetting(new BoolSetting("chests", "箱子木桶", "高亮箱子、陷阱箱与木桶", true));
-    public final BoolSetting shulkers = addSetting(new BoolSetting("shulkers", "潜影盒", "高亮潜影盒", true));
-    public final BoolSetting enderChests = addSetting(new BoolSetting("enderChests", "末影箱", "高亮末影箱", true));
-    public final BoolSetting spawners = addSetting(new BoolSetting("spawners", "刷怪笼", "高亮刷怪笼", true));
-    public final BoolSetting hoppers = addSetting(new BoolSetting("hoppers", "漏斗", "高亮漏斗", false));
+    public final Map<ContainerKind, ContainerConfig> configs = new EnumMap<>(ContainerKind.class);
 
-    public final BoolSetting shulkerTracer = addSetting(new BoolSetting("shulkerTracer", "潜影盒追踪线", "向潜影盒绘制追踪线", true));
-    public final BoolSetting chestTracer = addSetting(new BoolSetting("chestTracer", "箱子追踪线", "向非自然箱子绘制追踪线", false));
-    public final BoolSetting spawnerTracer = addSetting(new BoolSetting("spawnerTracer", "刷怪笼追踪线", "向刷怪笼绘制追踪线", false));
-    public final BoolSetting soundAlert = addSetting(new BoolSetting("soundAlert", "发现提示音", "新发现潜影盒或仓库箱子时播放提示音", true));
+    private record StorageTarget(BlockPos pos, BlockPos secondHalf, ContainerKind kind) {}
 
-    private record StorageEntry(BlockPos pos, int strokeArgb, int fillArgb, boolean tracer) {}
-
-    private volatile List<StorageEntry> cached = List.of();
+    private volatile List<StorageTarget> cached = List.of();
     private volatile int shulkerCount = 0;
     private volatile int totalCount = 0;
     private final Set<Long> alertedPositions = new HashSet<>();
     private int tickCounter = 0;
 
     public StashRadarModule() {
-        super("stash_radar", "仓库雷达", "Stash", "透视容器与刷怪笼并自动过滤自然箱子", Category.UTILITY);
+        super("stash_radar", "储存透视", "Storage ESP", "精确贴合模型渲染储存方块，支持分容器独立线条粗细、虚线闪烁、合并大箱子与动态潜影盒盖", Category.UTILITY);
+
+        addSetting(new ActionSetting("openIgnoreBlockPicker", "选择自然过滤方块", "打开全方块分类搜索大面板勾选需排除的自然周边方块", () ->
+                YeQuickMenu.openBlockPickerModal("自然箱子周边过滤方块", ConfigManager.customRadarIgnoreBlocks)
+        ).visible(ignoreNatural::get).functionGroup());
+
+        for (ContainerKind kind : ContainerKind.values()) {
+            String p = kind.name().toLowerCase();
+            BoolSetting en = addSetting(new BoolSetting(p + "_on", "启用·" + kind.label, "是否透视" + kind.label, kind.defOn)
+                    .visible(() -> editingKind.get() == kind).functionGroup());
+            EnumSetting<BoxRenderMode> bm = addSetting(new EnumSetting<>(p + "_box", kind.label + "·框体模式", "边框+填充 / 仅边框 / 仅填充", BoxRenderMode.BOTH)
+                    .visible(() -> editingKind.get() == kind && en.get()).functionGroup());
+            BoolSetting tr = addSetting(new BoolSetting(p + "_tr", kind.label + "·追踪线", "绘制从视野中心指向该容器的追踪线", kind.defTracer)
+                    .visible(() -> editingKind.get() == kind && en.get()).functionGroup());
+            EnumSetting<LineStyle> ls = addSetting(new EnumSetting<>(p + "_ls", kind.label + "·线条样式", "实线 / 常亮虚线 / 闪烁虚线 / 闪烁实线", kind.defLine)
+                    .visible(() -> editingKind.get() == kind && en.get() && tr.get()).functionGroup());
+            DoubleSetting lw = addSetting(new DoubleSetting(p + "_lw", kind.label + "·线条粗细", "设置追踪线与边框粗细数值", kind.defWidth, 0.8, 5.0, 0.2)
+                    .visible(() -> editingKind.get() == kind && en.get()).functionGroup());
+            DoubleSetting hz = addSetting(new DoubleSetting(p + "_hz", kind.label + "·闪烁频率", "每秒闪烁次数 (Hz)", kind.defFreq, 0.5, 10.0, 0.5)
+                    .visible(() -> editingKind.get() == kind && en.get() && tr.get()
+                            && (ls.get() == LineStyle.BLINK_DASH || ls.get() == LineStyle.BLINK_SOLID)).functionGroup());
+
+            ColorSetting col = addSetting(new ColorSetting(p + "_col", kind.label + "·颜色", "单独设置" + kind.label + "的高亮与追踪线颜色", kind.defColor)
+                    .visible(() -> editingKind.get() == kind && en.get()));
+            DoubleSetting fa = addSetting(new DoubleSetting(p + "_fa", kind.label + "·填充浓度", "内部半透明填充不透明度", 0.24, 0.05, 0.70, 0.05)
+                    .visible(() -> editingKind.get() == kind && en.get() && bm.get() != BoxRenderMode.OUTLINE_ONLY));
+
+            configs.put(kind, new ContainerConfig(en, col, bm, fa, tr, ls, lw, hz));
+        }
     }
 
     @Override
@@ -125,8 +211,10 @@ public class StashRadarModule extends Module {
         int pcz = mc.player.chunkPosition().z;
         boolean filterNat = ignoreNatural.get();
         boolean filterNether = ignoreNetherBricks.get();
+        boolean mergeChests = mergeDoubleChests.get();
 
-        List<StorageEntry> found = new ArrayList<>();
+        List<StorageTarget> found = new ArrayList<>();
+        Set<Long> visitedDoubleHalf = new HashSet<>();
         int shulkersFound = 0;
         boolean playAlert = false;
 
@@ -136,35 +224,144 @@ public class StashRadarModule extends Module {
                 LevelChunk chunk = level.getChunk(cx, cz);
                 for (BlockEntity be : chunk.getBlockEntities().values()) {
                     BlockPos pos = be.getBlockPos();
-                    if (be instanceof ShulkerBoxBlockEntity && shulkers.get()) {
-                        found.add(new StorageEntry(pos, 0xFFD946EF, 0x44D946EF, shulkerTracer.get()));
+                    if (visitedDoubleHalf.contains(pos.asLong())) continue;
+
+                    if (be instanceof ShulkerBoxBlockEntity && configs.get(ContainerKind.SHULKER).enabled.get()) {
+                        found.add(new StorageTarget(pos, null, ContainerKind.SHULKER));
                         shulkersFound++;
                         if (alertedPositions.add(pos.asLong())) playAlert = true;
-                    } else if ((be instanceof ChestBlockEntity || be instanceof BarrelBlockEntity) && chests.get()) {
+                    } else if ((be instanceof ChestBlockEntity || be instanceof BarrelBlockEntity) && configs.get(ContainerKind.CHEST).enabled.get()) {
                         if (filterNat && isNaturalContainer(level, pos, be, filterNether)) continue;
-                        found.add(new StorageEntry(pos, 0xFFF59E0B, 0x33F59E0B, chestTracer.get()));
+                        BlockPos otherHalf = null;
+                        if (mergeChests && be instanceof ChestBlockEntity) {
+                            BlockState st = level.getBlockState(pos);
+                            if (st.getBlock() instanceof ChestBlock && st.hasProperty(ChestBlock.TYPE)) {
+                                ChestType ct = st.getValue(ChestBlock.TYPE);
+                                if (ct != ChestType.SINGLE) {
+                                    Direction connDir = ChestBlock.getConnectedDirection(st);
+                                    BlockPos cand = pos.relative(connDir);
+                                    if (level.getBlockEntity(cand) instanceof ChestBlockEntity) {
+                                        otherHalf = cand;
+                                        visitedDoubleHalf.add(cand.asLong());
+                                    }
+                                }
+                            }
+                        }
+                        found.add(new StorageTarget(pos, otherHalf, ContainerKind.CHEST));
                         if (alertedPositions.add(pos.asLong())) playAlert = true;
-                    } else if (be instanceof EnderChestBlockEntity && enderChests.get()) {
-                        found.add(new StorageEntry(pos, 0xFF38BDF8, 0x3838BDF8, false));
-                    } else if (be instanceof SpawnerBlockEntity && spawners.get()) {
-                        found.add(new StorageEntry(pos, 0xFFEF4444, 0x44EF4444, spawnerTracer.get()));
-                    } else if (be instanceof HopperBlockEntity && hoppers.get()) {
-                        found.add(new StorageEntry(pos, 0xFF4ADE80, 0x2A4ADE80, false));
+                    } else if (be instanceof EnderChestBlockEntity && configs.get(ContainerKind.ENDER_CHEST).enabled.get()) {
+                        found.add(new StorageTarget(pos, null, ContainerKind.ENDER_CHEST));
+                    } else if (be instanceof SpawnerBlockEntity && configs.get(ContainerKind.SPAWNER).enabled.get()) {
+                        found.add(new StorageTarget(pos, null, ContainerKind.SPAWNER));
+                    } else if (be instanceof HopperBlockEntity && configs.get(ContainerKind.HOPPER).enabled.get()) {
+                        found.add(new StorageTarget(pos, null, ContainerKind.HOPPER));
                     }
-                    if (found.size() >= 500) break;
+                    if (found.size() >= 600) break;
                 }
-                if (found.size() >= 500) break;
+                if (found.size() >= 600) break;
             }
-            if (found.size() >= 500) break;
+            if (found.size() >= 600) break;
         }
 
         if (playAlert && soundAlert.get()) {
-            mc.player.playSound(SoundEvents.AMETHYST_BLOCK_CHIME, 0.7f, 1.2f);
+            mc.player.playSound(SoundEvents.AMETHYST_BLOCK_CHIME, 0.7f, 1.25f);
         }
 
         cached = found;
         shulkerCount = shulkersFound;
         totalCount = found.size();
+    }
+
+    /**
+     * Computes exact model-hugging AABB on every render frame (including live Shulker Box opening lid animation!).
+     */
+    private static AABB resolveExactContainerBox(Level level, StorageTarget t) {
+        BlockPos pos = t.pos;
+        BlockState state = level.getBlockState(pos);
+
+        if (t.kind == ContainerKind.SHULKER && level.getBlockEntity(pos) instanceof ShulkerBoxBlockEntity) {
+            VoxelShape shape = state.getShape(level, pos);
+            if (!shape.isEmpty()) {
+                return shape.bounds().move(pos);
+            }
+        }
+
+        AABB baseBox;
+        VoxelShape shape = state.getShape(level, pos);
+        if (!shape.isEmpty()) {
+            baseBox = shape.bounds().move(pos);
+        } else {
+            baseBox = new AABB(pos);
+        }
+
+        if (t.secondHalf != null) {
+            BlockState st2 = level.getBlockState(t.secondHalf);
+            VoxelShape sh2 = st2.getShape(level, t.secondHalf);
+            AABB b2 = sh2.isEmpty() ? new AABB(t.secondHalf) : sh2.bounds().move(t.secondHalf);
+            return baseBox.minmax(b2);
+        }
+        return baseBox;
+    }
+
+    public void emitGizmos(Vec3 tracerStart) {
+        if (!isEnabled()) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return;
+        long nowMs = System.currentTimeMillis();
+
+        for (StorageTarget t : cached) {
+            ContainerConfig cfg = configs.get(t.kind);
+            if (cfg == null || !cfg.enabled.get()) continue;
+
+            AABB box = resolveExactContainerBox(mc.level, t);
+            int rgb = cfg.color.getRgb();
+            float width = cfg.lineWidth.get().floatValue();
+            BoxRenderMode bm = cfg.boxMode.get();
+
+            int strokeCol = (bm == BoxRenderMode.FILL_ONLY) ? 0x00000000 : (0xF0000000 | rgb);
+            int fillA = (bm == BoxRenderMode.OUTLINE_ONLY) ? 0 : Math.max(8, Math.min(240, (int) Math.round(cfg.fillAlpha.get() * 255.0)));
+            int fillCol = (fillA << 24) | rgb;
+
+            if (bm == BoxRenderMode.OUTLINE_ONLY) {
+                Gizmos.cuboid(box, GizmoStyle.stroke(strokeCol, width)).setAlwaysOnTop();
+            } else {
+                Gizmos.cuboid(box, GizmoStyle.strokeAndFill(strokeCol, width, fillCol)).setAlwaysOnTop();
+            }
+
+            if (cfg.tracer.get() && tracerStart != null) {
+                drawStyledTracer(tracerStart, box.getCenter(), rgb, width, cfg.lineStyle.get(), cfg.blinkHz.get(), nowMs);
+            }
+        }
+    }
+
+    public static void drawStyledTracer(Vec3 start, Vec3 end, int rgb, float width, LineStyle style, double blinkHz, long nowMs) {
+        boolean blinking = (style == LineStyle.BLINK_DASH || style == LineStyle.BLINK_SOLID);
+        int lineAlpha = 0xEE;
+        if (blinking) {
+            double wave = 0.5 + 0.5 * Math.sin((nowMs / 1000.0) * blinkHz * Math.PI * 2.0);
+            if (wave < 0.18) return;
+            lineAlpha = Math.max(35, Math.min(248, (int) Math.round(wave * 248.0)));
+        }
+        int argb = (lineAlpha << 24) | (rgb & 0x00FFFFFF);
+
+        if (style == LineStyle.SOLID || style == LineStyle.BLINK_SOLID) {
+            Gizmos.line(start, end, argb, width).setAlwaysOnTop();
+        } else {
+            // Crisp segmented 3D dashed tracer ray
+            Vec3 diff = end.subtract(start);
+            double totalLen = diff.length();
+            if (totalLen < 0.05) return;
+            Vec3 dir = diff.scale(1.0 / totalLen);
+            double step = Math.max(0.8, Math.min(2.8, totalLen / 18.0));
+            double dashLen = step * 0.56;
+            double animShift = ((nowMs / 1000.0) * 2.4) % step;
+            for (double d = animShift; d < totalLen; d += step) {
+                double dEnd = Math.min(totalLen, d + dashLen);
+                if (dEnd - d > 0.05) {
+                    Gizmos.line(start.add(dir.scale(d)), start.add(dir.scale(dEnd)), argb, width).setAlwaysOnTop();
+                }
+            }
+        }
     }
 
     private static boolean isNaturalContainer(Level level, BlockPos pos, BlockEntity be, boolean filterNether) {
@@ -203,30 +400,17 @@ public class StashRadarModule extends Module {
         return false;
     }
 
-    public void emitGizmos() {
-        if (!isEnabled()) return;
-        Minecraft mc = Minecraft.getInstance();
-        Vec3 start = (mc.player != null) ? mc.player.getEyePosition(1.0f).add(mc.player.getLookAngle().scale(0.8)) : null;
-
-        for (StorageEntry e : cached) {
-            Gizmos.cuboid(e.pos, GizmoStyle.strokeAndFill(e.strokeArgb, 1.5f, e.fillArgb)).setAlwaysOnTop();
-            if (e.tracer && start != null) {
-                Gizmos.line(start, Vec3.atCenterOf(e.pos), e.strokeArgb, 1.8f).setAlwaysOnTop();
-            }
-        }
-    }
-
     public void renderHud(GuiGraphics g) {
         if (!isEnabled() || totalCount == 0) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.options.hideGui) return;
         ConfigManager.HudSlot slot = ConfigManager.HUD_SLOTS.get("hud_radar");
         if (slot != null && !slot.enabled) return;
-        String text = ConfigManager.tr("雷达: ", "Radar: ") + totalCount
+        String text = ConfigManager.tr("储存: ", "Storage: ") + totalCount
                 + (shulkerCount > 0 ? " (" + ConfigManager.tr("潜影盒 ", "Shulker ") + shulkerCount + ")" : "");
-        int tw = mc.font.width(text) + 4;
+        int tw = YeHdFont.width(text, 8.6f, false) + 6;
         int hx = slot != null ? slot.resolveX(g.guiWidth(), tw) : 8;
-        int hy = slot != null ? slot.resolveY(g.guiHeight(), 12) : 82;
-        g.drawString(mc.font, text, hx, hy, 0xEED946EF, true);
+        int hy = slot != null ? slot.resolveY(g.guiHeight(), 13) : 82;
+        YeHdFont.draw(g, text, hx, hy, 8.6f, 0xFFD946EF, true, false);
     }
 }

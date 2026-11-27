@@ -1,5 +1,6 @@
 package com.ye.mod.core;
 
+import com.ye.mod.core.setting.EnumSetting;
 import com.ye.mod.core.setting.Setting;
 import net.minecraft.client.Minecraft;
 
@@ -8,7 +9,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Base class for all modular features in Ye, supporting single-module factory/template reset.
+ * Base class for all modular features in Ye, supporting single-module reset, combo keybinds, and quick preset cycling.
  */
 public abstract class Module {
     protected final Minecraft mc = Minecraft.getInstance();
@@ -23,6 +24,7 @@ public abstract class Module {
     private boolean enabled;
     private boolean defaultEnabled;
     private int keybind = -1;
+    private int presetCycleKey = -1;
 
     protected Module(String id, String name, String subtitle, String description, Category category) {
         this.id = id;
@@ -46,13 +48,52 @@ public abstract class Module {
     }
 
     /**
-     * Resets ONLY this module's settings, keybind, and enabled state back to default!
+     * Override to true for hold-action modules (like Zoom) whose keybind should NEVER toggle enabled off on odd presses!
      */
+    public boolean isHoldOnlyKeybind() {
+        return false;
+    }
+
+    /**
+     * Finds the primary cycleable preset EnumSetting if this module supports 1-key preset switching.
+     */
+    public EnumSetting<?> getPrimaryPresetSetting() {
+        for (Setting<?> s : settings) {
+            if (s instanceof EnumSetting<?> es && s.isVisible()) {
+                return es;
+            }
+        }
+        for (Setting<?> s : settings) {
+            if (s instanceof EnumSetting<?> es) {
+                return es;
+            }
+        }
+        return null;
+    }
+
+    public boolean hasCycleablePreset() {
+        return getPrimaryPresetSetting() != null;
+    }
+
+    /**
+     * Cycles to the next preset/effect option and returns the new option's display label (or null if none).
+     */
+    public String cycleNextPreset() {
+        EnumSetting<?> es = getPrimaryPresetSetting();
+        if (es == null) return null;
+        es.cycle(1);
+        if (!this.enabled) {
+            setEnabled(true);
+        }
+        return com.ye.mod.ui.YeQuickMenu.enumLabel(es.get());
+    }
+
     public void resetToDefault() {
         for (Setting<?> s : settings) {
             s.resetSilent();
         }
         this.keybind = -1;
+        this.presetCycleKey = -1;
         if (this.enabled != this.defaultEnabled) {
             this.enabled = this.defaultEnabled;
             if (this.enabled) onEnable();
@@ -66,6 +107,7 @@ public abstract class Module {
             s.resetSilent();
         }
         this.keybind = -1;
+        this.presetCycleKey = -1;
         if (this.enabled != this.defaultEnabled) {
             this.enabled = this.defaultEnabled;
             try {
@@ -125,6 +167,17 @@ public abstract class Module {
 
     public void setKeybindSilent(int keybind) {
         this.keybind = keybind;
+    }
+
+    public int getPresetCycleKey() { return presetCycleKey; }
+
+    public void setPresetCycleKey(int key) {
+        this.presetCycleKey = key;
+        ConfigManager.saveAsync();
+    }
+
+    public void setPresetCycleKeySilent(int key) {
+        this.presetCycleKey = key;
     }
 
     protected void onEnable() {}

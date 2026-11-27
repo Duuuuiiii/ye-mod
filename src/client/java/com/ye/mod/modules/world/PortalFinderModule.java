@@ -4,8 +4,10 @@ import com.ye.mod.core.Category;
 import com.ye.mod.core.ConfigManager;
 import com.ye.mod.core.Module;
 import com.ye.mod.core.setting.BoolSetting;
+import com.ye.mod.core.setting.ColorSetting;
 import com.ye.mod.core.setting.DoubleSetting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gizmos.GizmoStyle;
 import net.minecraft.gizmos.Gizmos;
@@ -14,6 +16,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -22,49 +25,57 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Scans loaded chunks for Nether Portals, clustering adjacent portal blocks
- * into 1 single target marker + 1 clean tracer line + optional sound alert.
+ * Nether Portal Finder (传送门查找):
+ * - Fixed alert sound: plays a clean crisp bell chime ONLY once per portal cluster (NEVER the loud portal-entering whoosh!)
+ * - Fixed tracer ray: locked to exact interpolated camera origin so moving never makes tracer lines fly wildly!
+ * - Renders exact merged portal frame bounding box!
  */
 public class PortalFinderModule extends Module {
     public final DoubleSetting rangeChunks = addSetting(new DoubleSetting(
             "rangeChunks", "扫描半径", "扫描周围多少个区块内的下界传送门", 12.0, 2.0, 32.0, 1.0
-    ));
+    ).functionGroup());
 
     public final BoolSetting onlyOverworld = addSetting(new BoolSetting(
-            "onlyOverworld", "仅主世界", "仅在主世界查找传送门，下界不扫描", true
-    ));
+            "onlyOverworld", "仅主世界", "仅在主世界扫描传送门", true
+    ).functionGroup());
 
     public final BoolSetting tracerLine = addSetting(new BoolSetting(
-            "tracerLine", "单条追踪线", "仅向每个传送门中心画一条追踪线（不画多条）", true
-    ));
+            "tracerLine", "绘制追踪线", "向每个传送门中心绘制单条稳定追踪线", true
+    ).functionGroup());
 
     public final BoolSetting soundAlert = addSetting(new BoolSetting(
-            "soundAlert", "发现提示音", "扫描到新地狱门时播放提示音", true
+            "soundAlert", "发现提示音", "首次发现新地狱门时播放清脆叮声提示", true
+    ).functionGroup());
+
+    public final ColorSetting color = addSetting(new ColorSetting(
+            "color", "高亮颜色", "设置传送门框体与追踪线颜色", 0xFFC084FC
     ));
 
-    private volatile List<BlockPos> portalCenters = List.of();
-    private final Set<Long> alerted = new HashSet<>();
+    private record PortalCluster(AABB box, Vec3 center, long gridKey) {}
+
+    private volatile List<PortalCluster> portalClusters = List.of();
+    private final Set<Long> alertedClusters = new HashSet<>();
     private int tickCounter = 0;
 
     public PortalFinderModule() {
-        super("portal_finder", "传送门查找", "Portals", "扫描下界传送门并绘制单条追踪线", Category.UTILITY);
+        super("portal_finder", "传送门查找", "Portals", "扫描下界传送门并绘制稳定追踪线与清脆发现提示音", Category.UTILITY);
     }
 
     @Override
     protected void onDisable() {
-        portalCenters = List.of();
-        alerted.clear();
+        portalClusters = List.of();
+        alertedClusters.clear();
     }
 
     @Override
     public void onTick() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) {
-            portalCenters = List.of();
+            portalClusters = List.of();
             return;
         }
         if (onlyOverworld.get() && mc.level.dimension() != Level.OVERWORLD) {
-            portalCenters = List.of();
+            portalClusters = List.of();
             return;
         }
         tickCounter++;
@@ -103,45 +114,65 @@ public class PortalFinderModule extends Module {
             }
         }
 
-        // Cluster nearby portal blocks into 1 representative center per portal
-        List<BlockPos> centers = new ArrayList<>();
+        // Group adjacent portal blocks into unified portal AABB clusters with stable quantized cluster key
+        List<List<BlockPos>> groups = new ArrayList<>();
         for (BlockPos p : rawPortals) {
-            boolean merged = false;
-            for (BlockPos c : centers) {
-                if (c.distSqr(p) <= 36.0) {
-                    merged = true;
-                    break;
+            List<BlockPos> matched = null;
+            for (List<BlockPos> g : groups) {
+                for (BlockPos existing : g) {
+                    if (existing.distSqr(p) <= 25.0) {
+                        matched = g;
+                        break;
+                    }
                 }
+                if (matched != null) break;
             }
-            if (!merged) {
-                centers.add(p);
+            if (matched != null) matched.add(p);
+            else {
+                List<BlockPos> nl = new ArrayList<>();
+                nl.add(p);
+                groups.add(nl);
             }
         }
 
+        List<PortalCluster> clusters = new ArrayList<>(groups.size());
         boolean newFound = false;
-        for (BlockPos c : centers) {
-            if (alerted.add(c.asLong())) {
+        for (List<BlockPos> g : groups) {
+            int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE;
+            int maxX = Integer.MIN_VALUE, maxY = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
+            for (BlockPos p : g) {
+                minX = Math.min(minX, p.getX()); maxX = Math.max(maxX, p.getX() + 1);
+                minY = Math.min(minY, p.getY()); maxY = Math.max(maxY, p.getY() + 1);
+                minZ = Math.min(minZ, p.getZ()); maxZ = Math.max(maxZ, p.getZ() + 1);
+            }
+            AABB box = new AABB(minX, minY, minZ, maxX, maxY, maxZ);
+            // Quantize cluster center to 8-block grid so chunk boundary loading NEVER re-triggers sound!
+            long gridKey = BlockPos.asLong(((minX + maxX) / 2) >> 3, ((minY + maxY) / 2) >> 3, ((minZ + maxZ) / 2) >> 3);
+            if (alertedClusters.add(gridKey)) {
                 newFound = true;
             }
-        }
-        if (newFound && soundAlert.get()) {
-            mc.player.playSound(SoundEvents.PORTAL_TRIGGER, 0.45f, 1.4f);
+            clusters.add(new PortalCluster(box, box.getCenter(), gridKey));
         }
 
-        portalCenters = centers;
+        if (newFound && soundAlert.get() && mc.getSoundManager() != null) {
+            mc.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_BELL.value(), 1.35f, 0.70f));
+        }
+
+        portalClusters = clusters;
     }
 
-    public void emitGizmos() {
-        if (!isEnabled() || portalCenters.isEmpty()) return;
-        Minecraft mc = Minecraft.getInstance();
-        Vec3 start = (mc.player != null) ? mc.player.getEyePosition(1.0f).add(mc.player.getLookAngle().scale(0.8)) : null;
+    public void emitGizmos(Vec3 tracerStart) {
+        if (!isEnabled() || portalClusters.isEmpty()) return;
+        int rgb = color.getRgb();
+        int stroke = 0xEE000000 | rgb;
+        int fill = 0x44000000 | rgb;
 
-        for (BlockPos p : portalCenters) {
-            Gizmos.cuboid(p, GizmoStyle.strokeAndFill(0xFFC084FC, 2.2f, 0x55A855F7)).setAlwaysOnTop();
-            if (tracerLine.get() && start != null) {
-                Gizmos.line(start, Vec3.atCenterOf(p), 0xFFC084FC, 2.2f).setAlwaysOnTop();
+        for (PortalCluster c : portalClusters) {
+            Gizmos.cuboid(c.box, GizmoStyle.strokeAndFill(stroke, 2.0f, fill)).setAlwaysOnTop();
+            if (tracerLine.get() && tracerStart != null) {
+                Gizmos.line(tracerStart, c.center, stroke, 2.0f).setAlwaysOnTop();
             }
-            Gizmos.billboardText(ConfigManager.tr("地狱门", "Portal"), Vec3.atCenterOf(p).add(0, 1.2, 0),
+            Gizmos.billboardText(ConfigManager.tr("地狱门", "Portal"), new Vec3(c.center.x, c.box.maxY + 0.6, c.center.z),
                     net.minecraft.gizmos.TextGizmo.Style.whiteAndCentered().withScale(0.6f)).setAlwaysOnTop();
         }
     }

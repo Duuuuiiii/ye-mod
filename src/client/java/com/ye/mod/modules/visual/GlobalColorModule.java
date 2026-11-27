@@ -6,6 +6,7 @@ import com.ye.mod.core.Module;
 import com.ye.mod.core.ModuleManager;
 import com.ye.mod.core.setting.ActionSetting;
 import com.ye.mod.core.setting.BoolSetting;
+import com.ye.mod.core.setting.ColorSetting;
 import com.ye.mod.core.setting.DoubleSetting;
 import com.ye.mod.core.setting.EnumSetting;
 import com.ye.mod.core.setting.Setting;
@@ -14,17 +15,16 @@ import com.ye.mod.ui.YeQuickMenu;
 import java.awt.Color;
 
 /**
- * Global Color Synchronization Center (全局色彩).
- * Supports Custom RGB, Flowing Rainbow (with optional phase wave), Dual-Color Breathing Gradient, and Curated Presets.
- * Every color-capable module has an independent "syncGlobalColor" ("同步全局色彩", default false) toggle,
- * plus one-click batch sync buttons right here!
+ * Synchronized Color Module (同步色) for all HUD widgets & visual effects!
+ * Separated cleanly from UI Menu Theme Color (设置 -> 主题色).
+ * Features Rainbow Gradient (彩虹渐变), Dual-Color Breathing, Presets, and 2D Draggable HSV Color Picker!
  */
 public class GlobalColorModule extends Module {
     public enum ColorMode {
-        PRESET("精选色板"),
-        CUSTOM_RGB("自定义RGB"),
-        RAINBOW("流光彩虹"),
-        BREATHING("双色呼吸");
+        RAINBOW("彩虹渐变"),
+        CUSTOM_PICKER("自定义调色"),
+        BREATHING("双色渐变"),
+        PRESET("精选色板");
 
         public final String label;
         ColorMode(String label) { this.label = label; }
@@ -32,12 +32,12 @@ public class GlobalColorModule extends Module {
 
     public enum PresetPalette {
         ICE_CYAN("冰晶青", 0xFF38BDF8, 0xFFA855F7),
-        CYBER_PURPLE("赛博紫", 0xFFA855F7, 0xFF22D3EE),
-        CRIMSON("绯红赤", 0xFFEF4444, 0xFFFACC15),
-        ROYAL_GOLD("鎏金耀", 0xFFFACC15, 0xFFF97316),
+        CYBER_PURPLE("紫罗兰", 0xFFA855F7, 0xFF22D3EE),
+        CRIMSON("绯红", 0xFFEF4444, 0xFFFACC15),
+        ROYAL_GOLD("鎏金", 0xFFFACC15, 0xFFF97316),
         EMERALD("翡翠绿", 0xFF34D399, 0xFF38BDF8),
         SAKURA("樱花粉", 0xFFF472B6, 0xFFC084FC),
-        PURE_WHITE("纯净白", 0xFFF8FAFC, 0xFF94A3B8);
+        PURE_WHITE("纯白", 0xFFF8FAFC, 0xFF94A3B8);
 
         public final String label;
         public final int argb;
@@ -51,71 +51,71 @@ public class GlobalColorModule extends Module {
     }
 
     public final EnumSetting<ColorMode> mode = addSetting(new EnumSetting<>(
-            "mode", "色彩模式", "精选色板 / 自定义RGB / 流光彩虹 / 双色呼吸", ColorMode.PRESET
-    ));
+            "mode", "同步模式", "彩虹渐变 / 自定义调色 / 双色渐变 / 精选色板", ColorMode.RAINBOW
+    ).functionGroup());
 
     public final EnumSetting<PresetPalette> preset = addSetting(new EnumSetting<>(
-            "preset", "色板选择", "快速切换高颜值全局主副配色", PresetPalette.ICE_CYAN
-    ).visible(() -> mode.get() == ColorMode.PRESET || mode.get() == ColorMode.BREATHING));
+            "preset", "预设色板", "选择主副预设配色", PresetPalette.ICE_CYAN
+    ).visible(() -> mode.get() == ColorMode.PRESET).functionGroup());
 
-    public final DoubleSetting red = addSetting(new DoubleSetting(
-            "red", "红 (R)", "自定义红色通道 (0~255)", 56.0, 0.0, 255.0, 1.0
-    ).visible(() -> mode.get() == ColorMode.CUSTOM_RGB || mode.get() == ColorMode.BREATHING));
+    public final ColorSetting primaryColor = addSetting(new ColorSetting(
+            "primaryColor", "主色调色板", "拖动面板自由选取同步主色", 0xFF38BDF8
+    ).visible(() -> mode.get() == ColorMode.CUSTOM_PICKER || mode.get() == ColorMode.BREATHING));
 
-    public final DoubleSetting green = addSetting(new DoubleSetting(
-            "green", "绿 (G)", "自定义绿色通道 (0~255)", 189.0, 0.0, 255.0, 1.0
-    ).visible(() -> mode.get() == ColorMode.CUSTOM_RGB || mode.get() == ColorMode.BREATHING));
-
-    public final DoubleSetting blue = addSetting(new DoubleSetting(
-            "blue", "蓝 (B)", "自定义蓝色通道 (0~255)", 248.0, 0.0, 255.0, 1.0
-    ).visible(() -> mode.get() == ColorMode.CUSTOM_RGB || mode.get() == ColorMode.BREATHING));
-
-    public final BoolSetting useCustomBreathingColors = addSetting(new BoolSetting(
-            "useCustomBreathing", "自定义呼吸副色", "开启后使用下方副色RGB与上方主色RGB交替呼吸", false
+    public final ColorSetting secondaryColor = addSetting(new ColorSetting(
+            "secondaryColor", "副色调色板", "拖动面板自由选取双色渐变第二颜色", 0xFFA855F7
     ).visible(() -> mode.get() == ColorMode.BREATHING));
 
-    public final DoubleSetting red2 = addSetting(new DoubleSetting(
-            "red2", "副色红 (R2)", "呼吸渐变第二颜色 R", 168.0, 0.0, 255.0, 1.0
-    ).visible(() -> mode.get() == ColorMode.BREATHING && useCustomBreathingColors.get()));
-
-    public final DoubleSetting green2 = addSetting(new DoubleSetting(
-            "green2", "副色绿 (G2)", "呼吸渐变第二颜色 G", 85.0, 0.0, 255.0, 1.0
-    ).visible(() -> mode.get() == ColorMode.BREATHING && useCustomBreathingColors.get()));
-
-    public final DoubleSetting blue2 = addSetting(new DoubleSetting(
-            "blue2", "副色蓝 (B2)", "呼吸渐变第二颜色 B", 247.0, 0.0, 255.0, 1.0
-    ).visible(() -> mode.get() == ColorMode.BREATHING && useCustomBreathingColors.get()));
-
     public final DoubleSetting cycleSpeed = addSetting(new DoubleSetting(
-            "cycleSpeed", "流光速度", "彩虹流转或呼吸渐变速率", 1.0, 0.2, 4.0, 0.1
-    ).visible(() -> mode.get() == ColorMode.RAINBOW || mode.get() == ColorMode.BREATHING));
+            "cycleSpeed", "流转速率", "彩虹渐变或双色流动速度", 1.0, 0.2, 4.0, 0.1
+    ).visible(() -> mode.get() == ColorMode.RAINBOW || mode.get() == ColorMode.BREATHING).functionGroup());
 
     public final DoubleSetting saturation = addSetting(new DoubleSetting(
-            "saturation", "饱和度", "流光彩虹色彩浓郁度", 0.78, 0.25, 1.0, 0.02
+            "saturation", "彩虹饱和度", "彩虹色彩鲜艳程度", 0.78, 0.25, 1.0, 0.02
+    ).visible(() -> mode.get() == ColorMode.RAINBOW));
+
+    public final DoubleSetting brightness = addSetting(new DoubleSetting(
+            "brightness", "彩虹明度", "彩虹整体明亮程度", 1.0, 0.40, 1.0, 0.02
     ).visible(() -> mode.get() == ColorMode.RAINBOW));
 
     public final BoolSetting phaseWave = addSetting(new BoolSetting(
-            "phaseWave", "追光相位差", "不同模块/魂环层之间产生微小的流光追逐渐变", true
-    ).visible(() -> mode.get() == ColorMode.RAINBOW || mode.get() == ColorMode.BREATHING));
-
-    public final BoolSetting syncUiAccent = addSetting(new BoolSetting(
-            "syncUiAccent", "同步菜单主题色", "让 F9/F10 菜单按钮与高亮条也跟随全局色彩实时流转", false
-    ));
+            "phaseWave", "空间波浪渐变", "不同 HUD 与特效之间形成连续流动色差", true
+    ).visible(() -> mode.get() == ColorMode.RAINBOW || mode.get() == ColorMode.BREATHING).functionGroup());
 
     public GlobalColorModule() {
-        super("global_color", "全局色彩", "Color Sync", "一键统管所有模块颜色，支持RGB/流光彩虹/双色呼吸与分模块同步开关", Category.VISUAL);
+        super("global_color", "同步色", "Sync Color", "统管 HUD 与视觉模块的同步颜色，支持流光彩虹渐变与自由拖动调色", Category.VISUAL);
         setEnabled(true, true);
 
-        addSetting(new ActionSetting("syncAllOn", "一键开启全部同步", "将所有支持调色的模块设为「同步全局色彩」", () -> {
+        addSetting(new ActionSetting("syncAllHudOn", "一键同步所有HUD", "开启全部 HUD 子模块的同步色开关", () -> {
+            setEnabled(true);
+            int count = setHudSyncFlags(true);
+            YeQuickMenu.showToast(ConfigManager.tr("已同步 " + count + " 个 HUD 组件", "Synced " + count + " HUDs"), getCurrentArgb(0));
+        }).functionGroup());
+
+        addSetting(new ActionSetting("syncAllOn", "一键同步全部模块", "开启全部 HUD 与视觉模块的同步色开关", () -> {
             setEnabled(true);
             int count = setAllModuleSyncFlags(true);
-            YeQuickMenu.showToast(ConfigManager.tr("✓ 已同步 " + count + " 个模块至全局色彩", "Synced " + count + " modules"), getCurrentArgb(0));
-        }));
+            YeQuickMenu.showToast(ConfigManager.tr("已同步全部 " + count + " 个模块", "Synced " + count + " modules"), getCurrentArgb(0));
+        }).functionGroup());
 
-        addSetting(new ActionSetting("syncAllOff", "一键关闭全部同步", "恢复各模块各自独立的配色设置", () -> {
+        addSetting(new ActionSetting("syncAllOff", "关闭全部同步", "恢复各模块独立配色", () -> {
             int count = setAllModuleSyncFlags(false);
-            YeQuickMenu.showToast(ConfigManager.tr("已恢复 " + count + " 个模块独立配色", "Restored independent colors"), 0xFF94A3B8);
-        }));
+            YeQuickMenu.showToast(ConfigManager.tr("已恢复 " + count + " 个模块独立色", "Restored independent colors"), 0xFF94A3B8);
+        }).functionGroup());
+    }
+
+    public static int setHudSyncFlags(boolean sync) {
+        int changed = 0;
+        for (Module m : ModuleManager.getByCategory(Category.HUD)) {
+            for (Setting<?> s : m.getSettings()) {
+                if ("syncGlobalColor".equals(s.getId()) && s instanceof BoolSetting bs) {
+                    bs.set(sync);
+                    changed++;
+                }
+            }
+        }
+        ConfigManager.saveAsync();
+        return changed;
     }
 
     public static int setAllModuleSyncFlags(boolean sync) {
@@ -151,29 +151,34 @@ public class GlobalColorModule extends Module {
 
         return switch (mode.get()) {
             case PRESET -> preset.get().argb & 0x00FFFFFF;
-            case CUSTOM_RGB -> {
-                int r = clampByte(red.get());
-                int g = clampByte(green.get());
-                int b = clampByte(blue.get());
-                yield (r << 16) | (g << 8) | b;
-            }
+            case CUSTOM_PICKER -> primaryColor.getRgb();
             case RAINBOW -> {
-                double hue = (((now / 4500.0) * spd + phase) % 1.0 + 1.0) % 1.0;
-                yield Color.HSBtoRGB((float) hue, saturation.get().floatValue(), 1.0f) & 0x00FFFFFF;
+                double hue = (((now / 4200.0) * spd - phase) % 1.0 + 1.0) % 1.0;
+                yield Color.HSBtoRGB((float) hue, saturation.get().floatValue(), brightness.get().floatValue()) & 0x00FFFFFF;
             }
             case BREATHING -> {
-                int c1, c2;
-                if (useCustomBreathingColors.get()) {
-                    c1 = (clampByte(red.get()) << 16) | (clampByte(green.get()) << 8) | clampByte(blue.get());
-                    c2 = (clampByte(red2.get()) << 16) | (clampByte(green2.get()) << 8) | clampByte(blue2.get());
-                } else {
-                    c1 = preset.get().argb & 0x00FFFFFF;
-                    c2 = preset.get().secondArgb & 0x00FFFFFF;
-                }
-                double wave = 0.5 + 0.5 * Math.sin((now / 900.0) * spd + phase * Math.PI * 2.0);
+                int c1 = primaryColor.getRgb();
+                int c2 = secondaryColor.getRgb();
+                double wave = 0.5 + 0.5 * Math.sin((now / 850.0) * spd - phase * Math.PI * 2.0);
                 yield lerpRgb(c1, c2, (float) wave);
             }
         };
+    }
+
+    /**
+     * Spatial rainbow/gradient helper for per-character or per-pixel flowing HUD bars!
+     */
+    public int getSpatialArgb(float spatialOffset) {
+        long now = System.currentTimeMillis();
+        double spd = cycleSpeed.get();
+        if (mode.get() == ColorMode.RAINBOW) {
+            double hue = (((now / 4200.0) * spd - spatialOffset * 0.04) % 1.0 + 1.0) % 1.0;
+            return 0xFF000000 | (Color.HSBtoRGB((float) hue, saturation.get().floatValue(), brightness.get().floatValue()) & 0x00FFFFFF);
+        } else if (mode.get() == ColorMode.BREATHING) {
+            double wave = 0.5 + 0.5 * Math.sin((now / 850.0) * spd - spatialOffset * 0.25);
+            return 0xFF000000 | lerpRgb(primaryColor.getRgb(), secondaryColor.getRgb(), (float) wave);
+        }
+        return getCurrentArgb(0);
     }
 
     public int getCurrentArgb(int phaseIndex) {
@@ -194,10 +199,6 @@ public class GlobalColorModule extends Module {
         int alpha = (fallbackArgb >>> 24) & 0xFF;
         if (alpha == 0) alpha = 0xFF;
         return (alpha << 24) | g.getCurrentRgb(phaseIndex);
-    }
-
-    private static int clampByte(double v) {
-        return Math.max(0, Math.min(255, (int) Math.round(v)));
     }
 
     private static int lerpRgb(int c1, int c2, float t) {

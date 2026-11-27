@@ -13,6 +13,7 @@ import net.minecraft.util.Util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.awt.Color;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -37,15 +38,16 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 /**
- * Multi-Profile, Per-Player Account Config System with:
- * - Immutable Factory Default (configs/default.json)
- * - Custom Default Template for new accounts (configs/template.json)
- * - Per-Player automatic profile (<playerName>.json) + multi-slot profile switching/creation/renaming
- * - Lossless incremental schema merge + automatic version-upgrade backups (backups/)
- * - GZIP+Base64 compact clipboard share code ("YE1:...")
+ * Multi-Profile, Per-Player Account Config System (v1.7.3):
+ * - Dual UI Persona: SILKY (丝滑风) & MECHANICAL (机械风)
+ * - 3 UI Themes: DARK (深色), LIGHT (浅色), GAUSSIAN_GLASS (高斯玻璃) + Opacity & Blur Strength
+ * - Independent UI Theme Accent Color (with 2D HSV draggable picker) vs HUD/FX SyncColorModule
+ * - Module Favorites (收藏) & Pinning (置顶)
+ * - Per-profile Entity & Block matrix selection sets
+ * - 0px edge-flush HUD clamping + 9-zone magnetic auto-snap
  */
 public final class ConfigManager {
-    public static final String MOD_VERSION = "1.7.2";
+    public static final String MOD_VERSION = "1.7.3";
     public static final String DEFAULT_PROFILE = "default";
     public static final String TEMPLATE_FILE_STEM = "template";
     private static final String SHARE_PREFIX = "YE1:";
@@ -67,24 +69,33 @@ public final class ConfigManager {
     private static volatile String activeProfile = "Player";
     private static final Map<String, String> playerPinnedProfiles = new ConcurrentHashMap<>();
 
-    private static volatile int menuKey = org.lwjgl.glfw.GLFW.GLFW_KEY_F9;
-    private static volatile int mouseUnlockKey = org.lwjgl.glfw.GLFW.GLFW_KEY_F10;
-    public static volatile boolean lightTheme = false;
-    public static volatile boolean blurBackground = true;
-    public static volatile boolean english = false;
-    public static volatile YeSoundPresets.SoundType uiClickSound = YeSoundPresets.SoundType.MECH_SWITCH;
-    public static volatile float uiSoundVolume = 0.85f;
-    public static volatile int widgetX = -1;
-    public static volatile int widgetY = -1;
-    public static final Set<String> customRadarIgnoreBlocks = ConcurrentHashMap.newKeySet();
+    public enum UiStyle {
+        SILKY("丝滑风", "Silky"),
+        MECHANICAL("机械风", "Mechanical");
+
+        public final String zh;
+        public final String en;
+        UiStyle(String zh, String en) { this.zh = zh; this.en = en; }
+    }
+
+    public enum UiTheme {
+        DARK("深色", "Dark"),
+        LIGHT("浅色", "Light"),
+        GAUSSIAN_GLASS("高斯玻璃", "Glass");
+
+        public final String zh;
+        public final String en;
+        UiTheme(String zh, String en) { this.zh = zh; this.en = en; }
+    }
 
     public enum ThemeAccent {
-        APPLE_BLUE("蓝", "Blue", 0xFF0A84FF),
-        CYBER_PURPLE("紫", "Purple", 0xFFA855F7),
+        BLUE("蓝", "Blue", 0xFF0A84FF),
+        PURPLE("紫", "Purple", 0xFFA855F7),
         GOLD("金", "Gold", 0xFFF59E0B),
-        CRIMSON("红", "Red", 0xFFEF4444),
-        EMERALD("绿", "Green", 0xFF10B981),
-        SAKURA("粉", "Pink", 0xFFF472B6);
+        RED("红", "Red", 0xFFEF4444),
+        GREEN("绿", "Green", 0xFF10B981),
+        PINK("粉", "Pink", 0xFFF472B6),
+        CUSTOM("自定义", "Custom", 0xFF38BDF8);
 
         public final String zh;
         public final String en;
@@ -97,7 +108,34 @@ public final class ConfigManager {
         }
     }
 
-    public static volatile ThemeAccent themeAccent = ThemeAccent.APPLE_BLUE;
+    private static volatile int menuKey = org.lwjgl.glfw.GLFW.GLFW_KEY_F9;
+    private static volatile int mouseUnlockKey = org.lwjgl.glfw.GLFW.GLFW_KEY_F10;
+    public static volatile UiStyle uiStyle = UiStyle.SILKY;
+    public static volatile UiTheme uiTheme = UiTheme.DARK;
+    public static volatile boolean lightTheme = false;
+    public static volatile float uiOpacity = 0.92f;
+    public static volatile float glassBlurStrength = 10.0f;
+    public static volatile boolean useClientFont = false;
+    public static volatile boolean english = false;
+    public static volatile YeSoundPresets.UiSoundType uiClickSound = YeSoundPresets.UiSoundType.MECH_SWITCH;
+    public static volatile float uiSoundVolume = 0.80f;
+    public static volatile int widgetX = -1;
+    public static volatile int widgetY = -1;
+
+    public static volatile ThemeAccent themeAccent = ThemeAccent.BLUE;
+    public static volatile float customAccentHue = 0.56f;
+    public static volatile float customAccentSat = 0.78f;
+    public static volatile float customAccentBri = 0.98f;
+
+    // Favorites & Pinning
+    public static final Set<String> pinnedModules = ConcurrentHashMap.newKeySet();
+    public static final Set<String> favoriteModules = ConcurrentHashMap.newKeySet();
+
+    // Target picker matrix sets (persisted per profile)
+    public static final Set<String> customRadarIgnoreBlocks = ConcurrentHashMap.newKeySet();
+    public static final Set<String> entityEspCustomTypes = ConcurrentHashMap.newKeySet();
+    public static final Set<String> blockEspTargets = ConcurrentHashMap.newKeySet();
+    public static final Set<String> blockSearchTargets = ConcurrentHashMap.newKeySet();
 
     public static int getMouseUnlockKey() { return mouseUnlockKey; }
     public static void setMouseUnlockKey(int key) {
@@ -105,14 +143,46 @@ public final class ConfigManager {
         saveAsync();
     }
 
+    public static int getCustomAccentArgb() {
+        int rgb = Color.HSBtoRGB(customAccentHue, customAccentSat, customAccentBri) & 0x00FFFFFF;
+        return 0xFF000000 | rgb;
+    }
+
     public static int getAccentColor() {
-        com.ye.mod.modules.visual.GlobalColorModule gc = ModuleManager.get(com.ye.mod.modules.visual.GlobalColorModule.class);
-        if (gc != null && gc.isEnabled() && gc.syncUiAccent.get()) {
-            return gc.getCurrentArgb(0);
+        if (themeAccent == ThemeAccent.CUSTOM) {
+            return getCustomAccentArgb();
         }
         return themeAccent.argb;
     }
 
+    public static boolean isPinned(Module m) {
+        return m != null && pinnedModules.contains(m.getId());
+    }
+
+    public static boolean isFavorite(Module m) {
+        return m != null && favoriteModules.contains(m.getId());
+    }
+
+    public static void togglePinned(Module m) {
+        if (m == null) return;
+        if (!pinnedModules.remove(m.getId())) {
+            pinnedModules.add(m.getId());
+        }
+        saveAsync();
+    }
+
+    public static void toggleFavorite(Module m) {
+        if (m == null) return;
+        if (!favoriteModules.remove(m.getId())) {
+            favoriteModules.add(m.getId());
+        }
+        saveAsync();
+    }
+
+    /**
+     * HUD Slot with 0px edge clamping (can sit flush against the very bottom/top/left/right edge!)
+     * and 9-zone magnetic snapping (4 corners, 4 edge midpoints, and screen center)!
+     */
     public static final class HudSlot {
         public final String id;
         public final String zhName;
@@ -120,12 +190,13 @@ public final class ConfigManager {
         public boolean enabled;
         public int x;
         public int y;
-        public int anchorX;
-        public int anchorY;
+        public int anchorX; // 0 = Left, 1 = Center, 2 = Right
+        public int anchorY; // 0 = Top,  1 = Middle, 2 = Bottom
         public transient int lastScreenX;
         public transient int lastScreenY;
         public transient int lastW = 64;
         public transient int lastH = 14;
+        public transient boolean snappedThisDrag = false;
 
         public HudSlot(String id, String zhName, String enName, boolean enabled,
                        int x, int y, int anchorX, int anchorY) {
@@ -145,32 +216,43 @@ public final class ConfigManager {
                 case 2 -> sw - boxW - x;
                 default -> x;
             };
-            lastScreenX = Math.max(2, Math.min(Math.max(2, sw - boxW - 2), rx));
+            lastScreenX = Math.max(0, Math.min(Math.max(0, sw - boxW), rx));
             lastW = boxW;
             return lastScreenX;
         }
 
         public int resolveY(int sh, int boxH) {
-            int ry = (anchorY == 2) ? (sh - boxH - y) : y;
-            lastScreenY = Math.max(2, Math.min(Math.max(2, sh - boxH - 2), ry));
+            int ry = switch (anchorY) {
+                case 1 -> (sh - boxH) / 2 + y;
+                case 2 -> sh - boxH - y;
+                default -> y;
+            };
+            lastScreenY = Math.max(0, Math.min(Math.max(0, sh - boxH), ry));
             lastH = boxH;
             return lastScreenY;
         }
 
         public void updateFromScreenPos(int newScreenX, int newScreenY, int sw, int sh) {
-            int clampedX = Math.max(2, Math.min(Math.max(2, sw - lastW - 2), newScreenX));
-            int clampedY = Math.max(2, Math.min(Math.max(2, sh - lastH - 2), newScreenY));
+            int clampedX = Math.max(0, Math.min(Math.max(0, sw - lastW), newScreenX));
+            int clampedY = Math.max(0, Math.min(Math.max(0, sh - lastH), newScreenY));
 
-            int centerDist = Math.abs((clampedX + lastW / 2) - sw / 2);
-            if (clampedX <= 10) {
+            final int snapRadius = 9;
+            boolean snapX = false;
+            boolean snapY = false;
+
+            int centerDistX = Math.abs((clampedX + lastW / 2) - sw / 2);
+            if (clampedX <= 3) {
                 anchorX = 0;
-                x = 4;
-            } else if (sw - (clampedX + lastW) <= 10) {
+                x = 0;
+                snapX = true;
+            } else if (sw - (clampedX + lastW) <= 3) {
                 anchorX = 2;
-                x = 4;
-            } else if (centerDist <= 8) {
+                x = 0;
+                snapX = true;
+            } else if (centerDistX <= snapRadius) {
                 anchorX = 1;
                 x = 0;
+                snapX = true;
             } else if (clampedX + lastW / 2 < sw / 3) {
                 anchorX = 0;
                 x = clampedX;
@@ -182,19 +264,31 @@ public final class ConfigManager {
                 x = clampedX - (sw - lastW) / 2;
             }
 
-            if (clampedY <= 10) {
+            int centerDistY = Math.abs((clampedY + lastH / 2) - sh / 2);
+            if (clampedY <= 3) {
                 anchorY = 0;
-                y = 4;
-            } else if (sh - (clampedY + lastH) <= 10) {
+                y = 0;
+                snapY = true;
+            } else if (sh - (clampedY + lastH) <= 3) {
                 anchorY = 2;
-                y = 4;
+                y = 0;
+                snapY = true;
+            } else if (centerDistY <= snapRadius) {
+                anchorY = 1;
+                y = 0;
+                snapY = true;
+            } else if (clampedY + lastH / 2 < sh / 3) {
+                anchorY = 0;
+                y = clampedY;
             } else if (clampedY + lastH / 2 > (sh * 2) / 3) {
                 anchorY = 2;
                 y = sh - lastH - clampedY;
             } else {
-                anchorY = 0;
-                y = clampedY;
+                anchorY = 1;
+                y = clampedY - (sh - lastH) / 2;
             }
+
+            snappedThisDrag = snapX || snapY;
         }
     }
 
@@ -205,18 +299,19 @@ public final class ConfigManager {
 
     public static void resetHudSlotsDefault() {
         HUD_SLOTS.clear();
-        HUD_SLOTS.put("hud_time", new HudSlot("hud_time", "时间与统计", "Time & Stats", true, 4, 4, 0, 0));
+        HUD_SLOTS.put("hud_time", new HudSlot("hud_time", "时间统计", "Time & Stats", true, 4, 4, 0, 0));
         HUD_SLOTS.put("hud_info", new HudSlot("hud_info", "帧率与延迟", "FPS / Ping / TPS", true, 4, 40, 0, 0));
         HUD_SLOTS.put("hud_speed", new HudSlot("hud_speed", "移动速度", "Speed", true, 0, 36, 1, 0));
-        HUD_SLOTS.put("hud_coords", new HudSlot("hud_coords", "双维坐标", "Coords", true, 4, 4, 0, 2));
+        HUD_SLOTS.put("hud_coords", new HudSlot("hud_coords", "双维坐标", "Coords", true, 4, 2, 0, 2));
         HUD_SLOTS.put("hud_potions", new HudSlot("hud_potions", "药水面板", "Potions", true, 6, 6, 2, 0));
-        HUD_SLOTS.put("hud_armor", new HudSlot("hud_armor", "装备耐久", "Armor", true, 102, 4, 1, 2));
+        HUD_SLOTS.put("hud_armor", new HudSlot("hud_armor", "装备耐久", "Armor", true, 102, 0, 1, 2));
         HUD_SLOTS.put("hud_items", new HudSlot("hud_items", "物资计数", "PvP Items", true, 6, 128, 2, 0));
         HUD_SLOTS.put("hud_inv", new HudSlot("hud_inv", "背包预览", "Inventory", false, 6, 168, 2, 0));
-        HUD_SLOTS.put("hud_drops", new HudSlot("hud_drops", "附近掉落物", "Nearby Drops", true, 4, 110, 0, 0));
+        HUD_SLOTS.put("hud_drops", new HudSlot("hud_drops", "物品列表", "Item List", true, 4, 110, 0, 0));
         HUD_SLOTS.put("hud_modules", new HudSlot("hud_modules", "开启列表", "Module List", false, 6, 6, 2, 2));
+        HUD_SLOTS.put("hud_player_view", new HudSlot("hud_player_view", "玩家预览", "Player View", false, 6, 120, 0, 1));
         HUD_SLOTS.put("hud_wthit", new HudSlot("hud_wthit", "方块信息", "Block Info", false, 0, 6, 1, 0));
-        HUD_SLOTS.put("hud_radar", new HudSlot("hud_radar", "雷达计数", "Radar Count", true, 4, 82, 0, 0));
+        HUD_SLOTS.put("hud_radar", new HudSlot("hud_radar", "储存计数", "Storage Count", true, 4, 82, 0, 0));
     }
 
     public static void resetSingleHudSlot(String slotId) {
@@ -265,6 +360,10 @@ public final class ConfigManager {
         return getConfigDir().resolve("capes");
     }
 
+    public static Path getSkiesDir() {
+        return getConfigDir().resolve("skies");
+    }
+
     public static Path getMetaFile() {
         return getConfigDir().resolve("meta.json");
     }
@@ -289,20 +388,31 @@ public final class ConfigManager {
             Files.createDirectories(getConfigsDir());
             Files.createDirectories(getBackupsDir());
             Files.createDirectories(getCapesDir());
+            Files.createDirectories(getSkiesDir());
         } catch (IOException e) {
             LOGGER.warn("Failed to create Ye config directories", e);
         }
     }
 
-    /**
-     * Called once after all modules register in YeClient.onInitializeClient():
-     * 1) Captures immutable Factory Default snapshot & writes configs/default.json
-     * 2) Checks meta.json; if mod version changed, backs up all existing configs into backups/
-     * 3) Loads initial profile for the launcher's logged-in Minecraft user!
-     */
+    public static void initDefaultTargetSets() {
+        if (blockEspTargets.isEmpty()) {
+            blockEspTargets.add("minecraft:diamond_ore");
+            blockEspTargets.add("minecraft:deepslate_diamond_ore");
+            blockEspTargets.add("minecraft:ancient_debris");
+            blockEspTargets.add("minecraft:emerald_ore");
+            blockEspTargets.add("minecraft:deepslate_emerald_ore");
+            blockEspTargets.add("minecraft:spawner");
+        }
+        if (blockSearchTargets.isEmpty()) {
+            blockSearchTargets.add("minecraft:ancient_debris");
+            blockSearchTargets.add("minecraft:nether_portal");
+            blockSearchTargets.add("minecraft:end_portal_frame");
+        }
+    }
+
     public static void initSystem(String initialUser) {
         ensureDirectories();
-        // Capture pure factory defaults before touching any user file
+        initDefaultTargetSets();
         factorySnapshot = buildSnapshot();
         writeJsonToFile(getProfileFile(DEFAULT_PROFILE), factorySnapshot);
 
@@ -322,15 +432,11 @@ public final class ConfigManager {
         runtimeReady = true;
     }
 
-    /**
-     * Called on tick / join to detect Minecraft account switches automatically!
-     */
     public static void checkAccountSwitch(String detectedName) {
         if (detectedName == null || detectedName.isBlank()) return;
         String safe = sanitizeProfileName(detectedName);
         if (safe.equalsIgnoreCase(currentAccountName)) return;
 
-        // Save previous player's config first, then switch to the new player's profile!
         saveNow();
         currentAccountName = safe;
         ensurePlayerProfileExists(safe);
@@ -346,17 +452,14 @@ public final class ConfigManager {
         Path playerFile = getProfileFile(playerName);
         if (Files.exists(playerFile)) return;
 
-        // 1) Migrate legacy config/ye/config.json if present so existing users keep 100% of settings!
         Path legacy = getLegacyConfigFile();
         if (Files.exists(legacy)) {
             try {
                 Files.copy(legacy, playerFile, StandardCopyOption.REPLACE_EXISTING);
-                LOGGER.info("Migrated legacy config.json -> configs/{}.json", playerName);
                 return;
             } catch (IOException ignored) {}
         }
 
-        // 2) Inherit from user's custom template.json if set, otherwise factory default.json!
         Path templateFile = getProfileFile(TEMPLATE_FILE_STEM);
         if (Files.exists(templateFile)) {
             try {
@@ -386,7 +489,7 @@ public final class ConfigManager {
         }
 
         if (!MOD_VERSION.equals(prevVer)) {
-            backupAllConfigs(prevVer.isEmpty() ? "pre_1.7.1" : prevVer);
+            backupAllConfigs(prevVer.isEmpty() ? "pre_1.7.3" : prevVer);
             saveMeta();
         }
     }
@@ -396,11 +499,6 @@ public final class ConfigManager {
             String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
             Path sub = getBackupsDir().resolve(tag + "_" + stamp);
             boolean copiedAny = false;
-            if (Files.exists(getLegacyConfigFile())) {
-                Files.createDirectories(sub);
-                Files.copy(getLegacyConfigFile(), sub.resolve("legacy_config.json"), StandardCopyOption.REPLACE_EXISTING);
-                copiedAny = true;
-            }
             if (Files.exists(getConfigsDir())) {
                 try (Stream<Path> s = Files.list(getConfigsDir())) {
                     for (Path p : s.toList()) {
@@ -479,7 +577,6 @@ public final class ConfigManager {
             JsonElement parsed = JsonParser.parseString(raw);
             if (parsed.isJsonObject()) {
                 applySnapshot(parsed.getAsJsonObject(), fireCallbacks);
-                // Immediately write back lossless merged snapshot so new mod settings are populated on disk!
                 writeJsonToFile(file, buildSnapshot());
             }
         } catch (Exception e) {
@@ -531,9 +628,6 @@ public final class ConfigManager {
         }
     }
 
-    /**
-     * Resets the current profile back to immutable Factory Default (default.json)!
-     */
     public static void resetCurrentToFactoryDefault() {
         if (factorySnapshot == null) return;
         if (activeProfile.equalsIgnoreCase(DEFAULT_PROFILE)) {
@@ -542,15 +636,10 @@ public final class ConfigManager {
             saveMeta();
         }
         applySnapshot(factorySnapshot, true);
-        // Refresh default.json on disk as well to guarantee it's pristine
         writeJsonToFile(getProfileFile(DEFAULT_PROFILE), factorySnapshot);
         saveNow();
     }
 
-    /**
-     * Saves the user's current tuned settings as the Default Template (configs/template.json)
-     * inherited by any future new accounts/profiles!
-     */
     public static void saveCurrentAsDefaultTemplate() {
         ensureDirectories();
         writeJsonToFile(getProfileFile(TEMPLATE_FILE_STEM), buildSnapshot());
@@ -565,9 +654,6 @@ public final class ConfigManager {
         Util.getPlatform().openPath(getConfigsDir());
     }
 
-    /**
-     * Compresses current config into a compact shareable clipboard string ("YE1:...").
-     */
     public static String exportShareCodeToClipboard() {
         try {
             String json = COMPACT_GSON.toJson(buildSnapshot());
@@ -584,9 +670,6 @@ public final class ConfigManager {
         }
     }
 
-    /**
-     * Imports a "YE1:..." share code (or raw JSON) from clipboard into the active profile!
-     */
     public static boolean importShareCodeFromClipboard() {
         try {
             String clip = Minecraft.getInstance().keyboardHandler.getClipboard();
@@ -629,17 +712,31 @@ public final class ConfigManager {
         mouseUnlockKey = org.lwjgl.glfw.GLFW.GLFW_KEY_F10;
         widgetX = -1;
         widgetY = -1;
-        themeAccent = ThemeAccent.APPLE_BLUE;
+        uiStyle = UiStyle.SILKY;
+        uiTheme = UiTheme.DARK;
         lightTheme = false;
-        blurBackground = true;
+        uiOpacity = 0.92f;
+        glassBlurStrength = 10.0f;
+        useClientFont = false;
+        themeAccent = ThemeAccent.BLUE;
+        customAccentHue = 0.56f;
+        customAccentSat = 0.78f;
+        customAccentBri = 0.98f;
         english = false;
-        uiClickSound = YeSoundPresets.SoundType.MECH_SWITCH;
-        uiSoundVolume = 0.85f;
+        uiClickSound = YeSoundPresets.UiSoundType.MECH_SWITCH;
+        uiSoundVolume = 0.80f;
+        pinnedModules.clear();
+        favoriteModules.clear();
         customRadarIgnoreBlocks.clear();
+        entityEspCustomTypes.clear();
+        blockEspTargets.clear();
+        blockSearchTargets.clear();
+        initDefaultTargetSets();
         resetHudSlotsDefault();
         for (Module m : ModuleManager.getAll()) {
             for (Setting<?> s : m.getSettings()) s.resetSilent();
             m.setKeybindSilent(-1);
+            m.setPresetCycleKeySilent(-1);
             m.applyLoadedEnabled(m.isDefaultEnabled(), fireCallbacks);
         }
     }
@@ -647,34 +744,61 @@ public final class ConfigManager {
     private static void applySnapshot(JsonObject root, boolean fireCallbacks) {
         loading = true;
         try {
-            // Reset to clean factory defaults first so any new modules/settings added in updates have clean defaults!
             resetInMemoryToFactoryDefaults(fireCallbacks);
+
+            String savedVer = root.has("modVersion") ? root.get("modVersion").getAsString() : "";
 
             if (root.has("menuKey")) menuKey = root.get("menuKey").getAsInt();
             if (root.has("mouseUnlockKey")) mouseUnlockKey = root.get("mouseUnlockKey").getAsInt();
             if (root.has("widgetX")) widgetX = root.get("widgetX").getAsInt();
             if (root.has("widgetY")) widgetY = root.get("widgetY").getAsInt();
+            if (root.has("uiStyle")) {
+                try { uiStyle = UiStyle.valueOf(root.get("uiStyle").getAsString()); } catch (Exception ignored) {}
+            }
+            if (root.has("uiTheme")) {
+                try { uiTheme = UiTheme.valueOf(root.get("uiTheme").getAsString()); } catch (Exception ignored) {}
+            } else if (root.has("lightTheme") && root.get("lightTheme").getAsBoolean()) {
+                uiTheme = UiTheme.LIGHT;
+            }
+            lightTheme = (uiTheme == UiTheme.LIGHT);
+
+            if (root.has("uiOpacity")) uiOpacity = Math.max(0.25f, Math.min(1.0f, root.get("uiOpacity").getAsFloat()));
+            if (root.has("glassBlurStrength")) glassBlurStrength = Math.max(2.0f, Math.min(20.0f, root.get("glassBlurStrength").getAsFloat()));
+            if (root.has("useClientFont")) useClientFont = root.get("useClientFont").getAsBoolean();
+
             if (root.has("themeAccent")) {
+                String ta = root.get("themeAccent").getAsString();
                 try {
-                    themeAccent = ThemeAccent.valueOf(root.get("themeAccent").getAsString());
+                    themeAccent = switch (ta) {
+                        case "APPLE_BLUE" -> ThemeAccent.BLUE;
+                        case "CYBER_PURPLE" -> ThemeAccent.PURPLE;
+                        case "CRIMSON" -> ThemeAccent.RED;
+                        case "EMERALD" -> ThemeAccent.GREEN;
+                        case "SAKURA" -> ThemeAccent.PINK;
+                        default -> ThemeAccent.valueOf(ta);
+                    };
                 } catch (Exception ignored) {}
             }
-            if (root.has("lightTheme")) lightTheme = root.get("lightTheme").getAsBoolean();
-            if (root.has("blurBackground")) blurBackground = root.get("blurBackground").getAsBoolean();
+            if (root.has("customAccentHue")) customAccentHue = root.get("customAccentHue").getAsFloat();
+            if (root.has("customAccentSat")) customAccentSat = root.get("customAccentSat").getAsFloat();
+            if (root.has("customAccentBri")) customAccentBri = root.get("customAccentBri").getAsFloat();
             if (root.has("english")) english = root.get("english").getAsBoolean();
             if (root.has("uiClickSound")) {
                 try {
-                    uiClickSound = YeSoundPresets.SoundType.valueOf(root.get("uiClickSound").getAsString());
-                } catch (Exception ignored) {}
-            }
-            if (root.has("uiSoundVolume")) uiSoundVolume = root.get("uiSoundVolume").getAsFloat();
-
-            if (root.has("customRadarIgnoreBlocks") && root.get("customRadarIgnoreBlocks").isJsonArray()) {
-                customRadarIgnoreBlocks.clear();
-                for (JsonElement el : root.getAsJsonArray("customRadarIgnoreBlocks")) {
-                    customRadarIgnoreBlocks.add(el.getAsString());
+                    uiClickSound = YeSoundPresets.UiSoundType.valueOf(root.get("uiClickSound").getAsString());
+                } catch (Exception ignored) {
+                    uiClickSound = YeSoundPresets.UiSoundType.MECH_SWITCH;
                 }
             }
+            if (root.has("uiSoundVolume")) uiSoundVolume = Math.max(0.0f, Math.min(1.25f, root.get("uiSoundVolume").getAsFloat()));
+
+            readStringSet(root, "pinnedModules", pinnedModules, true);
+            readStringSet(root, "favoriteModules", favoriteModules, true);
+            readStringSet(root, "customRadarIgnoreBlocks", customRadarIgnoreBlocks, true);
+            readStringSet(root, "entityEspCustomTypes", entityEspCustomTypes, true);
+            if (root.has("blockEspTargets")) readStringSet(root, "blockEspTargets", blockEspTargets, true);
+            if (root.has("blockSearchTargets")) readStringSet(root, "blockSearchTargets", blockSearchTargets, true);
+
             if (root.has("hudSlots") && root.get("hudSlots").isJsonObject()) {
                 JsonObject hObj = root.getAsJsonObject("hudSlots");
                 for (HudSlot slot : HUD_SLOTS.values()) {
@@ -701,13 +825,18 @@ public final class ConfigManager {
                 }
                 JsonObject mObj = modulesObj.getAsJsonObject(module.getId());
                 if (mObj.has("keybind")) {
-                    try {
-                        module.setKeybindSilent(mObj.get("keybind").getAsInt());
-                    } catch (Exception ignored) {}
+                    try { module.setKeybindSilent(mObj.get("keybind").getAsInt()); } catch (Exception ignored) {}
+                }
+                if (mObj.has("presetCycleKey")) {
+                    try { module.setPresetCycleKeySilent(mObj.get("presetCycleKey").getAsInt()); } catch (Exception ignored) {}
                 }
                 if (mObj.has("settings") && mObj.get("settings").isJsonObject()) {
                     JsonObject sObj = mObj.getAsJsonObject("settings");
                     for (Setting<?> setting : module.getSettings()) {
+                        // Force oppressiveVignette OFF when migrating from <= 1.7.2 per user request!
+                        if (savedVer.compareTo("1.7.3") < 0 && "ambience".equals(module.getId()) && "oppressiveVignette".equals(setting.getId())) {
+                            continue;
+                        }
                         if (sObj.has(setting.getId())) {
                             try {
                                 setting.fromJson(sObj.get(setting.getId()));
@@ -728,9 +857,25 @@ public final class ConfigManager {
         }
     }
 
+    private static void readStringSet(JsonObject root, String key, Set<String> out, boolean clearFirst) {
+        if (!root.has(key) || !root.get(key).isJsonArray()) return;
+        if (clearFirst) out.clear();
+        for (JsonElement el : root.getAsJsonArray(key)) {
+            String s = el.getAsString().trim();
+            if (!s.isEmpty()) out.add(s);
+        }
+    }
+
+    private static void writeStringSet(JsonObject root, String key, Set<String> set) {
+        JsonArray arr = new JsonArray();
+        List<String> sorted = new ArrayList<>(set);
+        sorted.sort(String.CASE_INSENSITIVE_ORDER);
+        for (String s : sorted) arr.add(s);
+        root.add(key, arr);
+    }
+
     public static void saveAsync() {
         if (loading) return;
-        // Protect immutable factory default.json: if user edits while viewing "default", fork into their player profile!
         if (activeProfile.equalsIgnoreCase(DEFAULT_PROFILE)) {
             activeProfile = currentAccountName;
             playerPinnedProfiles.put(currentAccountName.toLowerCase(Locale.ROOT), activeProfile);
@@ -754,16 +899,26 @@ public final class ConfigManager {
         root.addProperty("mouseUnlockKey", mouseUnlockKey);
         root.addProperty("widgetX", widgetX);
         root.addProperty("widgetY", widgetY);
+        root.addProperty("uiStyle", uiStyle.name());
+        root.addProperty("uiTheme", uiTheme.name());
+        root.addProperty("lightTheme", uiTheme == UiTheme.LIGHT);
+        root.addProperty("uiOpacity", uiOpacity);
+        root.addProperty("glassBlurStrength", glassBlurStrength);
+        root.addProperty("useClientFont", useClientFont);
         root.addProperty("themeAccent", themeAccent.name());
-        root.addProperty("lightTheme", lightTheme);
-        root.addProperty("blurBackground", blurBackground);
+        root.addProperty("customAccentHue", customAccentHue);
+        root.addProperty("customAccentSat", customAccentSat);
+        root.addProperty("customAccentBri", customAccentBri);
         root.addProperty("english", english);
         root.addProperty("uiClickSound", uiClickSound.name());
         root.addProperty("uiSoundVolume", uiSoundVolume);
 
-        JsonArray ignoreArr = new JsonArray();
-        for (String id : customRadarIgnoreBlocks) ignoreArr.add(id);
-        root.add("customRadarIgnoreBlocks", ignoreArr);
+        writeStringSet(root, "pinnedModules", pinnedModules);
+        writeStringSet(root, "favoriteModules", favoriteModules);
+        writeStringSet(root, "customRadarIgnoreBlocks", customRadarIgnoreBlocks);
+        writeStringSet(root, "entityEspCustomTypes", entityEspCustomTypes);
+        writeStringSet(root, "blockEspTargets", blockEspTargets);
+        writeStringSet(root, "blockSearchTargets", blockSearchTargets);
 
         JsonObject hObj = new JsonObject();
         for (HudSlot slot : HUD_SLOTS.values()) {
@@ -782,6 +937,7 @@ public final class ConfigManager {
             JsonObject mObj = new JsonObject();
             mObj.addProperty("enabled", module.isEnabled());
             mObj.addProperty("keybind", module.getKeybind());
+            mObj.addProperty("presetCycleKey", module.getPresetCycleKey());
 
             JsonObject sObj = new JsonObject();
             for (Setting<?> setting : module.getSettings()) {

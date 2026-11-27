@@ -22,13 +22,14 @@ public abstract class SkyRendererMixin {
     @Inject(method = "extractRenderState", at = @At("TAIL"))
     private void ye$overrideSkyState(ClientLevel level, float partialTick, Camera camera, SkyRenderState state, CallbackInfo ci) {
         AmbienceModule ambience = ModuleManager.get(AmbienceModule.class);
-        if (ambience != null && ambience.isEnabled() && ambience.customSkyAndFog.get()) {
-            // Force OVERWORLD skybox even if dimension/mod altered it, and NEVER paint the lower sky disc black!
+        if (ambience != null && ambience.isEnabled()) {
             if (state.skybox == DimensionType.Skybox.NONE) {
                 state.skybox = DimensionType.Skybox.OVERWORLD;
             }
-            state.skyColor = ambience.getSkyArgb();
-            state.sunriseAndSunsetColor = (0xAA << 24) | (ambience.getHorizonArgb() & 0x00FFFFFF);
+            if (ambience.customSkyAndFog.get()) {
+                state.skyColor = ambience.getSkyArgb();
+                state.sunriseAndSunsetColor = (0xAA << 24) | (ambience.getHorizonArgb() & 0x00FFFFFF);
+            }
             state.rainBrightness = 1.0f;
             state.starBrightness = ambience.getStarBrightness(state.starBrightness);
             state.shouldRenderDarkDisc = false;
@@ -47,7 +48,7 @@ public abstract class SkyRendererMixin {
     @Inject(method = "renderDarkDisc", at = @At("HEAD"), cancellable = true)
     private void ye$preventBlackHorizonDisc(CallbackInfo ci) {
         AmbienceModule ambience = ModuleManager.get(AmbienceModule.class);
-        if (ambience != null && ambience.isEnabled() && ambience.customSkyAndFog.get()) {
+        if (ambience != null && ambience.isEnabled()) {
             ci.cancel();
         }
     }

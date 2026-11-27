@@ -92,20 +92,24 @@ public class EntityEspModule extends Module {
             "showInfoTag", "信息微标牌", "在2D战术框上方显示紧凑名称、血量条与距离", true
     ).visible(() -> style.get().use2d));
 
-    // Target Category Toggles
+    // Target Category Toggles + Ignore Self + Full Entity Matrix Picker!
+    public final BoolSetting ignoreSelf = addSetting(new BoolSetting(
+            "ignoreSelf", "忽略自己", "第三人称与灵魂出窍下不给自己渲染透视框", true
+    ).functionGroup());
+
     public final BoolSetting players = addSetting(new BoolSetting(
             "players", "玩家目标", "透视高亮其他玩家", true
-    ));
+    ).functionGroup());
     public final BoolSetting distinctFriends = addSetting(new BoolSetting(
-            "distinctFriends", "好友独立配色", "白名单中的好友固定显示翡翠绿并标注[好友]", true
-    ).visible(players::get));
+            "distinctFriends", "好友独立配色", "好友列表中的玩家显示翡翠绿并标注好友", true
+    ).visible(players::get).functionGroup());
 
     public final BoolSetting hostiles = addSetting(new BoolSetting(
-            "hostiles", "敌对生物", "高亮僵尸、骷髅、苦力怕、猪灵蛮兵、守卫者等敌对生物", true
-    ));
+            "hostiles", "敌对生物", "批量勾选所有敌对怪物（也可在下方大面板内单独指定生物）", true
+    ).functionGroup());
     public final BoolSetting passives = addSetting(new BoolSetting(
-            "passives", "友好与中立生物", "高亮牛羊村民马匹末影人等普通生物", false
-    ));
+            "passives", "友好与中立生物", "批量勾选牛羊村民等普通生物（也可在大面板单独勾选如羊）", false
+    ).functionGroup());
     public final BoolSetting crystals = addSetting(new BoolSetting(
             "crystals", "末影水晶", "高亮 PVP 关键末影水晶实体", true
     ));
@@ -126,18 +130,11 @@ public class EntityEspModule extends Module {
     private volatile boolean renderedOutlineThisFrame = false;
 
     public EntityEspModule() {
-        super("entity_esp", "实体透视", "Entity ESP", "多模式实体高亮（发光轮廓/2D战术四角框/3D立体框/追踪射线）", Category.VISUAL);
+        super("entity_esp", "实体透视", "Entity ESP", "多模式实体高亮（发光轮廓 / 战术四角框 / 立体透视框 / 追踪射线），配全生物平铺选择大面板", Category.VISUAL);
 
-        addSetting(new ActionSetting("toggleFriendEsp", "准星加删好友", "将准星对准的玩家加入或移出白名单（同步自动下线）", () -> {
-            String res = FriendManager.toggleCrosshairPlayer();
-            if (res == null) {
-                YeQuickMenu.showToast(ConfigManager.tr("请将准星对准一名玩家", "Aim at a player first"), 0xFFFACC15);
-            } else if (res.startsWith("+")) {
-                YeQuickMenu.showToast(ConfigManager.tr("✓ 已标记为好友: " + res.substring(1), "Added friend: " + res.substring(1)), 0xFF34D399);
-            } else {
-                YeQuickMenu.showToast(ConfigManager.tr("已取消好友标记: " + res.substring(1), "Removed friend: " + res.substring(1)), 0xFFEF4444);
-            }
-        }));
+        addSetting(new ActionSetting("openEntityMatrix", "打开生物目标选择大面板", "展开全生物分类平铺大面板，一键全选分类或单独勾选任意特定生物（如羊、苦力怕、村民）", () ->
+                YeQuickMenu.openEntityPickerModal("实体透视 · 生物目标选择大面板", ConfigManager.entityEspCustomTypes)
+        ).functionGroup());
     }
 
     public boolean usesShaderOutline() {
@@ -154,16 +151,27 @@ public class EntityEspModule extends Module {
      * Returns 0 if entity should NOT be highlighted, or opaque 0xFFRRGGBB color if matched!
      */
     public int classifyEntityArgb(Entity entity) {
-        if (entity == null || mc.player == null || entity == mc.player || entity.isRemoved()) return 0;
+        if (entity == null || mc.player == null || entity.isRemoved()) return 0;
+        if (entity == mc.player) {
+            if (ignoreSelf.get() || mc.options.getCameraType().isFirstPerson()) return 0;
+            return GlobalColorModule.resolveArgb(syncGlobalColor.get(), 0xFF38BDF8, 0);
+        }
         double maxDist = maxRange.get();
         if (mc.player.distanceToSqr(entity) > maxDist * maxDist) return 0;
 
+        String typeKey = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString();
+        boolean explicitlyPicked = ConfigManager.entityEspCustomTypes.contains(typeKey);
+
         if (entity instanceof Player p) {
-            if (!players.get() || p.isSpectator()) return 0;
+            if ((!players.get() && !explicitlyPicked) || p.isSpectator()) return 0;
             if (distinctFriends.get() && FriendManager.isFriend(p)) {
-                return 0xFF34D399; // Distinct Emerald Green for friends
+                return 0xFF34D399;
             }
             return GlobalColorModule.resolveArgb(syncGlobalColor.get(), 0xFFFF3B5C, 0);
+        }
+
+        if (explicitlyPicked) {
+            return GlobalColorModule.resolveArgb(syncGlobalColor.get(), 0xFF22D3EE, 2);
         }
 
         if (entity instanceof EndCrystal) {

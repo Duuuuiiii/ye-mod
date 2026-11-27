@@ -12,9 +12,7 @@ import java.util.Iterator;
 import java.util.List;
 
 /**
- * Crisp 3D Glowing Voxel/Block Matrix Footprints (足迹):
- * Replaces blurry 2D circle textures with razor-sharp, layered 3D glowing pixel-blocks
- * (Cyber Matrix Tiles, Molten Magma Embers, Frost Crystal Prisms, Golden Jade Seals)!
+ * 3D Glowing Block Matrix Footprints (足迹) with scale range 0.10 - 0.60!
  */
 public class StepDecalsModule extends Module {
     public enum Style {
@@ -37,15 +35,15 @@ public class StepDecalsModule extends Module {
     public record Decal(double x, double y, double z, float yaw, boolean leftFoot, long spawnMs) {}
 
     public final EnumSetting<Style> style = addSetting(new EnumSetting<>(
-            "style", "样式", "赛博方格 / 熔岩方块 / 冰晶棱块 / 鎏金方印", Style.CYBER_MATRIX
+            "style", "足迹样式", "赛博方格 / 熔岩方块 / 冰晶棱块 / 鎏金方印", Style.CYBER_MATRIX
+    ).functionGroup());
+
+    public final DoubleSetting scale = addSetting(new DoubleSetting(
+            "scale", "足迹大小", "地面立体方块足迹尺寸 (0.10 ~ 0.60)", 0.32, 0.10, 0.60, 0.02
     ));
 
     public final BoolSetting syncGlobalColor = addSetting(new BoolSetting(
-            "syncGlobalColor", "同步全局色彩", "立体方块足迹颜色跟随全局色彩模块", false
-    ));
-
-    public final DoubleSetting scale = addSetting(new DoubleSetting(
-            "scale", "大小", "地面立体方块足迹尺寸", 0.42, 0.25, 0.85, 0.05
+            "syncGlobalColor", "跟随同步色", "足迹颜色跟随同步色模块", false
     ));
 
     private final List<Decal> decals = new ArrayList<>();
@@ -53,7 +51,7 @@ public class StepDecalsModule extends Module {
     private boolean nextLeftFoot = true;
 
     public StepDecalsModule() {
-        super("step_decals", "足迹", "Footsteps", "行走时脚下生成清晰立体的发光方块矩阵印记", Category.VISUAL);
+        super("step_decals", "足迹", "Footsteps", "行走时脚下生成立体发光方块矩阵印记", Category.VISUAL);
     }
 
     @Override

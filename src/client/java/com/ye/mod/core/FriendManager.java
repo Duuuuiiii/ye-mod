@@ -4,11 +4,17 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.ye.mod.ui.YeQuickMenu;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.Vec3;
+import org.lwjgl.glfw.GLFW;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -22,12 +28,16 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Shared persistent Friend Whitelist (stored in config/ye/friends.json).
- * Used by AutoLog (ignore friends in visual range) and EntityESP (highlight friends in distinct color).
+ * Supports dedicated top-level Friends tab + close-range Middle-Click Friend toggle while walking!
  */
 public final class FriendManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Set<String> FRIENDS_LOWER = ConcurrentHashMap.newKeySet();
     private static final MapNameStore DISPLAY_NAMES = new MapNameStore();
+
+    public static volatile boolean middleClickAdd = false;
+    public static volatile double middleClickMaxDist = 6.0;
+    private static boolean prevMiddleDown = false;
 
     private static final class MapNameStore {
         private final ConcurrentHashMap<String, String> map = new ConcurrentHashMap<>();
@@ -54,14 +64,27 @@ public final class FriendManager {
         try {
             String raw = Files.readString(file, StandardCharsets.UTF_8);
             JsonElement el = JsonParser.parseString(raw);
+            FRIENDS_LOWER.clear();
+            DISPLAY_NAMES.clear();
             if (el.isJsonArray()) {
-                FRIENDS_LOWER.clear();
-                DISPLAY_NAMES.clear();
                 for (JsonElement item : el.getAsJsonArray()) {
                     String n = item.getAsString().trim();
                     if (!n.isEmpty()) {
                         FRIENDS_LOWER.add(n.toLowerCase(Locale.ROOT));
                         DISPLAY_NAMES.put(n);
+                    }
+                }
+            } else if (el.isJsonObject()) {
+                JsonObject obj = el.getAsJsonObject();
+                if (obj.has("middleClickAdd")) middleClickAdd = obj.get("middleClickAdd").getAsBoolean();
+                if (obj.has("middleClickMaxDist")) middleClickMaxDist = Math.max(2.0, Math.min(16.0, obj.get("middleClickMaxDist").getAsDouble()));
+                if (obj.has("friends") && obj.get("friends").isJsonArray()) {
+                    for (JsonElement item : obj.getAsJsonArray("friends")) {
+                        String n = item.getAsString().trim();
+                        if (!n.isEmpty()) {
+                            FRIENDS_LOWER.add(n.toLowerCase(Locale.ROOT));
+                            DISPLAY_NAMES.put(n);
+                        }
                     }
                 }
             }
@@ -71,12 +94,55 @@ public final class FriendManager {
     public static void save() {
         try {
             ConfigManager.ensureDirectories();
+            JsonObject root = new JsonObject();
+            root.addProperty("middleClickAdd", middleClickAdd);
+            root.addProperty("middleClickMaxDist", middleClickMaxDist);
             JsonArray arr = new JsonArray();
             for (String n : DISPLAY_NAMES.valuesSorted()) {
                 arr.add(n);
             }
-            Files.writeString(getFriendsFile(), GSON.toJson(arr), StandardCharsets.UTF_8);
+            root.add("friends", arr);
+            Files.writeString(getFriendsFile(), GSON.toJson(root), StandardCharsets.UTF_8);
         } catch (Exception ignored) {}
+    }
+
+    public static void onClientTick() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || mc.getWindow() == null) return;
+        boolean mDown = GLFW.glfwGetMouseButton(mc.getWindow().handle(), GLFW.GLFW_MOUSE_BUTTON_MIDDLE) == GLFW.GLFW_PRESS;
+        if (middleClickAdd && mc.screen == null && mc.player != null && mc.level != null && mDown && !prevMiddleDown) {
+            Player hitPlayer = raycastClosePlayer(mc, middleClickMaxDist);
+            if (hitPlayer != null) {
+                String name = hitPlayer.getGameProfile().name();
+                boolean added = toggleFriend(name);
+                YeQuickMenu.playClick();
+                if (added) {
+                    YeQuickMenu.showToast(ConfigManager.tr("已添加好友: ", "Added Friend: ") + name, 0xFF34D399);
+                } else {
+                    YeQuickMenu.showToast(ConfigManager.tr("已移除好友: ", "Removed Friend: ") + name, 0xFFEF4444);
+                }
+            }
+        }
+        prevMiddleDown = mDown;
+    }
+
+    private static Player raycastClosePlayer(Minecraft mc, double maxDist) {
+        if (mc.hitResult instanceof EntityHitResult ehr && ehr.getEntity() instanceof Player p && p != mc.player) {
+            if (mc.player.distanceTo(p) <= maxDist) return p;
+        }
+        Vec3 eye = mc.player.getEyePosition(1.0f);
+        Vec3 look = mc.player.getViewVector(1.0f);
+        Vec3 end = eye.add(look.scale(maxDist));
+        AABB searchBox = mc.player.getBoundingBox().expandTowards(look.scale(maxDist)).inflate(1.0);
+        EntityHitResult hit = ProjectileUtil.getEntityHitResult(
+                mc.player, eye, end, searchBox,
+                e -> e instanceof Player && e != mc.player && !e.isSpectator(),
+                maxDist * maxDist
+        );
+        if (hit != null && hit.getEntity() instanceof Player p) {
+            return p;
+        }
+        return null;
     }
 
     public static boolean isFriend(String name) {
@@ -131,25 +197,18 @@ public final class FriendManager {
         return FRIENDS_LOWER.size();
     }
 
-    /**
-     * Toggles friend status of the player under the crosshair, or returns null if not looking at a player.
-     */
     public static String toggleCrosshairPlayer() {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.hitResult instanceof EntityHitResult ehr) {
-            Entity target = ehr.getEntity();
-            if (target instanceof Player p && p != mc.player) {
-                String name = p.getGameProfile().name();
-                boolean nowFriend = toggleFriend(name);
-                return (nowFriend ? "+" : "-") + name;
-            }
+        if (mc.player == null) return null;
+        Player p = raycastClosePlayer(mc, middleClickMaxDist);
+        if (p != null) {
+            String name = p.getGameProfile().name();
+            boolean nowFriend = toggleFriend(name);
+            return (nowFriend ? "+" : "-") + name;
         }
         return null;
     }
 
-    /**
-     * Adds all currently visible players within 32 blocks as friends (convenient for team setup!).
-     */
     public static int addNearbyPlayers(double maxDist) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return 0;

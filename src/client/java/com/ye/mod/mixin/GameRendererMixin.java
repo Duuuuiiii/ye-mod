@@ -2,7 +2,9 @@ package com.ye.mod.mixin;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.ye.mod.core.ModuleManager;
+import com.ye.mod.modules.visual.CameraTweaksModule;
 import com.ye.mod.modules.visual.IdleWallpaperModule;
+import com.ye.mod.modules.visual.MotionBlurModule;
 import com.ye.mod.modules.visual.NoFovModule;
 import com.ye.mod.modules.visual.SinCityFilterModule;
 import com.ye.mod.modules.visual.ZoomModule;
@@ -26,9 +28,16 @@ public abstract class GameRendererMixin {
     @Unique private Identifier ye$appliedFilter = null;
 
     @Inject(method = "tick", at = @At("TAIL"))
-    private void ye$syncStylizedShader(CallbackInfo ci) {
-        SinCityFilterModule mod = ModuleManager.get(SinCityFilterModule.class);
-        Identifier target = (mod != null && mod.isEnabled()) ? mod.getActiveEffectId() : null;
+    private void ye$syncStylizedAndMotionBlurShader(CallbackInfo ci) {
+        SinCityFilterModule filterMod = ModuleManager.get(SinCityFilterModule.class);
+        MotionBlurModule blurMod = ModuleManager.get(MotionBlurModule.class);
+        Identifier target = null;
+        if (filterMod != null && filterMod.isEnabled()) {
+            target = filterMod.getActiveEffectId();
+        } else if (blurMod != null && blurMod.isEnabled()) {
+            target = blurMod.getActiveEffectId();
+        }
+
         if (target != null) {
             if (!target.equals(this.currentPostEffect())) {
                 this.setPostEffect(target);
@@ -53,7 +62,9 @@ public abstract class GameRendererMixin {
     @Inject(method = "bobHurt", at = @At("HEAD"), cancellable = true)
     private void ye$noHurtCam(PoseStack poseStack, float partialTick, CallbackInfo ci) {
         NoFovModule noFov = ModuleManager.get(NoFovModule.class);
-        if (noFov != null && noFov.isEnabled() && noFov.noHurtCam.get()) {
+        CameraTweaksModule cam = ModuleManager.get(CameraTweaksModule.class);
+        if ((noFov != null && noFov.isEnabled() && noFov.noHurtCam.get())
+                || (cam != null && cam.isEnabled() && cam.noHurtShake.get())) {
             ci.cancel();
         }
     }

@@ -3,6 +3,9 @@ package com.ye.mod.mixin;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.ye.mod.core.ModuleManager;
+import com.ye.mod.modules.visual.AmbienceModule;
+import com.ye.mod.render.YeSkyPanoramaRenderer;
 import com.ye.mod.render.YeWorldFxRenderer;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
@@ -31,9 +34,13 @@ public abstract class LevelRendererMixin {
 
     @Inject(method = "submitEntities", at = @At("TAIL"))
     private void ye$submitHighResWorldFx(PoseStack poseStack, LevelRenderState state, SubmitNodeCollector collector, CallbackInfo ci) {
-        com.ye.mod.modules.render.EntityEspModule esp = com.ye.mod.core.ModuleManager.get(com.ye.mod.modules.render.EntityEspModule.class);
+        com.ye.mod.modules.render.EntityEspModule esp = ModuleManager.get(com.ye.mod.modules.render.EntityEspModule.class);
         if (esp != null && esp.consumeOutlineFlag() && state != null) {
             state.haveGlowingEntities = true;
+        }
+        AmbienceModule amb = ModuleManager.get(AmbienceModule.class);
+        if (amb != null && amb.usesPanoramaDome()) {
+            YeSkyPanoramaRenderer.submitSkyDome(poseStack, collector, amb);
         }
         YeWorldFxRenderer.submitWorldEffects(poseStack, state, collector);
     }

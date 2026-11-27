@@ -1,6 +1,8 @@
 package com.ye.mod.ui;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import com.ye.mod.core.ConfigManager;
+import com.ye.mod.core.Module;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -8,20 +10,21 @@ import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
 
+import java.awt.Color;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 1:1 Native Monitor-Pixel Vector UI Renderer:
- * - Renders rounded rects, true rounded hairline borders (NEVER sharp square outlines!),
- *   soft Gaussian drop shadows, pill switches, and circles at exact 1:1 physical screen pixels!
- * - Zero UV edge bleeding (eliminating bottom white lines) and zero corner square artifacts!
- * - Integrates YeHdFont for desktop-grade anti-aliased Microsoft YaHei UI / Segoe UI typography.
+ * Dual-Persona UI Renderer:
+ * 1) SILKY (丝滑风): Tactile spring animations, golden-ratio rounded geometry, multi-layer shadows & specular sheen!
+ * 2) MECHANICAL (机械风): Meteor/Rusher-inspired razor-sharp 90° right angles, 0ms instant response, high-density tactical grid!
+ * Plus 3 Material Themes: DARK (深色), LIGHT (浅色), and GAUSSIAN_GLASS (高斯毛玻璃) + adjustable uiOpacity!
+ * Also includes cached HSV Hue Bar & 2D Color Picker rendering + Crisp Vector Module Icons!
  */
 public final class AppleUiRenderer {
     public static final int TEXT_PRIMARY = 0xFFF8FAFC;
     public static final int APPLE_GREEN = 0xFF30D158;
-    public static final int TOGGLE_OFF = 0xFF2B3242;
+    public static final int TOGGLE_OFF = 0xFF283142;
 
     public static boolean lightTheme = false;
     public static float themeAnim = 0.0f;
@@ -31,6 +34,8 @@ public final class AppleUiRenderer {
     private static final Map<Integer, StampTex> BORDER_STAMPS = new HashMap<>();
     private static final Map<Integer, StampTex> CIRCLE_STAMPS = new HashMap<>();
 
+    private static Identifier hueBarTexId = null;
+
     private static long lastFrameNs = System.nanoTime();
     private static float frameDt = 0.016f;
 
@@ -38,13 +43,21 @@ public final class AppleUiRenderer {
 
     private AppleUiRenderer() {}
 
+    public static boolean isMechanical() {
+        return ConfigManager.uiStyle == ConfigManager.UiStyle.MECHANICAL;
+    }
+
+    public static boolean isGlass() {
+        return ConfigManager.uiTheme == ConfigManager.UiTheme.GAUSSIAN_GLASS;
+    }
+
     public static void beginFrame() {
         long now = System.nanoTime();
         frameDt = Math.max(0.002f, Math.min(0.05f, (now - lastFrameNs) / 1_000_000_000.0f));
         lastFrameNs = now;
-        float target = com.ye.mod.core.ConfigManager.lightTheme ? 1.0f : 0.0f;
-        themeAnim = smooth(themeAnim, target, 14.0f, frameDt);
-        lightTheme = com.ye.mod.core.ConfigManager.lightTheme;
+        lightTheme = (ConfigManager.uiTheme == ConfigManager.UiTheme.LIGHT);
+        float target = lightTheme ? 1.0f : 0.0f;
+        themeAnim = isMechanical() ? target : smooth(themeAnim, target, 15.0f, frameDt);
     }
 
     public static float dt() {
@@ -52,32 +65,88 @@ public final class AppleUiRenderer {
     }
 
     public static float animChannel(String key, float target, float speed) {
+        if (isMechanical()) {
+            ANIM_CHANNELS.put(key, target);
+            return target;
+        }
         float cur = ANIM_CHANNELS.getOrDefault(key, target);
         float next = smooth(cur, target, speed, frameDt);
         ANIM_CHANNELS.put(key, next);
         return next;
     }
 
-    public static int bgWindowTop()   { return lerpColor(0xF610141D, 0xFAF8FAFC, themeAnim); }
-    public static int bgHeader()      { return lerpColor(0xFA0B0E16, 0xFCEBF0F7, themeAnim); }
-    public static int bgCard()        { return lerpColor(0xFF171C28, 0xFFFFFFFF, themeAnim); }
-    public static int bgCardHover()   { return lerpColor(0xFF212838, 0xFFEAF1FB, themeAnim); }
-    public static int borderOuter()   { return lerpColor(0x32FFFFFF, 0x240F172A, themeAnim); }
-    public static int borderSubtle()  { return lerpColor(0x1EFFFFFF, 0x180F172A, themeAnim); }
+    public static int bgWindowTop() {
+        float op = ConfigManager.uiOpacity;
+        if (isGlass()) {
+            int glassAlpha = Math.max(40, Math.min(220, Math.round(op * 155.0f)));
+            return (glassAlpha << 24) | 0x000E1525;
+        }
+        int base = lerpColor(isMechanical() ? 0xFF0A0D14 : 0xFF0F141F, 0xFFF8FAFC, themeAnim);
+        int a = Math.max(65, Math.min(255, Math.round(op * 252.0f)));
+        return (a << 24) | (base & 0x00FFFFFF);
+    }
+
+    public static int bgHeader() {
+        float op = ConfigManager.uiOpacity;
+        if (isGlass()) {
+            int ga = Math.max(55, Math.min(235, Math.round(op * 185.0f)));
+            return (ga << 24) | 0x00090E1A;
+        }
+        int base = lerpColor(isMechanical() ? 0xFF070A10 : 0xFF0B0F18, 0xFFEAF0F8, themeAnim);
+        int a = Math.max(85, Math.min(255, Math.round(Math.min(1.0f, op + 0.05f) * 254.0f)));
+        return (a << 24) | (base & 0x00FFFFFF);
+    }
+
+    public static int bgCard() {
+        float op = ConfigManager.uiOpacity;
+        if (isGlass()) {
+            int ga = Math.max(38, Math.min(210, Math.round(op * 135.0f)));
+            return (ga << 24) | 0x001B253B;
+        }
+        int base = lerpColor(isMechanical() ? 0xFF131823 : 0xFF171D2B, 0xFFFFFFFF, themeAnim);
+        int a = Math.max(75, Math.min(255, Math.round(Math.min(1.0f, op + 0.04f) * 255.0f)));
+        return (a << 24) | (base & 0x00FFFFFF);
+    }
+
+    public static int bgCardHover() {
+        float op = ConfigManager.uiOpacity;
+        if (isGlass()) {
+            int ga = Math.max(60, Math.min(230, Math.round(op * 175.0f)));
+            return (ga << 24) | 0x00263452;
+        }
+        int base = lerpColor(isMechanical() ? 0xFF1C2434 : 0xFF21293B, 0xFFEAF1FB, themeAnim);
+        int a = Math.max(95, Math.min(255, Math.round(Math.min(1.0f, op + 0.06f) * 255.0f)));
+        return (a << 24) | (base & 0x00FFFFFF);
+    }
+
+    public static int borderOuter() {
+        if (isGlass()) return 0x58BAE6FD;
+        if (isMechanical()) return lightTheme ? 0x550F172A : 0x48475569;
+        return lerpColor(0x36FFFFFF, 0x260F172A, themeAnim);
+    }
+
+    public static int borderSubtle() {
+        if (isGlass()) return 0x36E0F2FE;
+        if (isMechanical()) return lightTheme ? 0x300F172A : 0x34334155;
+        return lerpColor(0x1EFFFFFF, 0x180F172A, themeAnim);
+    }
+
     public static int textPrimary()   { return lerpColor(0xFFF8FAFC, 0xFF0F172A, themeAnim); }
     public static int textSecondary() { return lerpColor(0xFF94A3B8, 0xFF475569, themeAnim); }
     public static int textTertiary()  { return lerpColor(0xFF64748B, 0xFF64748B, themeAnim); }
 
-    public static void toggleTheme() {
-        com.ye.mod.core.ConfigManager.lightTheme = !com.ye.mod.core.ConfigManager.lightTheme;
-        lightTheme = com.ye.mod.core.ConfigManager.lightTheme;
-        com.ye.mod.core.ConfigManager.saveAsync();
+    public static void cycleUiTheme() {
+        ConfigManager.UiTheme[] vals = ConfigManager.UiTheme.values();
+        ConfigManager.uiTheme = vals[(ConfigManager.uiTheme.ordinal() + 1) % vals.length];
+        ConfigManager.lightTheme = (ConfigManager.uiTheme == ConfigManager.UiTheme.LIGHT);
+        lightTheme = ConfigManager.lightTheme;
+        ConfigManager.saveAsync();
     }
 
-    // ==================== HIGH-DPI VECTOR TYPOGRAPHY ====================
+    // ==================== TYPOGRAPHY HELPERS ====================
 
     public static void drawText(GuiGraphics g, Font unusedMcFont, String text, int x, int y, int color) {
-        YeHdFont.draw(g, text, x, y - 0.5f, 8.8f, color, themeAnim < 0.45f, false);
+        YeHdFont.draw(g, text, x, y, 8.8f, color, themeAnim < 0.45f, false);
     }
 
     public static void drawBoldText(GuiGraphics g, String text, float x, float y, float size, int color) {
@@ -88,15 +157,11 @@ public final class AppleUiRenderer {
         YeHdFont.draw(g, text, x, y, size, color, shadow, false);
     }
 
-    public static void drawCenteredText(GuiGraphics g, Font unusedMcFont, String text, int cx, int y, int color) {
-        YeHdFont.drawCentered(g, text, cx, y - 0.5f, 8.8f, color, themeAnim < 0.45f, false);
-    }
-
     public static void drawCenteredSmooth(GuiGraphics g, String text, float cx, float y, float size, int color, boolean bold) {
         YeHdFont.drawCentered(g, text, cx, y, size, color, themeAnim < 0.45f, bold);
     }
 
-    // ==================== 1:1 NATIVE PIXEL SDF ROUNDED SHAPES ====================
+    // ==================== 1:1 NATIVE PIXEL SDF SHAPES ====================
 
     private static StampTex getCornerStamp(int rPx) {
         int clamped = Math.max(2, Math.min(96, rPx));
@@ -186,10 +251,6 @@ public final class AppleUiRenderer {
         });
     }
 
-    /**
-     * Seam-free, 1:1 physical-pixel anti-aliased rounded rectangle!
-     * Zero overlap between quads (eliminating alpha double-blending seams & bottom white lines!).
-     */
     public static void drawRoundedRect(GuiGraphics g, float x, float y, float w, float h, float radius, int color) {
         if (w <= 0.1f || h <= 0.1f || ((color >>> 24) & 0xFF) == 0) return;
         float gs = YeHdFont.guiScale();
@@ -197,7 +258,7 @@ public final class AppleUiRenderer {
         int pxY = Math.round(y * gs);
         int pxW = Math.max(1, Math.round((x + w) * gs) - pxX);
         int pxH = Math.max(1, Math.round((y + h) * gs) - pxY);
-        int rPx = Math.min(Math.round(radius * gs), Math.min(pxW / 2, pxH / 2));
+        int rPx = isMechanical() ? 0 : Math.min(Math.round(radius * gs), Math.min(pxW / 2, pxH / 2));
 
         var pose = g.pose();
         pose.pushMatrix();
@@ -212,16 +273,12 @@ public final class AppleUiRenderer {
         StampTex st = getCornerStamp(rPx);
         int ts = st.sizePx;
 
-        // 4 exact 1:1 quarter-circle corners (non-overlapping!)
         g.blit(RenderPipelines.GUI_TEXTURED, st.id, pxX, pxY, 0f, 0f, rPx, rPx, rPx, rPx, ts, ts, color);
         g.blit(RenderPipelines.GUI_TEXTURED, st.id, pxX + pxW - rPx, pxY, (float) rPx, 0f, rPx, rPx, rPx, rPx, ts, ts, color);
         g.blit(RenderPipelines.GUI_TEXTURED, st.id, pxX, pxY + pxH - rPx, 0f, (float) rPx, rPx, rPx, rPx, rPx, ts, ts, color);
         g.blit(RenderPipelines.GUI_TEXTURED, st.id, pxX + pxW - rPx, pxY + pxH - rPx, (float) rPx, (float) rPx, rPx, rPx, rPx, rPx, ts, ts, color);
 
-        // 3 exact non-overlapping interior solid fills (zero UV edge sampling = zero white lines!)
-        if (pxW > rPx * 2) {
-            g.fill(pxX + rPx, pxY, pxX + pxW - rPx, pxY + pxH, color);
-        }
+        if (pxW > rPx * 2) g.fill(pxX + rPx, pxY, pxX + pxW - rPx, pxY + pxH, color);
         if (pxH > rPx * 2) {
             g.fill(pxX, pxY + rPx, pxX + rPx, pxY + pxH - rPx, color);
             g.fill(pxX + pxW - rPx, pxY + rPx, pxX + pxW, pxY + pxH - rPx, color);
@@ -234,9 +291,6 @@ public final class AppleUiRenderer {
         drawRoundedRect(g, (float) x, (float) y, (float) w, (float) h, (float) radius, color);
     }
 
-    /**
-     * True anti-aliased rounded hairline border — NEVER protrudes sharp 90-degree corners!
-     */
     public static void drawRoundedOutline(GuiGraphics g, float x, float y, float w, float h, float radius, float strokePxF, int color) {
         if (w <= 0.1f || h <= 0.1f || ((color >>> 24) & 0xFF) == 0) return;
         float gs = YeHdFont.guiScale();
@@ -245,7 +299,7 @@ public final class AppleUiRenderer {
         int pxW = Math.max(2, Math.round((x + w) * gs) - pxX);
         int pxH = Math.max(2, Math.round((y + h) * gs) - pxY);
         int stPx = Math.max(1, Math.round(strokePxF));
-        int rPx = Math.min(Math.round(radius * gs), Math.min(pxW / 2, pxH / 2));
+        int rPx = isMechanical() ? 0 : Math.min(Math.round(radius * gs), Math.min(pxW / 2, pxH / 2));
 
         var pose = g.pose();
         pose.pushMatrix();
@@ -280,31 +334,43 @@ public final class AppleUiRenderer {
         pose.popMatrix();
     }
 
-    /**
-     * Clean modern desktop window shell with multi-layer soft rounded shadow and true rounded border!
-     */
     public static void drawElevatedWindow(GuiGraphics g, int x, int y, int w, int h, int radius) {
-        drawRoundedRect(g, x - 3.0f, y - 1.0f, w + 6.0f, h + 5.0f, radius + 3.0f, 0x16000000);
-        drawRoundedRect(g, x - 1.5f, y, w + 3.0f, h + 3.0f, radius + 1.5f, 0x2C000000);
+        if (!isMechanical()) {
+            drawRoundedRect(g, x - 3.5f, y - 1.0f, w + 7.0f, h + 6.0f, radius + 3.5f, 0x1E000000);
+            drawRoundedRect(g, x - 1.5f, y, w + 3.0f, h + 3.0f, radius + 1.5f, 0x34000000);
+        }
         drawRoundedRect(g, x, y, w, h, radius, bgWindowTop());
-        drawRoundedOutline(g, x, y, w, h, radius, 1.4f, borderOuter());
+        if (isGlass()) {
+            // Subtle top glass frost reflection sheen
+            g.fillGradient(x + 2, y + 2, x + w - 2, y + Math.min(48, h / 3), 0x1EFFFFFF, 0x00FFFFFF);
+        }
+        drawRoundedOutline(g, x, y, w, h, radius, isMechanical() ? 1.6f : 1.4f, borderOuter());
     }
 
-    /**
-     * Clean elevated card with zero bottom white line and true rounded hover/active border!
-     */
     public static void drawElevatedCard(GuiGraphics g, int x, int y, int w, int h, int radius,
                                         float activeProg, float hoverProg, int accent) {
-        drawRoundedRect(g, x, y + 0.8f, w, h + 0.6f, radius, 0x22000000);
+        if (!isMechanical()) {
+            drawRoundedRect(g, x, y + 0.8f, w, h + 0.6f, radius, 0x20000000);
+        }
 
         int idleBg = lerpColor(bgCard(), bgCardHover(), hoverProg);
-        int fillCol = lerpColor(idleBg, accent, activeProg);
-        drawRoundedRect(g, x, y, w, h, radius, fillCol);
-
-        int borderCol = activeProg > 0.5f
-                ? withAlpha(0xFFFFFFFF, 0.22f)
-                : lerpColor(borderSubtle(), withAlpha(accent, 0.72f), hoverProg);
-        drawRoundedOutline(g, x, y, w, h, radius, 1.0f, borderCol);
+        if (isMechanical()) {
+            // Mechanical style: crisp tactical dark card + razor-sharp left accent bar when active!
+            int mechActiveBg = lerpColor(idleBg, withAlpha(accent, 0.28f), activeProg);
+            g.fill(x, y, x + w, y + h, mechActiveBg);
+            int bCol = activeProg > 0.5f ? accent : (hoverProg > 0.5f ? withAlpha(accent, 0.8f) : borderSubtle());
+            drawRoundedOutline(g, x, y, w, h, 0, 1.0f, bCol);
+            if (activeProg > 0.5f) {
+                g.fill(x, y, x + 2, y + h, accent);
+            }
+        } else {
+            int fillCol = lerpColor(idleBg, accent, activeProg);
+            drawRoundedRect(g, x, y, w, h, radius, fillCol);
+            int borderCol = activeProg > 0.5f
+                    ? withAlpha(0xFFFFFFFF, 0.26f)
+                    : lerpColor(borderSubtle(), withAlpha(accent, 0.75f), hoverProg);
+            drawRoundedOutline(g, x, y, w, h, radius, 1.0f, borderCol);
+        }
     }
 
     public static void drawCircle(GuiGraphics g, float x, float y, float size, int color) {
@@ -327,6 +393,14 @@ public final class AppleUiRenderer {
 
     public static void drawPillSwitch(GuiGraphics g, int x, int y, int w, int h, float progress, int accent) {
         int bg = lerpColor(TOGGLE_OFF, accent, progress);
+        if (isMechanical()) {
+            g.fill(x, y, x + w, y + h, bg);
+            drawRoundedOutline(g, x, y, w, h, 0, 1.0f, progress > 0.5f ? accent : 0x5564748B);
+            int kw = Math.max(6, w / 2 - 2);
+            int kx = x + 2 + Math.round((w - kw - 4) * progress);
+            g.fill(kx, y + 2, kx + kw, y + h - 2, 0xFFF8FAFC);
+            return;
+        }
         drawRoundedRect(g, x, y, w, h, h * 0.5f, bg);
         drawRoundedOutline(g, x, y, w, h, h * 0.5f, 1.0f, 0x24FFFFFF);
         float knobSize = h - 3.6f;
@@ -337,12 +411,88 @@ public final class AppleUiRenderer {
         drawCircle(g, knobX, knobY, knobSize, 0xFFFFFFFF);
     }
 
-    public static int darken(int argb, float factor) {
-        int a = (argb >>> 24) & 0xFF;
-        int r = Math.min(255, Math.round(((argb >>> 16) & 0xFF) * factor));
-        int gr = Math.min(255, Math.round(((argb >>> 8) & 0xFF) * factor));
-        int b = Math.min(255, Math.round((argb & 0xFF) * factor));
-        return (a << 24) | (r << 16) | (gr << 8) | b;
+    // ==================== 2D HSV COLOR PICKER RENDERER ====================
+
+    private static Identifier getHueBarTexture() {
+        if (hueBarTexId != null) return hueBarTexId;
+        NativeImage img = new NativeImage(256, 4, true);
+        for (int x = 0; x < 256; x++) {
+            int rgb = Color.HSBtoRGB(x / 255.0f, 1.0f, 1.0f) & 0x00FFFFFF;
+            for (int y = 0; y < 4; y++) {
+                img.setPixel(x, y, 0xFF000000 | rgb);
+            }
+        }
+        hueBarTexId = Identifier.fromNamespaceAndPath("ye", "hsv_hue_strip");
+        Minecraft.getInstance().getTextureManager().register(hueBarTexId, new DynamicTexture(() -> "ye_hue_bar", img));
+        return hueBarTexId;
+    }
+
+    /**
+     * Draws a crisp 2D Saturation-Brightness picker box + Hue rainbow slider bar!
+     */
+    public static void drawHsvPicker(GuiGraphics g, int x, int y, int svW, int svH, int hueBarY, int hueBarH,
+                                     float hue, float sat, float bri) {
+        int pureHueArgb = 0xFF000000 | (Color.HSBtoRGB(hue, 1.0f, 1.0f) & 0x00FFFFFF);
+
+        // Smooth 16-column Saturation x Brightness gradient square
+        int strips = 24;
+        for (int i = 0; i < strips; i++) {
+            int sx0 = x + (i * svW) / strips;
+            int sx1 = x + ((i + 1) * svW) / strips;
+            float sMid = (i + 0.5f) / strips;
+            int topCol = lerpColor(0xFFFFFFFF, pureHueArgb, sMid);
+            g.fillGradient(sx0, y, sx1, y + svH, topCol, 0xFF000000);
+        }
+        drawRoundedOutline(g, x, y, svW, svH, isMechanical() ? 0 : 4, 1.0f, 0x44FFFFFF);
+
+        // Reticle at (sat, 1 - bri)
+        float cx = x + sat * svW;
+        float cy = y + (1.0f - bri) * svH;
+        drawCircle(g, cx - 4.0f, cy - 4.0f, 8.0f, 0xCC000000);
+        drawCircle(g, cx - 3.0f, cy - 3.0f, 6.0f, 0xFFFFFFFF);
+
+        // Hue Rainbow Strip
+        g.blit(RenderPipelines.GUI_TEXTURED, getHueBarTexture(), x, hueBarY, 0f, 0f, svW, hueBarH, 256, 4, 256, 4);
+        drawRoundedOutline(g, x, hueBarY, svW, hueBarH, isMechanical() ? 0 : 3, 1.0f, 0x44FFFFFF);
+        float hx = x + hue * svW;
+        g.fill(Math.round(hx - 1.5f), hueBarY - 1, Math.round(hx + 1.5f), hueBarY + hueBarH + 1, 0xFFFFFFFF);
+    }
+
+    // ==================== CRISP VECTOR MODULE ICONS (FOR LARGE MOUSE UI) ====================
+
+    public static void drawModuleIcon(GuiGraphics g, Module m, float x, float y, float sz, int col) {
+        String id = m.getId();
+        float cx = x + sz * 0.5f;
+        float cy = y + sz * 0.5f;
+
+        if (id.contains("wings")) {
+            // Symmetrical Wing chevron
+            drawRoundedRect(g, x + 1, y + 2, sz * 0.38f, sz * 0.24f, 1.2f, col);
+            drawRoundedRect(g, x + 2, y + 5, sz * 0.30f, sz * 0.22f, 1.2f, col);
+            drawRoundedRect(g, x + sz - sz * 0.38f - 1, y + 2, sz * 0.38f, sz * 0.24f, 1.2f, col);
+            drawRoundedRect(g, x + sz - sz * 0.30f - 2, y + 5, sz * 0.30f, sz * 0.22f, 1.2f, col);
+        } else if (id.contains("esp") || id.contains("radar") || id.contains("search") || id.contains("portal")) {
+            // Tactical target reticle / cube frame
+            drawRoundedOutline(g, x + 1.5f, y + 1.5f, sz - 3f, sz - 3f, 2.0f, 1.4f, col);
+            drawCircle(g, cx - 1.8f, cy - 1.8f, 3.6f, col);
+        } else if (id.contains("color") || id.contains("glint") || id.contains("shader") || id.contains("ambience") || id.contains("sin_city") || id.contains("blur")) {
+            // Optical Spark / Palette Venn
+            drawCircle(g, x + 1.5f, y + 2.5f, sz * 0.52f, col);
+            drawCircle(g, x + sz * 0.38f, y + sz * 0.34f, sz * 0.50f, withAlpha(col, 0.65f));
+        } else if (id.contains("ring") || id.contains("crosshair") || id.contains("zoom") || id.contains("camera")) {
+            // Concentric Lens / Ring
+            drawRoundedOutline(g, x + 1.2f, y + 1.2f, sz - 2.4f, sz - 2.4f, (sz - 2.4f) * 0.5f, 1.4f, col);
+            drawCircle(g, cx - 1.5f, cy - 1.5f, 3.0f, col);
+        } else if (id.startsWith("hud_") || id.equals("wthit") || id.equals("player_ui")) {
+            // Dashboard Layout Grid
+            drawRoundedRect(g, x + 1.2f, y + 1.5f, sz * 0.42f, sz - 3f, 1.2f, col);
+            drawRoundedRect(g, x + sz * 0.56f, y + 1.5f, sz * 0.34f, sz * 0.38f, 1.2f, col);
+            drawRoundedRect(g, x + sz * 0.56f, y + sz * 0.56f, sz * 0.34f, sz * 0.30f, 1.2f, withAlpha(col, 0.72f));
+        } else {
+            // Crisp Diamond / Bolt emblem
+            drawRoundedRect(g, x + 2.0f, cy - 1.2f, sz - 4.0f, 2.4f, 1.0f, col);
+            drawRoundedRect(g, cx - 1.2f, y + 2.0f, 2.4f, sz - 4.0f, 1.0f, col);
+        }
     }
 
     public static float smooth(float current, float target, float speed, float dt) {

@@ -158,6 +158,20 @@ public final class YeI18n {
         put("条模式", "Bar");
         put("经典龙翼", "PvP Dragon");
         put("四节羽翼", "Avian Wings");
+        put("物品列表", "Item List");
+        put("玩家预览", "Player View");
+        put("储存透视", "Storage ESP");
+        put("方块透视", "Block ESP");
+        put("方块搜索", "Block Search");
+        put("光影", "Shaders");
+        put("动态模糊", "Motion Blur");
+        put("附魔光效", "Enchant Glint");
+        put("摄像机", "Camera Tweaks");
+        put("飞行速度", "Flight Speed");
+        put("一键发言", "Quick Chat");
+        put("玩家界面", "Player UI");
+        put("同步色", "Sync Color");
+        put("待机动画", "Idle Animation");
         put("原色", "Original");
         put("流光", "Chroma");
     }

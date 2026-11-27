@@ -18,6 +18,7 @@ import java.util.Map;
 public class AccessoriesModule extends Module {
     public enum HeadItem {
         NONE("无"),
+        BALLOON("悬浮气球"),
         CROWN("皇冠"),
         TOP_HAT("礼帽"),
         HALO("光环"),
