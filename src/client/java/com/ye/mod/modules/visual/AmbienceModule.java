@@ -22,11 +22,11 @@ import java.lang.reflect.Method;
  */
 public class AmbienceModule extends Module {
     public enum SkyStyle {
-        SAKURA_CLOUDS("绯樱云海大图", Theme.SAKURA_SUNSET),
-        GALAXY_NEBULA("深空星云大图", Theme.DREAM_VIOLET),
-        AURORA_STARRY("极光星幕大图", Theme.AURORA_TEAL),
-        AZURE_CUMULUS("蔚蓝积云大图", Theme.CLEAR_AZURE),
-        CUSTOM_IMAGE("自定义全景大图", Theme.CLEAR_AZURE),
+        AZURE_CUMULUS("蔚蓝积云", Theme.CLEAR_AZURE),
+        SAKURA_CLOUDS("绯樱云海", Theme.SAKURA_SUNSET),
+        AURORA_STARRY("极光星幕", Theme.AURORA_TEAL),
+        GALAXY_NEBULA("深空星云", Theme.DREAM_VIOLET),
+        CUSTOM_IMAGE("自定义全景", Theme.CLEAR_AZURE),
         GRADIENT_ONLY("纯大气渐变", Theme.SAKURA_SUNSET);
 
         public final String label;
@@ -68,7 +68,7 @@ public class AmbienceModule extends Module {
     }
 
     public final EnumSetting<SkyStyle> skyStyle = addSetting(new EnumSetting<>(
-            "skyStyle", "天空类型", "内置无缝全景大图 / 自定义全景图 / 纯渐变", SkyStyle.SAKURA_CLOUDS
+            "skyStyle", "天空类型", "内置无缝全景 / 自定义全景 / 纯渐变", SkyStyle.AZURE_CUMULUS
     ).functionGroup());
 
     public final EnumSetting<Theme> theme = addSetting(new EnumSetting<>(
@@ -76,7 +76,7 @@ public class AmbienceModule extends Module {
     ).visible(() -> skyStyle.get() == SkyStyle.GRADIENT_ONLY || skyStyle.get() == SkyStyle.CUSTOM_IMAGE).functionGroup());
 
     public final DoubleSetting skyBrightness = addSetting(new DoubleSetting(
-            "skyBrightness", "天空图亮度", "调节全景天幕大图明暗", 1.0, 0.30, 1.50, 0.05
+            "skyBrightness", "天空亮度", "调节全景天幕明暗", 1.28, 0.50, 2.00, 0.05
     ).visible(() -> skyStyle.get() != SkyStyle.GRADIENT_ONLY));
 
     public final DoubleSetting panoRotateSpeed = addSetting(new DoubleSetting(
@@ -122,7 +122,7 @@ public class AmbienceModule extends Module {
     private boolean disabledNuitByUs = false;
 
     public AmbienceModule() {
-        super("ambience", "天空氛围", "Ambience", "内置360°无缝全景天空大图与大气霞光渲染", Category.VISUAL);
+        super("ambience", "天空氛围", "Ambience", "内置360°无缝全景天空与大气霞光渲染", Category.VISUAL);
 
         addSetting(new ActionSetting("openSkyFolder", "打开自定义天空目录", "将任意全景 PNG/JPG 放入此目录即可切换为自定义天空", () -> {
             ConfigManager.ensureDirectories();

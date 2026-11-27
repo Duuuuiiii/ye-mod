@@ -51,7 +51,7 @@ public class StepDecalsModule extends Module {
     private boolean nextLeftFoot = true;
 
     public StepDecalsModule() {
-        super("step_decals", "足迹", "Footsteps", "行走时脚下生成立体发光方块矩阵印记", Category.VISUAL);
+        super("step_decals", "足迹", "Footsteps", "行走时脚下生成立体发光方块矩阵印记", Category.PLAYER_MODEL);
     }
 
     @Override

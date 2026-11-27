@@ -172,9 +172,9 @@ public final class YeSkyPanoramaRenderer {
     private static int paintGalaxyNebula(double dx, double dy, double dz) {
         double h = Math.max(-0.25, dy);
         double horizonGlow = Math.exp(-Math.pow(Math.abs(dy + 0.02) / 0.22, 2.0));
-        double r = 8 + horizonGlow * 42;
-        double g = 11 + horizonGlow * 48;
-        double b = 28 + horizonGlow * 96;
+        double r = 24 + horizonGlow * 68;
+        double g = 28 + horizonGlow * 76;
+        double b = 56 + horizonGlow * 124;
 
         // Tilted Milky Way galactic plane
         double plane = dx * 0.52 + dy * 0.64 - dz * 0.56;
@@ -195,9 +195,9 @@ public final class YeSkyPanoramaRenderer {
 
     private static int paintAuroraSky(double dx, double dy, double dz) {
         double horizon = Math.exp(-Math.pow((dy + 0.03) / 0.26, 2.0));
-        double r = 6 + horizon * 18;
-        double g = 18 + horizon * 78;
-        double b = 36 + horizon * 95;
+        double r = 18 + horizon * 34;
+        double g = 42 + horizon * 102;
+        double b = 72 + horizon * 118;
 
         if (dy > -0.08) {
             double wave = Math.sin(dx * 4.5 + dz * 2.8 + fbm3(dx * 2.4, 0.5, dz * 2.4) * 3.5);
@@ -272,53 +272,58 @@ public final class YeSkyPanoramaRenderer {
     }
 
     /**
-     * Renders the 360° spherical panorama sky dome around the camera!
+     * Renders the 360° spherical panorama sky dome strictly during SkyRenderer.renderSkyDisc (sky pass, before world terrain)!
+     * Because the sky pass runs before terrain/chunks with depth write disabled, it NEVER clips distant terrain or turns the world into a sphere!
      */
-    public static void submitSkyDome(PoseStack ps, SubmitNodeCollector collector, AmbienceModule amb) {
+    public static void renderSkyDomeInSkyPass(AmbienceModule amb) {
         Identifier tex = getOrBuildPanorama(amb.skyStyle.get());
         if (tex == null) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || mc.renderBuffers() == null) return;
 
-        float bri = amb.skyBrightness.get().floatValue();
-        int cByte = Math.max(25, Math.min(255, Math.round(bri * 255.0f)));
+        float bri = Math.max(0.5f, amb.skyBrightness.get().floatValue());
+        int cByte = Math.max(40, Math.min(255, Math.round(Math.min(1.0f, bri) * 255.0f)));
         int tint = 0xFF000000 | (cByte << 16) | (cByte << 8) | cByte;
 
         float rotDeg = (float) (((System.currentTimeMillis() / 1000.0) * amb.panoRotateSpeed.get()) % 360.0);
-        final float radius = 165.0f;
+        final float radius = 88.0f;
         final int segU = 40;
         final int segV = 20;
 
-        ps.pushPose();
+        PoseStack ps = new PoseStack();
         ps.mulPose(Axis.YP.rotationDegrees(rotDeg));
-        collector.submitCustomGeometry(ps, RenderTypes.entityCutoutNoCull(tex), (pose, vc) -> {
-            for (int iv = 0; iv < segV; iv++) {
-                float v0 = iv / (float) segV;
-                float v1 = (iv + 1) / (float) segV;
-                double th0 = v0 * Math.PI;
-                double th1 = v1 * Math.PI;
-                float y0 = (float) (Math.cos(th0) * radius);
-                float y1 = (float) (Math.cos(th1) * radius);
-                float r0 = (float) (Math.sin(th0) * radius);
-                float r1 = (float) (Math.sin(th1) * radius);
+        var buf = mc.renderBuffers().bufferSource();
+        VertexConsumer vc = buf.getBuffer(RenderTypes.entityTranslucent(tex));
+        PoseStack.Pose pose = ps.last();
 
-                for (int iu = 0; iu < segU; iu++) {
-                    float u0 = iu / (float) segU;
-                    float u1 = (iu + 1) / (float) segU;
-                    double ph0 = u0 * Math.PI * 2.0;
-                    double ph1 = u1 * Math.PI * 2.0;
+        for (int iv = 0; iv < segV; iv++) {
+            float v0 = iv / (float) segV;
+            float v1 = (iv + 1) / (float) segV;
+            double th0 = v0 * Math.PI;
+            double th1 = v1 * Math.PI;
+            float y0 = (float) (Math.cos(th0) * radius);
+            float y1 = (float) (Math.cos(th1) * radius);
+            float r0 = (float) (Math.sin(th0) * radius);
+            float r1 = (float) (Math.sin(th1) * radius);
 
-                    float x00 = (float) (r0 * Math.cos(ph0)), z00 = (float) (r0 * Math.sin(ph0));
-                    float x10 = (float) (r0 * Math.cos(ph1)), z10 = (float) (r0 * Math.sin(ph1));
-                    float x11 = (float) (r1 * Math.cos(ph1)), z11 = (float) (r1 * Math.sin(ph1));
-                    float x01 = (float) (r1 * Math.cos(ph0)), z01 = (float) (r1 * Math.sin(ph0));
+            for (int iu = 0; iu < segU; iu++) {
+                float u0 = iu / (float) segU;
+                float u1 = (iu + 1) / (float) segU;
+                double ph0 = u0 * Math.PI * 2.0;
+                double ph1 = u1 * Math.PI * 2.0;
 
-                    emitSkyVert(pose, vc, x00, y0, z00, u0, v0, tint);
-                    emitSkyVert(pose, vc, x10, y0, z10, u1, v0, tint);
-                    emitSkyVert(pose, vc, x11, y1, z11, u1, v1, tint);
-                    emitSkyVert(pose, vc, x01, y1, z01, u0, v1, tint);
-                }
+                float x00 = (float) (r0 * Math.cos(ph0)), z00 = (float) (r0 * Math.sin(ph0));
+                float x10 = (float) (r0 * Math.cos(ph1)), z10 = (float) (r0 * Math.sin(ph1));
+                float x11 = (float) (r1 * Math.cos(ph1)), z11 = (float) (r1 * Math.sin(ph1));
+                float x01 = (float) (r1 * Math.cos(ph0)), z01 = (float) (r1 * Math.sin(ph0));
+
+                emitSkyVert(pose, vc, x00, y0, z00, u0, v0, tint);
+                emitSkyVert(pose, vc, x10, y0, z10, u1, v0, tint);
+                emitSkyVert(pose, vc, x11, y1, z11, u1, v1, tint);
+                emitSkyVert(pose, vc, x01, y1, z01, u0, v1, tint);
             }
-        });
-        ps.popPose();
+        }
+        buf.endBatch(RenderTypes.entityTranslucent(tex));
     }
 
     private static void emitSkyVert(PoseStack.Pose pose, VertexConsumer vc, float x, float y, float z, float u, float v, int argb) {

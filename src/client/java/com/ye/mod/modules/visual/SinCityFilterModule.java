@@ -36,7 +36,7 @@ public class SinCityFilterModule extends Module {
 
     public final EnumSetting<FilterPreset> preset = addSetting(new EnumSetting<>(
             "preset", "滤镜预设", "梦幻柔光 / 超清锐化 / 原色漫描 / 极速光学 / 黑白留红", FilterPreset.DREAM_BLOOM
-    ).functionGroup());
+    ).functionGroup().gridPicker());
 
     public SinCityFilterModule() {
         super("sin_city", "滤镜", "Filters", "视觉风格化滤镜（梦幻柔光 / 超清锐化 / 原色漫描 / 极速光学 / 黑白留红）", Category.VISUAL);

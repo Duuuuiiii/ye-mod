@@ -347,11 +347,11 @@ public class CrosshairModule extends Module {
 
     public final EnumSetting<Preset> preset = addSetting(new EnumSetting<>(
             "preset", "样式", "18款严格像素对称准星预设", Preset.T02_SLIM_CROSS
-    ));
+    ).functionGroup().gridPicker());
 
     public final EnumSetting<ColorPreset> color = addSetting(new EnumSetting<>(
             "color", "颜色", "白 / 青 / 绿 / 粉 / 金 / 红", ColorPreset.WHITE
-    ));
+    ).gridPicker());
 
     public final BoolSetting syncGlobalColor = addSetting(new BoolSetting(
             "syncGlobalColor", "同步全局色彩", "准星颜色跟随全局色彩模块", false

@@ -49,10 +49,22 @@ public class YeMouseScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        if (draggingHudSlot != null) {
+        boolean isDraggingHud = (draggingHudSlot != null);
+        // Background blur (applies to Glass, Dark, Light based on uiBlurStrength; cancelled during HUD drag!)
+        if (!isDraggingHud && !ConfigManager.uiMinimized && YeQuickMenu.isOpen()) {
+            float blurStr = AppleUiRenderer.isGlass()
+                    ? Math.max(0.25f, ConfigManager.uiBlurStrength)
+                    : ConfigManager.uiBlurStrength;
+            if (blurStr > 0.02f) {
+                g.blurBeforeThisStratum();
+            }
+        }
+        // Render all active HUDs ABOVE the background blur layer so they remain razor-sharp in HUD edit mode!
+        HudElementModule.renderAllActive(g, true);
+        if (isDraggingHud) {
             renderNineZoneSnapGuides(g, draggingHudSlot);
         }
-        YeQuickMenu.render(g, mouseX, mouseY, true);
+        YeQuickMenu.render(g, mouseX, mouseY, true, isDraggingHud);
     }
 
     private void renderNineZoneSnapGuides(GuiGraphics g, ConfigManager.HudSlot slot) {
@@ -102,7 +114,7 @@ public class YeMouseScreen extends Screen {
             case 2 -> ConfigManager.tr("底边", "Bottom");
             default -> ConfigManager.tr("顶边", "Top");
         };
-        return h + " · " + v + (s.snappedThisDrag ? ConfigManager.tr(" [已吸附]", " [Snapped]") : "");
+        return h + " · " + v;
     }
 
     @Override

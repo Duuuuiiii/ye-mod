@@ -179,7 +179,7 @@ public final class HudElements {
         public final BoolSetting showBiome = addSetting(new BoolSetting("showBiome", "显示生物群系", "附带显示当前群系", false).functionGroup());
 
         public CoordsHud() {
-            super("hud_coords_mod", "hud_coords", "双维坐标", "Coords",
+            super("hud_coords_mod", "hud_coords", "坐标", "Coords",
                     "XYZ坐标面板，支持跨维度坐标同步换算、小数精度、朝向、区块与群系",
                     true, false, ColorStyle.RUSHER_PINK, 1);
             addResetPositionButton();
@@ -464,7 +464,7 @@ public final class HudElements {
         private final long sessionStartMs = System.currentTimeMillis();
 
         public TimeHud() {
-            super("hud_time_mod", "hud_time", "时间统计", "Time",
+            super("hud_time_mod", "hud_time", "时间", "Time",
                     "显示系统时钟、本次在线计时与世界天数",
                     true, false, ColorStyle.RUSHER_PINK, 3);
             addResetPositionButton();
@@ -818,18 +818,35 @@ public final class HudElements {
         }
     }
 
-    // ==================== 9. ITEM LIST HUD (物品列表 — 原「附近掉落物」，强制支持官方简体中文译名!) ====================
+    // ==================== 9. ITEM LIST HUD (物品列表 — 区块全范围 + 红/紫/白价值分级!) ====================
     public static final class NearbyDropsHud extends HudElementModule {
-        public final DoubleSetting scanDist = addSetting(new DoubleSetting("scanDist", "扫描半径", "检测周围多少米内的地面物品", 64.0, 16.0, 128.0, 8.0).functionGroup());
-        public final DoubleSetting maxRows = addSetting(new DoubleSetting("maxRows", "最大显示行数", "最多列出前多少种地面物品", 6.0, 2.0, 16.0, 1.0).functionGroup());
+        public final BoolSetting unlimitedRange = addSetting(new BoolSetting("unlimitedRange", "加载范围全显", "默认显示已加载区块内的全部掉落物，关闭后按下方半径限制", true).functionGroup());
+        public final DoubleSetting scanDist = addSetting(new DoubleSetting("scanDist", "扫描半径", "限制检测多少米内的地面物品", 96.0, 16.0, 256.0, 8.0).visible(() -> !unlimitedRange.get()).functionGroup());
+        public final DoubleSetting maxRows = addSetting(new DoubleSetting("maxRows", "最大显示行数", "最多列出前多少种地面物品", 8.0, 2.0, 20.0, 1.0).functionGroup());
+        public final BoolSetting tierColoring = addSetting(new BoolSetting("tierColoring", "价值分级高亮", "红=高价值(潜影盒/鞘翅等)，紫=有价值(烟花/黑曜石等)，白=普通", true).functionGroup());
+        public final BoolSetting sortByTier = addSetting(new BoolSetting("sortByTier", "高价值优先排序", "将高价值与有价值物品排在列表最前方", true).functionGroup());
         public final BoolSetting showIcon = addSetting(new BoolSetting("showIcon", "显示物品图标", "每行前方渲染对应物品图标", true).functionGroup());
         public final BoolSetting showDistance = addSetting(new BoolSetting("showDistance", "显示距离米数", "末尾附带最近距离", true).functionGroup());
 
         public NearbyDropsHud() {
             super("hud_drops_mod", "hud_drops", "物品列表", "Item List",
-                    "聚合统计周围地面物品中文名称、图标、总数量与距离",
+                    "统计已加载区块内地面物品中文名称、图标、数量与距离，支持红/紫/白价值分级",
                     true, false, ColorStyle.ROYAL_GOLD, 8);
+            addSetting(new com.ye.mod.core.setting.ActionSetting("editHighTier", "配置高价值物品(红)", "自定义红色高价值高亮物品", () -> {
+                com.ye.mod.ui.YeQuickMenu.openBlockPickerModal(ConfigManager.tr("高价值物品 (红色)", "High Tier Items (Red)"), ConfigManager.dropTierHigh);
+            }).functionGroup());
+            addSetting(new com.ye.mod.core.setting.ActionSetting("editMidTier", "配置有价值物品(紫)", "自定义紫色有价值高亮物品", () -> {
+                com.ye.mod.ui.YeQuickMenu.openBlockPickerModal(ConfigManager.tr("有价值物品 (紫色)", "Mid Tier Items (Purple)"), ConfigManager.dropTierMid);
+            }).functionGroup());
             addResetPositionButton();
+        }
+
+        private int resolveTier(ItemStack stack) {
+            if (stack.isEmpty()) return 0;
+            String id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+            if (ConfigManager.dropTierHigh.contains(id) || id.contains("shulker_box")) return 2;
+            if (ConfigManager.dropTierMid.contains(id)) return 1;
+            return 0;
         }
 
         @Override
@@ -837,32 +854,42 @@ public final class HudElements {
             ConfigManager.HudSlot slot = getSlot();
             if (slot == null) return;
 
-            record DropGroup(ItemStack sample, String name, int count, double minDist) {}
+            record DropGroup(ItemStack sample, String name, int count, double minDist, int tier) {}
             Map<String, DropGroup> grouped = new LinkedHashMap<>();
+            boolean unlim = unlimitedRange.get();
             double maxD = scanDist.get();
             for (Entity e : mc.level.entitiesForRendering()) {
                 if (e instanceof ItemEntity ie && !ie.getItem().isEmpty()) {
                     double d = mc.player.distanceTo(ie);
-                    if (d > maxD) continue;
-                    // Uses YeZhCnDict so even on English client language it displays official Chinese item names!
+                    if (!unlim && d > maxD) continue;
                     String nm = YeZhCnDict.itemName(ie.getItem());
                     int cnt = ie.getItem().getCount();
+                    int tier = resolveTier(ie.getItem());
                     DropGroup prev = grouped.get(nm);
                     if (prev == null) {
-                        grouped.put(nm, new DropGroup(ie.getItem().copyWithCount(1), nm, cnt, d));
+                        grouped.put(nm, new DropGroup(ie.getItem().copyWithCount(1), nm, cnt, d, tier));
                     } else {
-                        grouped.put(nm, new DropGroup(prev.sample, nm, prev.count + cnt, Math.min(prev.minDist, d)));
+                        grouped.put(nm, new DropGroup(prev.sample, nm, prev.count + cnt, Math.min(prev.minDist, d), Math.max(prev.tier, tier)));
                     }
                 }
             }
 
             List<DropGroup> list = new ArrayList<>(grouped.values());
-            list.sort(Comparator.comparingDouble(DropGroup::minDist));
+            if (sortByTier.get()) {
+                list.sort((a, b) -> {
+                    int tc = Integer.compare(b.tier, a.tier);
+                    return tc != 0 ? tc : Double.compare(a.minDist, b.minDist);
+                });
+            } else {
+                list.sort(Comparator.comparingDouble(DropGroup::minDist));
+            }
             int limit = (int) Math.round(maxRows.get());
             if (list.size() > limit) list = list.subList(0, limit);
             if (list.isEmpty() && !editMode) return;
             if (list.isEmpty()) {
-                list.add(new DropGroup(new ItemStack(Items.DIAMOND), ConfigManager.tr("钻石", "Diamond"), 4, 12.5));
+                list.add(new DropGroup(new ItemStack(Items.SHULKER_BOX), ConfigManager.tr("潜影盒", "Shulker Box"), 2, 18.0, 2));
+                list.add(new DropGroup(new ItemStack(Items.FIREWORK_ROCKET), ConfigManager.tr("烟花火箭", "Firework"), 64, 32.0, 1));
+                list.add(new DropGroup(new ItemStack(Items.NETHERRACK), ConfigManager.tr("下界岩", "Netherrack"), 16, 48.0, 0));
             }
 
             float sc = scale.get().floatValue();
@@ -887,32 +914,39 @@ public final class HudElements {
             int x = slot.resolveX(sw, w), y = slot.resolveY(sh, h);
 
             drawHudCard(g, x, y, w, h, editMode);
-            int col = resolvePrimaryColor();
+            int fallbackCol = resolvePrimaryColor();
+            boolean useTiers = tierColoring.get();
 
             for (int i = 0; i < list.size(); i++) {
+                DropGroup dg = list.get(i);
+                int rowCol = !useTiers ? fallbackCol : switch (dg.tier) {
+                    case 2 -> 0xFFEF4444;
+                    case 1 -> 0xFFC084FC;
+                    default -> 0xFFF1F5F9;
+                };
                 float ry = y + 2.0f * sc + i * rowH;
                 if (icons) {
                     var pose = g.pose();
                     pose.pushMatrix();
                     pose.translate(x + 4 * sc, ry);
                     pose.scale(0.68f * sc, 0.68f * sc);
-                    g.renderItem(list.get(i).sample, 0, 0);
+                    g.renderItem(dg.sample, 0, 0);
                     pose.popMatrix();
                 }
-                drawHudText(g, texts.get(i), x + 5 * sc + iconOff, ry + 0.5f * sc, fSize, col, false);
+                drawHudText(g, texts.get(i), x + 5 * sc + iconOff, ry + 0.5f * sc, fSize, rowCol, false);
             }
         }
     }
 
-    // ==================== 10. ACTIVE MODULE LIST HUD (开启列表) ====================
+    // ==================== 10. ACTIVE MODULE LIST HUD (功能列表) ====================
     public static final class ModuleListHud extends HudElementModule {
-        public final BoolSetting rainbowWave = addSetting(new BoolSetting("rainbowWave", "流光彩虹渐变", "模块名称随高度呈现流光波浪", true).functionGroup());
+        public final BoolSetting rainbowWave = addSetting(new BoolSetting("rainbowWave", "渐变", "模块名称随高度呈现流动渐变", true).functionGroup());
         public final BoolSetting sideStripe = addSetting(new BoolSetting("sideStripe", "边缘亮色竖条", "在对齐侧绘制流光边线", true).functionGroup());
         public final BoolSetting hideHudCategory = addSetting(new BoolSetting("hideHudCategory", "仅列功能模块", "不重复列出 HUD 子模块", true).functionGroup());
 
         public ModuleListHud() {
-            super("hud_modules_mod", "hud_modules", "开启列表", "ArrayList",
-                    "已开启功能模块列表，支持左右自适应对齐与流光波浪",
+            super("hud_modules_mod", "hud_modules", "功能列表", "ArrayList",
+                    "已开启功能模块列表，支持左右自适应对齐与渐变",
                     false, false, ColorStyle.ICE_CYAN, 9);
             addResetPositionButton();
         }
@@ -969,7 +1003,7 @@ public final class HudElements {
         }
     }
 
-    // ==================== 11. 3D PAPER-DOLL PLAYERVIEW HUD (玩家预览 — RusherHack 超越版!) ====================
+    // ==================== 11. 3D PAPER-DOLL PLAYERVIEW HUD (玩家预览 — 宽敞翅膀框 + 多玩家状态!) ====================
     public static final class PlayerViewHud extends HudElementModule {
         public enum AngleMode {
             CLASSIC_ANGLE("立体微侧角"),
@@ -982,8 +1016,9 @@ public final class HudElements {
         }
 
         public enum TargetChoice {
-            SELF_ONLY("始终自己"),
-            COMBAT_TARGET("对视/战斗时切敌方");
+            SELF_ONLY("只看自己"),
+            COMBAT_TARGET("对视/战斗时切敌方"),
+            MULTI_NEARBY("多玩家同屏展示");
 
             public final String label;
             TargetChoice(String label) { this.label = label; }
@@ -994,20 +1029,24 @@ public final class HudElements {
         ).functionGroup());
 
         public final EnumSetting<TargetChoice> targetChoice = addSetting(new EnumSetting<>(
-                "targetChoice", "预览对象", "始终渲染自己，或准星指向生物时实时预览对方3D装备模型", TargetChoice.SELF_ONLY
+                "targetChoice", "预览对象", "单人预览、对视敌方或周围多玩家同屏渲染", TargetChoice.SELF_ONLY
         ).functionGroup());
 
+        public final DoubleSetting maxPlayers = addSetting(new DoubleSetting(
+                "maxPlayers", "最多显示玩家数", "多玩家同屏模式下最多同时展示的玩家数量", 3.0, 2.0, 5.0, 1.0
+        ).visible(() -> targetChoice.get() == TargetChoice.MULTI_NEARBY).functionGroup());
+
         public final DoubleSetting customYaw = addSetting(new DoubleSetting(
-                "customYaw", "侧身角度", "调节立体侧身旋转偏角", 26.0, -90.0, 90.0, 2.0
+                "customYaw", "侧身角度", "调节立体侧身旋转偏角", 24.0, -90.0, 90.0, 2.0
         ).visible(() -> angleMode.get() == AngleMode.CLASSIC_ANGLE).functionGroup());
 
         public final BoolSetting showStatusFooter = addSetting(new BoolSetting(
-                "showStatusFooter", "底部名称与生命条", "在3D小人脚下附带紧凑名字与生命条", false
+                "showStatusFooter", "底部名称血量与Pop", "在模型脚下显示玩家ID、血量条与图腾Pop计数", true
         ).functionGroup());
 
         public PlayerViewHud() {
             super("hud_player_view_mod", "hud_player_view", "玩家预览", "Player View",
-                    "屏幕实时渲染3D玩家纸娃娃（同步盔甲、手持、潜行、滑翔、翅膀及敌方目标预览）",
+                    "屏幕实时渲染3D玩家纸娃娃（宽敞展示翅膀饰品，支持多玩家同屏、血量与Pop计数）",
                     false, false, ColorStyle.ICE_CYAN, 11);
             addResetPositionButton();
         }
@@ -1017,63 +1056,119 @@ public final class HudElements {
             ConfigManager.HudSlot slot = getSlot();
             if (slot == null) return;
 
-            LivingEntity subject = mc.player;
-            if (targetChoice.get() == TargetChoice.COMBAT_TARGET
+            List<LivingEntity> subjects = new ArrayList<>();
+            if (targetChoice.get() == TargetChoice.MULTI_NEARBY) {
+                subjects.add(mc.player);
+                int lim = (int) Math.round(maxPlayers.get());
+                mc.level.players().stream()
+                        .filter(p -> p != mc.player && !p.isSpectator())
+                        .sorted(Comparator.comparingDouble(p -> mc.player.distanceTo(p)))
+                        .limit(Math.max(0, lim - 1))
+                        .forEach(subjects::add);
+            } else if (targetChoice.get() == TargetChoice.COMBAT_TARGET
                     && mc.hitResult instanceof EntityHitResult ehr
                     && ehr.getEntity() instanceof LivingEntity le && le.isAlive()) {
-                subject = le;
+                subjects.add(le);
+            } else {
+                subjects.add(mc.player);
             }
 
             float sc = scale.get().floatValue();
-            boolean footer = showStatusFooter.get();
-            int w = Math.round(52 * sc);
-            int h = Math.round((footer ? 82 : 70) * sc);
+            boolean footer = showStatusFooter.get() || subjects.size() > 1;
+            int cellW = Math.round(82 * sc);
+            int gap = Math.round(6 * sc);
+            int w = subjects.size() * cellW + Math.max(0, subjects.size() - 1) * gap;
+            int h = Math.round((footer ? 112 : 96) * sc);
             int x = slot.resolveX(sw, w);
             int y = slot.resolveY(sh, h);
 
             drawHudCard(g, x, y, w, h, editMode);
 
-            int dollBottom = y + h - Math.round((footer ? 14 : 4) * sc);
-            int dollScale = Math.max(12, Math.round(28 * sc));
-            float cx = x + w * 0.5f;
-            float cy = y + (dollBottom - y) * 0.45f;
+            for (int idx = 0; idx < subjects.size(); idx++) {
+                LivingEntity subject = subjects.get(idx);
+                int cxBox = x + idx * (cellW + gap);
+                int dollBottom = y + h - Math.round((footer ? 20 : 6) * sc);
+                int dollScale = Math.max(14, Math.round(32 * sc));
+                float cx = cxBox + cellW * 0.5f;
+                float cy = y + (dollBottom - y) * 0.48f;
 
-            float lookX, lookY;
-            switch (angleMode.get()) {
-                case FRONT_STRAIGHT -> {
-                    lookX = cx;
-                    lookY = cy;
+                float lookX, lookY;
+                switch (angleMode.get()) {
+                    case FRONT_STRAIGHT -> {
+                        lookX = cx;
+                        lookY = cy;
+                    }
+                    case CLASSIC_ANGLE -> {
+                        lookX = cx - customYaw.get().floatValue() * 1.6f * sc;
+                        lookY = cy - 6.0f * sc;
+                    }
+                    case AUTO_TURNTABLE -> {
+                        double ang = ((System.currentTimeMillis() % 6000L) / 6000.0) * Math.PI * 2.0;
+                        lookX = cx + (float) Math.sin(ang) * 90.0f * sc;
+                        lookY = cy - 4.0f * sc;
+                    }
+                    default -> {
+                        // Fixed non-mirrored look direction: turning right turns preview naturally right
+                        float relYaw = net.minecraft.util.Mth.wrapDegrees(subject.getYRot());
+                        lookX = cx + relYaw * 0.85f * sc;
+                        lookY = cy - subject.getXRot() * 0.95f * sc;
+                    }
                 }
-                case CLASSIC_ANGLE -> {
-                    lookX = cx + customYaw.get().floatValue() * 1.6f * sc;
-                    lookY = cy - 6.0f * sc;
-                }
-                case AUTO_TURNTABLE -> {
-                    double ang = ((System.currentTimeMillis() % 6000L) / 6000.0) * Math.PI * 2.0;
-                    lookX = cx + (float) Math.sin(ang) * 90.0f * sc;
-                    lookY = cy - 4.0f * sc;
-                }
-                default -> {
-                    float relYaw = net.minecraft.util.Mth.wrapDegrees(subject.getYRot());
-                    lookX = cx - relYaw * 0.85f * sc;
-                    lookY = cy - subject.getXRot() * 0.95f * sc;
+
+                try {
+                    InventoryScreen.renderEntityInInventoryFollowsMouse(
+                            g, cxBox + 2, y + 2, cxBox + cellW - 2, dollBottom,
+                            dollScale, 0.0625f, lookX, lookY, subject
+                    );
+                } catch (Throwable ignored) {}
+
+                if (footer) {
+                    float hp = subject.getHealth() + subject.getAbsorptionAmount();
+                    float pct = Math.max(0f, Math.min(1f, subject.getHealth() / Math.max(1f, subject.getMaxHealth())));
+                    int pops = (subject instanceof net.minecraft.world.entity.player.Player pl)
+                            ? com.ye.mod.modules.visual.HealthPlatesModule.getEntityPopCount(pl.getId()) : 0;
+                    String label = subject.getName().getString();
+                    if (pops > 0) label += " -" + pops;
+                    String nm = YeHdFont.clipToWidth(label, 7.2f * sc, true, cellW - 8 * sc);
+                    YeHdFont.drawCentered(g, nm, cx, dollBottom + 1.5f * sc, 7.2f * sc, resolvePrimaryColor(), textShadow.get(), true);
+
+                    String hpStr = String.format(Locale.ROOT, "%.0f HP", hp);
+                    YeHdFont.drawCentered(g, hpStr, cx, dollBottom + 9.5f * sc, 6.5f * sc, 0xFFCBD5E1, false, false);
+                    AppleUiRenderer.drawRoundedRect(g, cxBox + 6 * sc, y + h - 4.2f * sc, cellW - 12 * sc, 2.6f * sc, 1.3f * sc, 0xFF1E293B);
+                    AppleUiRenderer.drawRoundedRect(g, cxBox + 6 * sc, y + h - 4.2f * sc, (cellW - 12 * sc) * pct, 2.6f * sc, 1.3f * sc, 0xFF4ADE80);
                 }
             }
+        }
+    }
 
-            try {
-                InventoryScreen.renderEntityInInventoryFollowsMouse(
-                        g, x + 2, y + 2, x + w - 2, dollBottom,
-                        dollScale, 0.0625f, lookX, lookY, subject
-                );
-            } catch (Throwable ignored) {}
+    // ==================== 12. STORAGE COUNT HUD (储存数量) ====================
+    public static final class StorageCountHud extends HudElementModule {
+        public StorageCountHud() {
+            super("hud_radar_mod", "hud_radar", "储存数量", "Storage Count",
+                    "单独统计周围加载区块内的储存容器总数与潜影盒数量",
+                    true, false, ColorStyle.ROYAL_GOLD, 12);
+            addResetPositionButton();
+        }
 
-            if (footer) {
-                float pct = Math.max(0f, Math.min(1f, subject.getHealth() / Math.max(1f, subject.getMaxHealth())));
-                String nm = YeHdFont.clipToWidth(subject.getName().getString(), 7.4f * sc, true, w - 8 * sc);
-                YeHdFont.drawCentered(g, nm, cx, dollBottom + 1 * sc, 7.4f * sc, resolvePrimaryColor(), textShadow.get(), true);
-                AppleUiRenderer.drawRoundedRect(g, x + 5 * sc, y + h - 4.5f * sc, w - 10 * sc, 2.8f * sc, 1.4f * sc, 0xFF1E293B);
-                AppleUiRenderer.drawRoundedRect(g, x + 5 * sc, y + h - 4.5f * sc, (w - 10 * sc) * pct, 2.8f * sc, 1.4f * sc, 0xFF4ADE80);
-            }
+        @Override
+        public void renderElement(GuiGraphics g, int sw, int sh, boolean editMode) {
+            ConfigManager.HudSlot slot = getSlot();
+            if (slot == null) return;
+            com.ye.mod.modules.world.StashRadarModule sr = ModuleManager.get(com.ye.mod.modules.world.StashRadarModule.class);
+            int total = (sr != null) ? sr.getTotalStorageCount() : 0;
+            int shulkers = (sr != null) ? sr.getShulkerCount() : 0;
+            if (!editMode && (sr == null || !sr.isEnabled()) && total == 0) return;
+
+            String txt = ConfigManager.tr(
+                    String.format("储存: %d (潜影盒 %d)", total, shulkers),
+                    String.format("Storage: %d (Shulkers %d)", total, shulkers));
+            float sc = scale.get().floatValue();
+            float fSize = 8.6f * sc;
+            int w = Math.round(YeHdFont.widthF(txt, fSize, false) + 12 * sc);
+            int h = Math.round(15 * sc);
+            int x = slot.resolveX(sw, w), y = slot.resolveY(sh, h);
+            drawHudCard(g, x, y, w, h, editMode);
+            drawHudText(g, txt, x + 6 * sc, y + 2.5f * sc, fSize, resolvePrimaryColor(), false);
         }
     }
 

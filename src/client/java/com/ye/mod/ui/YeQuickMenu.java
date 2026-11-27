@@ -108,6 +108,8 @@ public final class YeQuickMenu {
     private static double scrollOffset = 0.0;
     private static double targetScroll = 0.0;
     private static double maxScroll = 0.0;
+    private static double savedFeaturesScroll = 0.0;
+    private static double savedHudScroll = 0.0;
 
     private static EnumSetting<?> openDropdown = null;
     private static int dropX, dropY, dropW;
@@ -187,6 +189,7 @@ public final class YeQuickMenu {
     public static void openHudElementSettings(HudElementModule hm) {
         if (hm == null) return;
         open = true;
+        ConfigManager.uiMinimized = false;
         openAnim = 1.0f;
         activeSection = TopSection.HUD;
         activeModule = hm;
@@ -197,38 +200,64 @@ public final class YeQuickMenu {
         playClick();
     }
 
+    public static void openSectionFromSidebar(TopSection sec) {
+        Minecraft mc = Minecraft.getInstance();
+        open = true;
+        ConfigManager.uiMinimized = false;
+        activeSection = sec;
+        activeModule = null;
+        closeOverlays();
+        if (mc != null && !(mc.screen instanceof YeMouseScreen)) {
+            mc.setScreen(new YeMouseScreen());
+        }
+        playClick();
+    }
+
     public static void playClick() {
         YeSoundPresets.playUi(ConfigManager.uiClickSound, ConfigManager.uiSoundVolume);
     }
 
     public static int currentWinW(boolean mouseMode) {
-        return mouseMode ? LARGE_W : COMPACT_W;
+        if (!mouseMode) return COMPACT_W;
+        Minecraft mc = Minecraft.getInstance();
+        int sw = (mc != null && mc.getWindow() != null) ? mc.getWindow().getGuiScaledWidth() : LARGE_W;
+        return Math.max(336, Math.min(Math.round(sw * 0.82f), sw - 34));
     }
 
     public static int currentWinH(boolean mouseMode) {
-        return mouseMode ? LARGE_H : COMPACT_H;
+        if (!mouseMode) return COMPACT_H;
+        Minecraft mc = Minecraft.getInstance();
+        int sh = (mc != null && mc.getWindow() != null) ? mc.getWindow().getGuiScaledHeight() : LARGE_H;
+        return Math.max(210, Math.min(Math.round(sh * 0.82f), sh - 20));
     }
 
     public static int getWinX(int sw, boolean mouseMode) {
         if (mouseMode) {
-            return (sw - LARGE_W) / 2;
+            return Math.max(6, (sw - currentWinW(true)) / 2);
         }
         return Math.max(6, sw - COMPACT_W - 10);
     }
 
     public static int getWinY(int sh, boolean mouseMode) {
         if (mouseMode) {
-            return (sh - LARGE_H) / 2;
+            return Math.max(6, (sh - currentWinH(true)) / 2);
         }
         return Math.max(6, sh - COMPACT_H - 10);
     }
 
     public static boolean isPointInsideMenuOrOverlay(double mx, double my, int sw, int sh) {
+        if (ConfigManager.rusherSidebar && inBounds(mx, my, sw - 27, (sh - 68) / 2, 24, 68)) return true;
+        if (ConfigManager.uiMinimized) {
+            int minW = 58, minH = 22;
+            int minX = sw - minW - 12, minY = 10;
+            return inBounds(mx, my, minX, minY, minW, minH);
+        }
         if (YePickerModal.isOpen() || confirmMessage != null || tutorialModalOpen) return true;
+        int ww = currentWinW(true), wh = currentWinH(true);
         int wx = getWinX(sw, true);
         int wy = getWinY(sh, true);
-        if (inBounds(mx, my, wx, wy, LARGE_W, LARGE_H)) return true;
-        if (openDropdown != null && inBounds(mx, my, dropX, Math.max(4, dropY - 220), dropW, 440)) return true;
+        if (inBounds(mx, my, wx, wy, ww, wh)) return true;
+        if (openDropdown != null && inBounds(mx, my, dropX, Math.max(4, dropY - 220), Math.max(dropW, 300), 440)) return true;
         if (soundDropdownOpen && inBounds(mx, my, soundDropX, Math.max(4, soundDropY - 180), soundDropW, 360)) return true;
         if ((openColorSetting != null || openThemeCustomColor) && inBounds(mx, my, pickerX, pickerY, pickerW + 16, pickerSvH + 54)) return true;
         return false;
@@ -244,17 +273,21 @@ public final class YeQuickMenu {
     }
 
     public static void render(GuiGraphics g, int mouseX, int mouseY, boolean mouseUnlocked) {
+        render(g, mouseX, mouseY, mouseUnlocked, false);
+    }
+
+    public static void render(GuiGraphics g, int mouseX, int mouseY, boolean mouseUnlocked, boolean hideForHudDrag) {
         AppleUiRenderer.beginFrame();
         float dt = AppleUiRenderer.dt();
         boolean mech = AppleUiRenderer.isMechanical();
 
         float targetOpen = open ? 1.0f : 0.0f;
-        openAnim = mech ? targetOpen : AppleUiRenderer.smooth(openAnim, targetOpen, 17.0f, dt);
-        pageSlide = mech ? 0.0f : AppleUiRenderer.smooth(pageSlide, 0.0f, 20.0f, dt);
+        openAnim = mech ? targetOpen : AppleUiRenderer.smooth(openAnim, targetOpen, 18.0f, dt);
+        pageSlide = mech ? 0.0f : AppleUiRenderer.smooth(pageSlide, 0.0f, 22.0f, dt);
 
         if (targetScroll > maxScroll) targetScroll = maxScroll;
         if (targetScroll < 0.0) targetScroll = 0.0;
-        scrollOffset = mech ? targetScroll : AppleUiRenderer.smooth((float) scrollOffset, (float) targetScroll, 22.0f, dt);
+        scrollOffset = mech ? targetScroll : AppleUiRenderer.smooth((float) scrollOffset, (float) targetScroll, 24.0f, dt);
         if (scrollOffset > maxScroll) scrollOffset = maxScroll;
         if (scrollOffset < 0.0) scrollOffset = 0.0;
 
@@ -268,23 +301,54 @@ public final class YeQuickMenu {
             return;
         }
 
-        if (AppleUiRenderer.isGlass()) {
-            g.blurBeforeThisStratum();
+        if (hideForHudDrag) {
+            renderToastOnly(g, sw, sh);
+            return;
+        }
+
+        int accent = ConfigManager.getAccentColor();
+
+        // Compact Minimized "Yer" Floating Bar
+        if (mouseUnlocked && ConfigManager.uiMinimized) {
+            HIT_RECTS.clear();
+            int minW = 58, minH = 22;
+            int minX = sw - minW - 12, minY = 10;
+            int rad = mech ? 0 : 7;
+            AppleUiRenderer.drawElevatedWindow(g, minX, minY, minW, minH, rad);
+            AppleUiRenderer.drawRoundedOutline(g, minX, minY, minW, minH, rad, 1.2f, accent);
+            AppleUiRenderer.drawRoundedRect(g, minX + 6, minY + 5, 3, 12, 1.5f, accent);
+            YeHdFont.draw(g, "Yer", minX + 13, YeHdFont.vCenterY(minY, minH, 9.5f), 9.5f, AppleUiRenderer.textPrimary(), false, true);
+            YeHdFont.draw(g, "+", minX + minW - 14, YeHdFont.vCenterY(minY, minH, 9.5f), 9.5f, accent, false, true);
+            HIT_RECTS.add(new HitRect(minX, minY, minW, minH, () -> {
+                playClick();
+                ConfigManager.uiMinimized = false;
+            }, null, null, 8));
+            renderRusherSidebar(g, sw, sh, mouseX, mouseY, true);
+            renderToastOnly(g, sw, sh);
+            return;
         }
 
         int winW = currentWinW(mouseUnlocked);
         int winH = currentWinH(mouseUnlocked);
         int wx = getWinX(sw, mouseUnlocked);
         int baseWy = getWinY(sh, mouseUnlocked);
-        // Smooth Slide-Down Exit Animation for Arrow UI (slides completely down off-screen when closing!)
-        int slideDownPx = mouseUnlocked
-                ? Math.round((1.0f - openAnim) * 18.0f)
-                : Math.round((1.0f - openAnim) * (winH + 24.0f));
+        // Only Compact Arrow UI slides down off-screen at bottom-right; Large Mouse UI stays centered with smooth zoom/fade!
+        int slideDownPx = mouseUnlocked ? 0 : Math.round((1.0f - openAnim) * (winH + 24.0f));
         int wy = baseWy + slideDownPx;
-        int accent = ConfigManager.getAccentColor();
-        int gridCols = mouseUnlocked ? 4 : 3;
+        int gridCols = mouseUnlocked ? (winW >= 540 ? 5 : 4) : 3;
 
         HIT_RECTS.clear();
+
+        // Smooth center-scale for Large UI (uniform regardless of direction!)
+        float uiScale = (mouseUnlocked && !mech) ? (0.93f + 0.07f * openAnim) : 1.0f;
+        var pose = g.pose();
+        boolean scaledPose = Math.abs(uiScale - 1.0f) > 0.002f;
+        if (scaledPose) {
+            pose.pushMatrix();
+            pose.translate(wx + winW * 0.5f, wy + winH * 0.5f);
+            pose.scale(uiScale, uiScale);
+            pose.translate(-(wx + winW * 0.5f), -(wy + winH * 0.5f));
+        }
 
         // 1. Window Shell + Header Bar
         int winRad = mech ? 0 : (mouseUnlocked ? 12 : 9);
@@ -343,10 +407,20 @@ public final class YeQuickMenu {
         }
 
         if (mouseUnlocked) {
+            // Top-right Minimize button -> shrinks to compact "Yer" bar
+            int minBtnW = 18, minBtnX = wx + winW - 26, minBtnY = wy + (hdrH - 16) / 2;
+            boolean minHov = inBounds(mouseX, mouseY, minBtnX, minBtnY, minBtnW, 16);
+            AppleUiRenderer.drawRoundedRect(g, minBtnX, minBtnY, minBtnW, 16, mech ? 0 : 4, minHov ? accent : AppleUiRenderer.bgCardHover());
+            YeHdFont.drawCenteredInBox(g, "—", minBtnX, minBtnY, minBtnW, 16, 8.2f, minHov ? 0xFFFFFFFF : AppleUiRenderer.textSecondary(), false, true);
+            HIT_RECTS.add(new HitRect(minBtnX, minBtnY, minBtnW, 16, () -> {
+                playClick();
+                ConfigManager.uiMinimized = true;
+            }, null, null, 3));
+
             String profBadge = ConfigManager.tr("档案: ", "Profile: ") + ConfigManager.getActiveProfile();
             int pw = YeHdFont.width(profBadge, 8.2f, false);
-            if (tx + pw + 16 < wx + winW) {
-                YeHdFont.draw(g, profBadge, wx + winW - 12 - pw, YeHdFont.vCenterY(wy, hdrH, 8.2f), 8.2f, AppleUiRenderer.textTertiary(), false, false);
+            if (tx + pw + 36 < wx + winW) {
+                YeHdFont.draw(g, profBadge, minBtnX - 8 - pw, YeHdFont.vCenterY(wy, hdrH, 8.2f), 8.2f, AppleUiRenderer.textTertiary(), false, false);
             }
         }
 
@@ -393,7 +467,42 @@ public final class YeQuickMenu {
             }
         }
 
+        if (scaledPose) {
+            pose.popMatrix();
+        }
+
+        // RusherHack-style right-edge floating Features | HUD switcher
+        if (mouseUnlocked) {
+            renderRusherSidebar(g, sw, sh, mouseX, mouseY, true);
+        }
+
         renderToastOnly(g, sw, sh);
+    }
+
+    public static void renderRusherSidebar(GuiGraphics g, int sw, int sh, int mx, int my, boolean clickable) {
+        if (!ConfigManager.rusherSidebar) return;
+        int accent = ConfigManager.getAccentColor();
+        int bw = 24, bh = 68;
+        int bx = sw - bw - 3;
+        int by = (sh - bh) / 2;
+        int rad = AppleUiRenderer.isMechanical() ? 0 : 6;
+        AppleUiRenderer.drawRoundedRect(g, bx, by, bw, bh, rad, 0xCC0B101B);
+        AppleUiRenderer.drawRoundedOutline(g, bx, by, bw, bh, rad, 1.0f, AppleUiRenderer.borderOuter());
+
+        boolean inFeat = open && activeSection == TopSection.FEATURES;
+        boolean inHud = open && activeSection == TopSection.HUD;
+        int topH = bh / 2 - 2;
+
+        AppleUiRenderer.drawRoundedRect(g, bx + 2, by + 2, bw - 4, topH, rad > 0 ? 4 : 0, inFeat ? accent : 0x22FFFFFF);
+        YeHdFont.drawCenteredInBox(g, ConfigManager.tr("功", "F"), bx + 2, by + 2, bw - 4, topH, 8.2f, inFeat ? 0xFFFFFFFF : AppleUiRenderer.textPrimary(), false, true);
+
+        AppleUiRenderer.drawRoundedRect(g, bx + 2, by + topH + 3, bw - 4, topH, rad > 0 ? 4 : 0, inHud ? accent : 0x22FFFFFF);
+        YeHdFont.drawCenteredInBox(g, "H", bx + 2, by + topH + 3, bw - 4, topH, 8.2f, inHud ? 0xFFFFFFFF : AppleUiRenderer.textPrimary(), false, true);
+
+        if (clickable) {
+            HIT_RECTS.add(new HitRect(bx + 2, by + 2, bw - 4, topH, () -> openSectionFromSidebar(TopSection.FEATURES), null, null, 7));
+            HIT_RECTS.add(new HitRect(bx + 2, by + topH + 3, bw - 4, topH, () -> openSectionFromSidebar(TopSection.HUD), null, null, 7));
+        }
     }
 
     private static boolean hasModalOpen() {
@@ -618,31 +727,8 @@ public final class YeQuickMenu {
         int subCol = (m.isEnabled() && !AppleUiRenderer.isMechanical()) ? 0xD8FFFFFF : AppleUiRenderer.textTertiary();
         YeHdFont.draw(g, sub, cx + 23, cy + 22.0f, 7.7f, subCol, false, false);
 
-        // Favorite (★) & Pin (▲) badges on right side when hovered or active
-        boolean fav = ConfigManager.isFavorite(m);
-        boolean pin = ConfigManager.isPinned(m);
-        if (hovered || fav || pin) {
-            int starX = cx + cellW - 14;
-            int pinX = cx + cellW - 26;
-            if (hovered || pin) {
-                YeHdFont.draw(g, "▲", pinX, cy + 6.5f, 7.2f, pin ? 0xFF38BDF8 : 0x7794A3B8, false, true);
-                addClippedHit(pinX - 2, rawCy + 3, 12, 14, clipY, clipH, () -> {
-                    playClick();
-                    ConfigManager.togglePinned(m);
-                }, null, null, null);
-            }
-            if (hovered || fav) {
-                YeHdFont.draw(g, "★", starX, cy + 6.0f, 7.8f, fav ? 0xFFFACC15 : 0x7794A3B8, false, true);
-                addClippedHit(starX - 2, rawCy + 3, 13, 14, clipY, clipH, () -> {
-                    playClick();
-                    ConfigManager.toggleFavorite(m);
-                }, null, null, null);
-            }
-        }
-
-        // Main card hit rect (added BEFORE micro-buttons? Wait: YeMouseScreen sorts higher zPriority first, or iterates reverse for equal zPriority!
-        // Since micro-buttons were added BEFORE main card, let's put main card BEFORE micro-buttons or give micro-buttons zPriority = 1!)
-        addClippedHit(cx, rawCy, cellW - (hovered ? 28 : 0), cellH, clipY, clipH,
+        // Clean full-card hit rect with exact clipY + clipH bottom bound (fixes bottom 2 rows clickability!)
+        addClippedHit(cx, rawCy, cellW, cellH, clipY, clipY + clipH,
                 () -> {
                     playClick();
                     m.toggle();
@@ -650,21 +736,12 @@ public final class YeQuickMenu {
                 },
                 () -> openModuleDetail(m),
                 null, null);
-        if (hovered) {
-            // Lower half of right edge still toggles/opens detail cleanly
-            addClippedHit(cx + cellW - 28, rawCy + 18, 28, cellH - 18, clipY, clipH,
-                    () -> {
-                        playClick();
-                        m.toggle();
-                        ConfigManager.saveAsync();
-                    },
-                    () -> openModuleDetail(m),
-                    null, null);
-        }
     }
 
     private static void openModuleDetail(Module m) {
         playClick();
+        if (activeSection == TopSection.FEATURES) savedFeaturesScroll = targetScroll;
+        else if (activeSection == TopSection.HUD) savedHudScroll = targetScroll;
         activeModule = m;
         closeOverlays();
         pageSlide = 14.0f;
@@ -686,8 +763,10 @@ public final class YeQuickMenu {
             closeOverlays();
             pageSlide = -14.0f;
             selectedIndex = 0;
-            scrollOffset = 0.0;
-            targetScroll = 0.0;
+            double restore = (activeSection == TopSection.FEATURES) ? savedFeaturesScroll
+                    : (activeSection == TopSection.HUD ? savedHudScroll : 0.0);
+            scrollOffset = restore;
+            targetScroll = restore;
         }, null, null, 2));
 
         String mName = ConfigManager.english ? activeModule.getSubtitle() : activeModule.getName();
@@ -798,13 +877,31 @@ public final class YeQuickMenu {
             ry += YePreviewRenderer.renderModulePreviewCard(g, font, activeModule, x, ry, rowW);
         }
 
-        // Cape & Skin Galleries
+        // Cape, Skin, BlockSearch, StashRadar Hierarchy & AutoLog Condition-Flow Cards
         if (activeModule instanceof CustomCapeModule cm) {
             ry = renderCapeGallery(g, cm, x, ry, rowW, listY, listH, mx, my, mouseUnlocked, accent);
         } else if (activeModule instanceof CustomSkinModule sm) {
+            if (mouseUnlocked) {
+                ry = renderOnlineSkinSearchBar(g, sm, x, ry, rowW, listY, listH, accent);
+            }
             ry = renderSkinGallery(g, sm, x, ry, rowW, listY, listH, mx, my, mouseUnlocked, accent);
         } else if (activeModule instanceof BlockSearchModule bsm && mouseUnlocked) {
             ry = renderBlockSearchResultsPanel(g, bsm, x, ry, rowW, listY, listH, mx, my, accent);
+        } else if (activeModule instanceof com.ye.mod.modules.world.StashRadarModule sr && mouseUnlocked) {
+            ry = renderStashRadarHierarchy(g, sr, x, ry, rowW, listY, listH, mx, my, accent);
+            // Only render global non-per-container settings cleanly below
+            List<Setting<?>> globals = funcSettings.stream()
+                    .filter(s -> !(s == sr.editingKind) && !s.getId().contains("_"))
+                    .toList();
+            if (!globals.isEmpty()) {
+                ry = drawSettingSectionHeader(g, ConfigManager.tr("全局过滤与范围", "Global Filter & Range"), x, ry, rowW, listY, listH, accent);
+                ry = renderSettingsBlock(g, globals, flatNavSettings, x, ry, rowW, listY, listH, mx, my, true, accent);
+            }
+            funcSettings.clear();
+        } else if (activeModule instanceof com.ye.mod.modules.world.AutoLogModule al && mouseUnlocked) {
+            ry = renderAutoLogConditionCards(g, al, x, ry, rowW, listY, listH, mx, my, accent);
+            funcSettings.clear();
+            dispSettings.clear();
         }
 
         // Upper Section: 功能参数
@@ -888,12 +985,28 @@ public final class YeQuickMenu {
 
         float labelSize = compactCol ? 8.3f : 8.6f;
 
+        // Per-setting crisp circular Reset button on right edge in Mouse UI
+        int rstOff = 0;
+        if (mouseUnlocked && !(s instanceof ActionSetting)) {
+            rstOff = 17;
+            int rxBtn = cx + cw - 17;
+            int ryBtn = cy + (ch - 12) / 2;
+            boolean rHov = inBounds(mx, my, rxBtn, ryBtn, 12, 12);
+            AppleUiRenderer.drawResetCircleIcon(g, rxBtn + 1, ryBtn + 1, 10, rHov ? accent : AppleUiRenderer.textTertiary());
+            addClippedHit(rxBtn, ryBtn, 13, 13, clipY, clipY + clipH, () -> {
+                playClick();
+                s.reset();
+                ConfigManager.saveAsync();
+            }, null, null, null);
+        }
+        int usableW = cw - rstOff;
+
         if (s instanceof BoolSetting bs) {
-            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, cw - 42);
+            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, usableW - 40);
             YeHdFont.draw(g, lbl, cx + 7, YeHdFont.vCenterY(cy, ch, labelSize), labelSize, AppleUiRenderer.textPrimary(), false, false);
             float bProg = AppleUiRenderer.animChannel("bsw_" + activeModule.getId() + "_" + bs.getId(), bs.get() ? 1f : 0f, 18f);
-            AppleUiRenderer.drawPillSwitch(g, cx + cw - 33, cy + (ch - 14) / 2, 27, 14, bProg, accent);
-            addClippedHit(cx, cy, cw, ch, clipY, clipY + clipH, () -> {
+            AppleUiRenderer.drawPillSwitch(g, cx + usableW - 33, cy + (ch - 14) / 2, 27, 14, bProg, accent);
+            addClippedHit(cx, cy, usableW, ch, clipY, clipY + clipH, () -> {
                 playClick();
                 openDropdown = null;
                 bs.toggle();
@@ -904,10 +1017,10 @@ public final class YeQuickMenu {
             boolean editingThis = (textInputKind == 5 && numKey.equals(activeNumberKey));
             String vt = editingThis ? (textInputBuffer + "|") : formatDouble(ds.get(), ds.getStep());
             float vtW = Math.max(24f, YeHdFont.widthF(vt, labelSize, true));
-            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, cw - vtW - 18);
+            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, usableW - vtW - 18);
             YeHdFont.draw(g, lbl, cx + 7, cy + 3.8f, labelSize, AppleUiRenderer.textPrimary(), false, false);
 
-            int numBoxX = Math.round(cx + cw - 9 - vtW);
+            int numBoxX = Math.round(cx + usableW - 9 - vtW);
             if (editingThis) {
                 AppleUiRenderer.drawRoundedRect(g, numBoxX - 3, cy + 2, vtW + 6, 13, 3, 0xEE080C16);
                 AppleUiRenderer.drawRoundedOutline(g, numBoxX - 3, cy + 2, vtW + 6, 13, 3, 1.0f, accent);
@@ -918,7 +1031,7 @@ public final class YeQuickMenu {
             addClippedHit(numBoxX - 4, cy + 1, Math.round(vtW) + 8, 14, clipY, clipY + clipH,
                     null, null, null, () -> startNumberEdit(numKey, formatDouble(ds.get(), ds.getStep()), ds::set));
 
-            int bw = cw - 14;
+            int bw = usableW - 14;
             int bx = cx + 7;
             int by = cy + ch - 8;
             float targetPct = (float) ((ds.get() - ds.getMin()) / Math.max(0.0001, ds.getMax() - ds.getMin()));
@@ -934,12 +1047,12 @@ public final class YeQuickMenu {
             }, null);
         } else if (s instanceof EnumSetting<?> es) {
             String val = enumLabel(es.get()) + " ▾";
-            int maxBtnW = compactCol ? (cw / 2 + 16) : (cw / 2 + 28);
-            int bw = Math.min(maxBtnW, Math.max(compactCol ? 64 : 78, YeHdFont.width(val, 8.0f, false) + 14));
-            int bx = cx + cw - 5 - bw;
+            int maxBtnW = compactCol ? (usableW / 2 + 16) : (usableW / 2 + 28);
+            int bw = Math.min(maxBtnW, Math.max(compactCol ? 60 : 74, YeHdFont.width(val, 8.0f, false) + 14));
+            int bx = cx + usableW - 5 - bw;
             int by = cy + (ch - 16) / 2;
 
-            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, cw - bw - 14);
+            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, usableW - bw - 14);
             YeHdFont.draw(g, lbl, cx + 7, YeHdFont.vCenterY(cy, ch, labelSize), labelSize, AppleUiRenderer.textPrimary(), false, false);
 
             boolean isOpen = (openDropdown == es);
@@ -958,14 +1071,14 @@ public final class YeQuickMenu {
                 }
             }, null, null, null);
         } else if (s instanceof ColorSetting cs) {
-            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, cw - 72);
+            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, usableW - 70);
             YeHdFont.draw(g, lbl, cx + 7, YeHdFont.vCenterY(cy, ch, labelSize), labelSize, AppleUiRenderer.textPrimary(), false, false);
-            int bx = cx + cw - 66;
+            int bx = cx + usableW - 65;
             int by = cy + (ch - 16) / 2;
-            AppleUiRenderer.drawRoundedRect(g, bx, by, 61, 16, 5, AppleUiRenderer.bgCardHover());
+            AppleUiRenderer.drawRoundedRect(g, bx, by, 60, 16, 5, AppleUiRenderer.bgCardHover());
             AppleUiRenderer.drawRoundedRect(g, bx + 3, by + 3, 10, 10, 3, cs.getArgb());
             YeHdFont.draw(g, cs.getHex(), bx + 16, YeHdFont.vCenterY(by, 16, 7.6f), 7.6f, AppleUiRenderer.textPrimary(), false, true);
-            addClippedHit(bx, by, 61, 16, clipY, clipY + clipH, () -> {
+            addClippedHit(bx, by, 60, 16, clipY, clipY + clipH, () -> {
                 playClick();
                 openThemeCustomColor = false;
                 openColorSetting = (openColorSetting == cs) ? null : cs;
@@ -976,10 +1089,10 @@ public final class YeQuickMenu {
             String kid = "ks_" + activeModule.getId() + "_" + ks.getId();
             boolean listening = kid.equals(activeKeybindId);
             String kVal = listening ? liveBindPrompt() : ks.formatKey();
-            int bw = Math.max(52, YeHdFont.width(kVal, 8.0f, false) + 12);
-            int bx = cx + cw - 5 - bw;
+            int bw = Math.max(48, YeHdFont.width(kVal, 8.0f, false) + 12);
+            int bx = cx + usableW - 5 - bw;
             int by = cy + (ch - 16) / 2;
-            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, cw - bw - 14);
+            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, usableW - bw - 14);
             YeHdFont.draw(g, lbl, cx + 7, YeHdFont.vCenterY(cy, ch, labelSize), labelSize, AppleUiRenderer.textPrimary(), false, false);
             AppleUiRenderer.drawRoundedRect(g, bx, by, bw, 16, 5, listening ? 0xFFEF4444 : AppleUiRenderer.bgCardHover());
             YeHdFont.drawCenteredInBox(g, kVal, bx, by, bw, 16, 8.0f, listening ? 0xFFFFFFFF : accent, false, true);
@@ -988,10 +1101,10 @@ public final class YeQuickMenu {
                     () -> { playClick(); ks.set(-1); stopKeybindListen(); }, null, null);
         } else if (s instanceof StringSetting ss) {
             boolean editing = (textInputKind == 4 && activeStringSetting == ss);
-            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, cw * 0.42f);
+            String lbl = YeHdFont.clipToWidth(s.getName(), labelSize, false, usableW * 0.42f);
             YeHdFont.draw(g, lbl, cx + 7, YeHdFont.vCenterY(cy, ch, labelSize), labelSize, AppleUiRenderer.textPrimary(), false, false);
-            int bx = cx + Math.round(cw * 0.44f);
-            int bw = cw - Math.round(cw * 0.44f) - 5;
+            int bx = cx + Math.round(usableW * 0.44f);
+            int bw = usableW - Math.round(usableW * 0.44f) - 5;
             int by = cy + (ch - 16) / 2;
             AppleUiRenderer.drawRoundedRect(g, bx, by, bw, 16, 4, 0xCC090D16);
             AppleUiRenderer.drawRoundedOutline(g, bx, by, bw, 16, 4, 1.0f, editing ? accent : AppleUiRenderer.borderSubtle());
@@ -1162,6 +1275,25 @@ public final class YeQuickMenu {
         addClippedHit(rxCol, ry, halfW, 28, y, y + h, () -> {
             playClick();
             ConfigManager.useClientFont = !ConfigManager.useClientFont;
+            ConfigManager.saveAsync();
+        }, null, null, null);
+        ry += 32;
+
+        // Row 2.5: Total Background Blur Strength (for Glass, Dark, Light) + RusherHack Right Sidebar Toggle
+        renderCustomSliderCard(g, x, ry, halfW, ConfigManager.tr("总背景模糊度", "BG Blur"), "ui_blur_str",
+                Math.round(ConfigManager.uiBlurStrength * 100) + "%",
+                ConfigManager.uiBlurStrength, 0.0, 1.0,
+                v -> { ConfigManager.uiBlurStrength = (float) Math.max(0.0, Math.min(1.0, v)); ConfigManager.saveAsync(); },
+                vPct -> { ConfigManager.uiBlurStrength = (float) Math.max(0.0, Math.min(1.0, vPct > 1.5 ? vPct / 100.0 : vPct)); ConfigManager.saveAsync(); },
+                y, h, mx, my, mouseUnlocked, accent);
+
+        AppleUiRenderer.drawElevatedCard(g, rxCol, ry, halfW, 28, 6, 0f, (mouseUnlocked && inBounds(mx, my, rxCol, ry, halfW, 28)) ? 1f : 0f, accent);
+        YeHdFont.draw(g, ConfigManager.tr("右侧功能/HUD栏", "Right Switcher"), rxCol + 8, YeHdFont.vCenterY(ry, 28, 8.5f), 8.5f, AppleUiRenderer.textPrimary(), false, false);
+        float rsAnim = AppleUiRenderer.animChannel("rs_bar_sw", ConfigManager.rusherSidebar ? 1f : 0f, 18f);
+        AppleUiRenderer.drawPillSwitch(g, rxCol + halfW - 34, ry + 7, 27, 14, rsAnim, accent);
+        addClippedHit(rxCol, ry, halfW, 28, y, y + h, () -> {
+            playClick();
+            ConfigManager.rusherSidebar = !ConfigManager.rusherSidebar;
             ConfigManager.saveAsync();
         }, null, null, null);
         ry += 32;
@@ -1382,24 +1514,17 @@ public final class YeQuickMenu {
         addClippedHit(addBtnX, ry, 71, 21, y, y + h, YeQuickMenu::confirmTextInput, null, null, null);
         ry += 26;
 
-        // 2. Middle-Click Close-Range Friend Toggle + Max Distance Slider!
-        AppleUiRenderer.drawElevatedCard(g, x, ry, halfW, 28, 6, 0f, (mouseUnlocked && inBounds(mx, my, x, ry, halfW, 28)) ? 1f : 0f, accent);
-        YeHdFont.draw(g, ConfigManager.tr("中键近距加删好友", "Middle-Click Friend"), x + 8, YeHdFont.vCenterY(ry, 28, 8.5f), 8.5f, AppleUiRenderer.textPrimary(), false, false);
+        // 2. Middle-Click Close-Range Friend Toggle (Fixed 4.5m interaction range)
+        AppleUiRenderer.drawElevatedCard(g, x, ry, rowW, 24, 6, 0f, (mouseUnlocked && inBounds(mx, my, x, ry, rowW, 24)) ? 1f : 0f, accent);
+        YeHdFont.draw(g, ConfigManager.tr("中键加删好友 (固定 4.5 格近距触发)", "Middle-Click Friend (4.5m)"), x + 8, YeHdFont.vCenterY(ry, 24, 8.5f), 8.5f, AppleUiRenderer.textPrimary(), false, false);
         float mcfAnim = AppleUiRenderer.animChannel("mcf_sw", FriendManager.middleClickAdd ? 1f : 0f, 18f);
-        AppleUiRenderer.drawPillSwitch(g, x + halfW - 34, ry + 7, 27, 14, mcfAnim, accent);
-        addClippedHit(x, ry, halfW, 28, y, y + h, () -> {
+        AppleUiRenderer.drawPillSwitch(g, x + rowW - 34, ry + 5, 27, 14, mcfAnim, accent);
+        addClippedHit(x, ry, rowW, 24, y, y + h, () -> {
             playClick();
             FriendManager.middleClickAdd = !FriendManager.middleClickAdd;
             FriendManager.save();
         }, null, null, null);
-
-        renderCustomSliderCard(g, rxCol, ry, halfW, ConfigManager.tr("中键最大距离", "Max Click Dist"), "friend_mc_dist",
-                String.format(Locale.ROOT, "%.1fm", FriendManager.middleClickMaxDist),
-                FriendManager.middleClickMaxDist, 2.0, 16.0,
-                v -> { FriendManager.middleClickMaxDist = Math.round(v * 2.0) / 2.0; FriendManager.save(); },
-                v -> { FriendManager.middleClickMaxDist = Math.max(2.0, Math.min(16.0, v)); FriendManager.save(); },
-                y, h, mx, my, mouseUnlocked, accent);
-        ry += 33;
+        ry += 29;
 
         // 3. Nearby Players in World (1-Click Quick Toggle!)
         Minecraft mc = Minecraft.getInstance();
@@ -1652,38 +1777,58 @@ public final class YeQuickMenu {
 
     private static <E extends Enum<E>> void renderDropdown(GuiGraphics g, EnumSetting<E> es, int mx, int my, int accent) {
         E[] vals = es.getDefaultValue().getDeclaringClass().getEnumConstants();
-        int itemH = (vals.length > 0 && vals[0] instanceof com.ye.mod.modules.visual.CrosshairModule.Preset) ? 20 : 18;
-        int maxVisItems = 9;
-        int fullH = vals.length * itemH + 6;
-        int boxH = Math.min(fullH, maxVisItems * itemH + 6);
+        boolean useTable = es.isGridPicker() || vals.length >= 6;
+        int cols = 1;
+        if (useTable) {
+            if (vals.length > 0 && vals[0] instanceof com.ye.mod.modules.visual.CrosshairModule.Preset) cols = 6;
+            else if (vals.length >= 9) cols = 3;
+            else cols = 2;
+        }
+        int itemH = (vals.length > 0 && vals[0] instanceof com.ye.mod.modules.visual.CrosshairModule.Preset) ? 24 : 19;
+        int cellW = (cols == 6) ? 54 : (cols == 3 ? 98 : (cols == 2 ? 108 : Math.max(dropW, 114)));
+        int tableW = cols == 1 ? cellW : (cols * cellW + (cols - 1) * 4 + 8);
+        int rows = (vals.length + cols - 1) / cols;
+        int maxVisRows = 8;
+        int fullH = rows * itemH + 6;
+        int boxH = Math.min(fullH, maxVisRows * itemH + 6);
         double maxDropSc = Math.max(0.0, fullH - boxH);
         dropScroll = Math.max(0.0, Math.min(maxDropSc, dropScroll));
 
         int sh = Minecraft.getInstance().getWindow().getGuiScaledHeight();
         int sw = Minecraft.getInstance().getWindow().getGuiScaledWidth();
-        int dx = Math.max(6, Math.min(sw - dropW - 6, dropX));
+        int dx = Math.max(6, Math.min(sw - tableW - 6, dropX));
         int dy = (dropY + boxH + 6 > sh) ? Math.max(6, dropY - 22 - boxH) : dropY;
 
-        AppleUiRenderer.drawElevatedWindow(g, dx, dy, dropW, boxH, 7);
-        AppleUiRenderer.drawRoundedOutline(g, dx, dy, dropW, boxH, 7, 1.4f, accent);
-        HIT_RECTS.add(new HitRect(dx, dy, dropW, boxH, () -> {}, null, null, 5));
+        AppleUiRenderer.drawElevatedWindow(g, dx, dy, tableW, boxH, AppleUiRenderer.isMechanical() ? 0 : 7);
+        AppleUiRenderer.drawRoundedOutline(g, dx, dy, tableW, boxH, AppleUiRenderer.isMechanical() ? 0 : 7, 1.4f, accent);
+        HIT_RECTS.add(new HitRect(dx, dy, tableW, boxH, () -> {}, null, null, 5));
 
-        g.enableScissor(dx + 1, dy + 2, dx + dropW - 1, dy + boxH - 2);
+        g.enableScissor(dx + 1, dy + 2, dx + tableW - 1, dy + boxH - 2);
         for (int i = 0; i < vals.length; i++) {
             E opt = vals[i];
-            int iy = dy + 3 + i * itemH - (int) Math.round(dropScroll);
+            int colIdx = i % cols;
+            int rowIdx = i / cols;
+            int ix = (cols == 1) ? (dx + 3) : (dx + 4 + colIdx * (cellW + 4));
+            int iw = (cols == 1) ? (tableW - 6) : cellW;
+            int iy = dy + 3 + rowIdx * itemH - (int) Math.round(dropScroll);
             if (iy + itemH < dy || iy > dy + boxH) continue;
 
             boolean sel = (opt == es.get());
-            boolean hov = inBounds(mx, my, dx + 3, iy, dropW - 6, itemH);
+            boolean hov = inBounds(mx, my, ix, iy, iw, itemH);
             int bg = sel ? accent : (hov ? AppleUiRenderer.bgCardHover() : AppleUiRenderer.bgCard());
-            AppleUiRenderer.drawRoundedRect(g, dx + 3, iy, dropW - 6, itemH - 1, 4.5f, bg);
-            int swOff = YePreviewRenderer.renderOptionSwatch(g, opt, dx + 6, iy + 3, 11);
-            YeHdFont.draw(g, enumLabel(opt), dx + 7 + swOff, YeHdFont.vCenterY(iy, itemH - 1, 8.2f), 8.2f,
-                    sel ? 0xFFFFFFFF : AppleUiRenderer.textPrimary(), false, sel);
+            AppleUiRenderer.drawRoundedRect(g, ix, iy, iw, itemH - 2, AppleUiRenderer.isMechanical() ? 0 : 4.5f, bg);
+            if (cols == 6 && opt instanceof com.ye.mod.modules.visual.CrosshairModule.Preset cp) {
+                com.ye.mod.modules.visual.CrosshairModule.renderAtCenter(g, cp, ix + iw / 2, iy + (itemH - 2) / 2,
+                        sel ? 0xFFFFFFFF : 0xFFE2E8F0, false);
+            } else {
+                int swOff = YePreviewRenderer.renderOptionSwatch(g, opt, ix + 4, iy + 3, 11);
+                YeHdFont.draw(g, YeHdFont.clipToWidth(enumLabel(opt), 8.0f, sel, iw - swOff - 8),
+                        ix + 5 + swOff, YeHdFont.vCenterY(iy, itemH - 2, 8.0f), 8.0f,
+                        sel ? 0xFFFFFFFF : AppleUiRenderer.textPrimary(), false, sel);
+            }
             int ct = Math.max(dy + 2, iy), cb = Math.min(dy + boxH - 2, iy + itemH);
             if (cb > ct) {
-                HIT_RECTS.add(new HitRect(dx + 3, ct, dropW - 6, cb - ct, () -> {
+                HIT_RECTS.add(new HitRect(ix, ct, iw, cb - ct, () -> {
                     es.set(opt);
                     openDropdown = null;
                     playClick();
@@ -1827,7 +1972,143 @@ public final class YeQuickMenu {
                 }
             }
             textInputKind = 0;
+        } else if (textInputKind == 7) {
+            if (!val.isEmpty()) {
+                showToast(ConfigManager.tr("正在联网搜索皮肤: ", "Fetching skin: ") + val, 0xFF38BDF8);
+                SkinManager.fetchOnlineSkinAsync(val, skinId -> {
+                    if (skinId != null) {
+                        CustomSkinModule sm = ModuleManager.get(CustomSkinModule.class);
+                        if (sm != null) {
+                            sm.selectedSkin.set(skinId);
+                            sm.setEnabled(true);
+                        }
+                        showToast(ConfigManager.tr("已下载并应用皮肤: ", "Applied skin: ") + val, 0xFF22C55E);
+                    } else {
+                        showToast(ConfigManager.tr("未找到该皮肤: ", "Skin not found: ") + val, 0xFFEF4444);
+                    }
+                });
+                textInputBuffer = "";
+            }
+            textInputKind = 0;
         }
+    }
+
+    private static int renderOnlineSkinSearchBar(GuiGraphics g, CustomSkinModule sm, int x, int ry, int rowW, int listY, int listH, int accent) {
+        if (ry + 22 >= listY && ry <= listY + listH) {
+            boolean typing = (textInputKind == 7);
+            int inpW = rowW - 82;
+            AppleUiRenderer.drawRoundedRect(g, x, ry, inpW, 20, 5, 0xCC090D16);
+            AppleUiRenderer.drawRoundedOutline(g, x, ry, inpW, 20, 5, 1.0f, typing ? accent : AppleUiRenderer.borderSubtle());
+            String prompt = typing ? (textInputBuffer + "|")
+                    : (textInputBuffer.isEmpty() ? ConfigManager.tr("输入角色名或正版ID联网下载皮肤...", "Enter player ID or anime name...") : textInputBuffer);
+            YeHdFont.draw(g, YeHdFont.clipToWidth(prompt, 8.0f, false, inpW - 12), x + 7, YeHdFont.vCenterY(ry, 20, 8.0f), 8.0f,
+                    (!typing && textInputBuffer.isEmpty()) ? AppleUiRenderer.textTertiary() : 0xFFF8FAFC, false, false);
+            addClippedHit(x, ry, inpW, 20, listY, listY + listH, () -> {
+                playClick();
+                commitInlineInputIfNumber();
+                textInputKind = 7;
+            }, () -> textInputBuffer = "", null, null);
+
+            int btnX = x + inpW + 5;
+            AppleUiRenderer.drawRoundedRect(g, btnX, ry, 77, 20, 5, accent);
+            YeHdFont.drawCenteredInBox(g, ConfigManager.tr("联网下载", "Download"), btnX, ry, 77, 20, 8.0f, 0xFFFFFFFF, false, true);
+            addClippedHit(btnX, ry, 77, 20, listY, listY + listH, YeQuickMenu::confirmTextInput, null, null, null);
+        }
+        return ry + 24;
+    }
+
+    private static int renderStashRadarHierarchy(GuiGraphics g, com.ye.mod.modules.world.StashRadarModule sr,
+                                                 int x, int ry, int rowW, int listY, int listH, int mx, int my, int accent) {
+        var kinds = com.ye.mod.modules.world.StashRadarModule.ContainerKind.values();
+        // Top Big Container Selector Box
+        int boxH = 32;
+        if (ry + boxH >= listY && ry <= listY + listH) {
+            AppleUiRenderer.drawRoundedRect(g, x, ry, rowW, boxH, AppleUiRenderer.isMechanical() ? 0 : 7, AppleUiRenderer.bgCard());
+            AppleUiRenderer.drawRoundedOutline(g, x, ry, rowW, boxH, AppleUiRenderer.isMechanical() ? 0 : 7, 1.2f, accent);
+            int gap = 4, bw = (rowW - 12 - (kinds.length - 1) * gap) / kinds.length;
+            for (int i = 0; i < kinds.length; i++) {
+                var k = kinds[i];
+                int bx = x + 6 + i * (bw + gap);
+                boolean sel = (sr.editingKind.get() == k);
+                var cfg = sr.configs.get(k);
+                int kCol = cfg != null ? cfg.color.getArgb() : accent;
+                AppleUiRenderer.drawElevatedCard(g, bx, ry + 5, bw, 22, 5, sel ? 1f : 0f, 0f, kCol);
+                YeHdFont.drawCenteredInBox(g, k.label, bx, ry + 5, bw, 22, 8.0f, sel ? 0xFFFFFFFF : AppleUiRenderer.textPrimary(), false, sel);
+                addClippedHit(bx, ry + 5, bw, 22, listY, listY + listH, () -> {
+                    playClick();
+                    sr.editingKind.set(k);
+                }, null, null, null);
+            }
+        }
+        ry += boxH + 5;
+
+        // Nested Indented Child Container Settings Box (clear parent-child hierarchy!)
+        var selKind = sr.editingKind.get();
+        var cfg = sr.configs.get(selKind);
+        if (cfg != null) {
+            List<Setting<?>> childSettings = List.<Setting<?>>of(
+                    cfg.enabled, cfg.color, cfg.boxMode, cfg.fillAlpha,
+                    cfg.tracer, cfg.lineStyle, cfg.lineWidth, cfg.blinkHz
+            ).stream().filter(Setting::isVisible).toList();
+            int subX = x + 10, subW = rowW - 10;
+            ry = drawSettingSectionHeader(g, selKind.label + ConfigManager.tr(" · 专属样式与线条", " · Container Config"), subX, ry, subW, listY, listH, cfg.color.getArgb());
+            ry = renderSettingsBlock(g, childSettings, List.of(), subX, ry, subW, listY, listH, mx, my, true, cfg.color.getArgb());
+        }
+        return ry + 4;
+    }
+
+    private static int renderAutoLogConditionCards(GuiGraphics g, com.ye.mod.modules.world.AutoLogModule al,
+                                                   int x, int ry, int rowW, int listY, int listH, int mx, int my, int accent) {
+        ry = drawSettingSectionHeader(g, ConfigManager.tr("保命触发条件 (每项可设: 关闭 / 任一触发 / 联合触发)", "AutoLog Rules (Off / Any / All)"), x, ry, rowW, listY, listH, accent);
+        record RuleCard(EnumSetting<com.ye.mod.modules.world.AutoLogModule.RuleMode> rule, List<Setting<?>> params) {}
+        List<RuleCard> cards = List.of(
+                new RuleCard(al.popRule, List.of(al.maxPops, al.popResetSec)),
+                new RuleCard(al.totemLeftRule, List.of(al.minTotems)),
+                new RuleCard(al.healthRule, List.of(al.minHealth, al.includeAbsorption)),
+                new RuleCard(al.playerRule, List.of(al.playerRange, al.ignoreFriends, al.armedOnly)),
+                new RuleCard(al.fireworkRule, List.of(al.minFireworks)),
+                new RuleCard(al.gappleRule, List.of(al.minGapples)),
+                new RuleCard(al.xpBottleRule, List.of(al.minXpBottles)),
+                new RuleCard(al.durabilityRule, List.of(al.minDurabilityPct)),
+                new RuleCard(al.voidRule, List.of())
+        );
+        var modes = com.ye.mod.modules.world.AutoLogModule.RuleMode.values();
+        String[] shortLabels = {ConfigManager.tr("关闭", "Off"), ConfigManager.tr("任一", "OR"), ConfigManager.tr("联合", "AND")};
+
+        for (RuleCard rc : cards) {
+            boolean active = rc.rule.get() != com.ye.mod.modules.world.AutoLogModule.RuleMode.OFF;
+            if (ry + 24 >= listY && ry <= listY + listH) {
+                AppleUiRenderer.drawElevatedCard(g, x, ry, rowW, 23, 6, active ? 0.18f : 0f, 0f, accent);
+                YeHdFont.draw(g, rc.rule.getName(), x + 8, YeHdFont.vCenterY(ry, 23, 8.6f), 8.6f,
+                        active ? AppleUiRenderer.textPrimary() : AppleUiRenderer.textSecondary(), false, active);
+                int pillW = 36, gap = 3;
+                int startPx = x + rowW - (pillW * 3 + gap * 2 + 6);
+                for (int mi = 0; mi < 3; mi++) {
+                    var mode = modes[mi];
+                    int px = startPx + mi * (pillW + gap);
+                    boolean sel = rc.rule.get() == mode;
+                    int pCol = (mi == 0) ? 0xFF475569 : (mi == 1 ? accent : 0xFFA855F7);
+                    AppleUiRenderer.drawRoundedRect(g, px, ry + 4, pillW, 15, 4, sel ? pCol : AppleUiRenderer.bgCardHover());
+                    YeHdFont.drawCenteredInBox(g, shortLabels[mi], px, ry + 4, pillW, 15, 7.8f, sel ? 0xFFFFFFFF : AppleUiRenderer.textSecondary(), false, sel);
+                    addClippedHit(px, ry + 4, pillW, 15, listY, listY + listH, () -> {
+                        playClick();
+                        rc.rule.set(mode);
+                    }, null, null, null);
+                }
+            }
+            ry += 25;
+            if (active && !rc.params.isEmpty()) {
+                List<Setting<?>> vis = rc.params.stream().filter(Setting::isVisible).toList();
+                if (!vis.isEmpty()) {
+                    ry = renderSettingsBlock(g, vis, List.of(), x + 12, ry, rowW - 12, listY, listH, mx, my, true, accent);
+                }
+            }
+        }
+
+        ry = drawSettingSectionHeader(g, ConfigManager.tr("防重连死循环与好友快捷", "Safety & Friends"), x, ry, rowW, listY, listH, 0xFF34D399);
+        List<Setting<?>> safety = List.of(al.autoDisableOnLog, al.joinGraceSec);
+        ry = renderSettingsBlock(g, safety, List.of(), x, ry, rowW, listY, listH, mx, my, true, accent);
+        return ry;
     }
 
     private static void drawScrollbar(GuiGraphics g, int barX, int viewY, int viewH, int contentH, int accent) {

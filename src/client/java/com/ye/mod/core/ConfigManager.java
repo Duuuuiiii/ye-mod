@@ -47,8 +47,9 @@ import java.util.zip.GZIPOutputStream;
  * - 0px edge-flush HUD clamping + 9-zone magnetic auto-snap
  */
 public final class ConfigManager {
-    public static final String MOD_VERSION = "1.7.3";
+    public static final String MOD_VERSION = "1.7.4";
     public static final String DEFAULT_PROFILE = "default";
+    public static final String SHARED_PROFILE = "main";
     public static final String TEMPLATE_FILE_STEM = "template";
     private static final String SHARE_PREFIX = "YE1:";
 
@@ -66,8 +67,8 @@ public final class ConfigManager {
     private static JsonObject factorySnapshot = null;
 
     private static volatile String currentAccountName = "Player";
-    private static volatile String activeProfile = "Player";
-    private static final Map<String, String> playerPinnedProfiles = new ConcurrentHashMap<>();
+    private static volatile String activeProfile = SHARED_PROFILE;
+    private static volatile String savedGlobalProfile = SHARED_PROFILE;
 
     public enum UiStyle {
         SILKY("丝滑风", "Silky"),
@@ -114,7 +115,10 @@ public final class ConfigManager {
     public static volatile UiTheme uiTheme = UiTheme.DARK;
     public static volatile boolean lightTheme = false;
     public static volatile float uiOpacity = 0.92f;
+    public static volatile float uiBlurStrength = 0.48f;
     public static volatile float glassBlurStrength = 10.0f;
+    public static volatile boolean uiMinimized = false;
+    public static volatile boolean rusherSidebar = true;
     public static volatile boolean useClientFont = false;
     public static volatile boolean english = false;
     public static volatile YeSoundPresets.UiSoundType uiClickSound = YeSoundPresets.UiSoundType.MECH_SWITCH;
@@ -136,6 +140,12 @@ public final class ConfigManager {
     public static final Set<String> entityEspCustomTypes = ConcurrentHashMap.newKeySet();
     public static final Set<String> blockEspTargets = ConcurrentHashMap.newKeySet();
     public static final Set<String> blockSearchTargets = ConcurrentHashMap.newKeySet();
+    public static final Set<String> dropTierHigh = ConcurrentHashMap.newKeySet();
+    public static final Set<String> dropTierMid = ConcurrentHashMap.newKeySet();
+
+    // Player PvP Stats (persisted)
+    public static volatile int statPlayerKills = 0;
+    public static volatile int statPlayerDeaths = 0;
 
     public static int getMouseUnlockKey() { return mouseUnlockKey; }
     public static void setMouseUnlockKey(int key) {
@@ -288,6 +298,45 @@ public final class ConfigManager {
                 y = clampedY - (sh - lastH) / 2;
             }
 
+            // Magnetic snap to other visible HUD boundaries (mutual edge snapping)
+            for (HudSlot other : HUD_SLOTS.values()) {
+                if (other == this || !other.enabled || other.lastW <= 0 || other.lastH <= 0) continue;
+                int oL = other.lastScreenX, oR = other.lastScreenX + other.lastW;
+                int oT = other.lastScreenY, oB = other.lastScreenY + other.lastH;
+                boolean yNear = clampedY < oB + 12 && clampedY + lastH > oT - 12;
+                boolean xNear = clampedX < oR + 12 && clampedX + lastW > oL - 12;
+                if (yNear) {
+                    if (Math.abs(clampedX - oR) <= 6) { clampedX = oR + 2; snapX = true; }
+                    else if (Math.abs((clampedX + lastW) - oL) <= 6) { clampedX = oL - lastW - 2; snapX = true; }
+                    else if (Math.abs(clampedX - oL) <= 5) { clampedX = oL; snapX = true; }
+                }
+                if (xNear) {
+                    if (Math.abs(clampedY - oB) <= 6) { clampedY = oB + 2; snapY = true; }
+                    else if (Math.abs((clampedY + lastH) - oT) <= 6) { clampedY = oT - lastH - 2; snapY = true; }
+                    else if (Math.abs(clampedY - oT) <= 5) { clampedY = oT; snapY = true; }
+                }
+            }
+
+            // Prevent overlap with other enabled HUDs by nudging to nearest free edge
+            for (HudSlot other : HUD_SLOTS.values()) {
+                if (other == this || !other.enabled || other.lastW <= 0 || other.lastH <= 0) continue;
+                int oL = other.lastScreenX, oR = other.lastScreenX + other.lastW;
+                int oT = other.lastScreenY, oB = other.lastScreenY + other.lastH;
+                if (clampedX < oR && clampedX + lastW > oL && clampedY < oB && clampedY + lastH > oT) {
+                    int pushLeft = (clampedX + lastW) - oL + 2;
+                    int pushRight = oR - clampedX + 2;
+                    int pushUp = (clampedY + lastH) - oT + 2;
+                    int pushDown = oB - clampedY + 2;
+                    int minPush = Math.min(Math.min(pushLeft, pushRight), Math.min(pushUp, pushDown));
+                    if (minPush == pushLeft && oL - lastW - 2 >= 0) clampedX = oL - lastW - 2;
+                    else if (minPush == pushRight && oR + 2 + lastW <= sw) clampedX = oR + 2;
+                    else if (minPush == pushUp && oT - lastH - 2 >= 0) clampedY = oT - lastH - 2;
+                    else if (oB + 2 + lastH <= sh) clampedY = oB + 2;
+                }
+            }
+            clampedX = Math.max(0, Math.min(Math.max(0, sw - lastW), clampedX));
+            clampedY = Math.max(0, Math.min(Math.max(0, sh - lastH), clampedY));
+
             snappedThisDrag = snapX || snapY;
         }
     }
@@ -299,19 +348,19 @@ public final class ConfigManager {
 
     public static void resetHudSlotsDefault() {
         HUD_SLOTS.clear();
-        HUD_SLOTS.put("hud_time", new HudSlot("hud_time", "时间统计", "Time & Stats", true, 4, 4, 0, 0));
+        HUD_SLOTS.put("hud_time", new HudSlot("hud_time", "时间", "Time", true, 4, 4, 0, 0));
         HUD_SLOTS.put("hud_info", new HudSlot("hud_info", "帧率与延迟", "FPS / Ping / TPS", true, 4, 40, 0, 0));
         HUD_SLOTS.put("hud_speed", new HudSlot("hud_speed", "移动速度", "Speed", true, 0, 36, 1, 0));
-        HUD_SLOTS.put("hud_coords", new HudSlot("hud_coords", "双维坐标", "Coords", true, 4, 2, 0, 2));
+        HUD_SLOTS.put("hud_coords", new HudSlot("hud_coords", "坐标", "Coords", true, 4, 2, 0, 2));
         HUD_SLOTS.put("hud_potions", new HudSlot("hud_potions", "药水面板", "Potions", true, 6, 6, 2, 0));
         HUD_SLOTS.put("hud_armor", new HudSlot("hud_armor", "装备耐久", "Armor", true, 102, 0, 1, 2));
         HUD_SLOTS.put("hud_items", new HudSlot("hud_items", "物资计数", "PvP Items", true, 6, 128, 2, 0));
         HUD_SLOTS.put("hud_inv", new HudSlot("hud_inv", "背包预览", "Inventory", false, 6, 168, 2, 0));
         HUD_SLOTS.put("hud_drops", new HudSlot("hud_drops", "物品列表", "Item List", true, 4, 110, 0, 0));
-        HUD_SLOTS.put("hud_modules", new HudSlot("hud_modules", "开启列表", "Module List", false, 6, 6, 2, 2));
+        HUD_SLOTS.put("hud_modules", new HudSlot("hud_modules", "功能列表", "Module List", false, 6, 6, 2, 2));
         HUD_SLOTS.put("hud_player_view", new HudSlot("hud_player_view", "玩家预览", "Player View", false, 6, 120, 0, 1));
         HUD_SLOTS.put("hud_wthit", new HudSlot("hud_wthit", "方块信息", "Block Info", false, 0, 6, 1, 0));
-        HUD_SLOTS.put("hud_radar", new HudSlot("hud_radar", "储存计数", "Storage Count", true, 4, 82, 0, 0));
+        HUD_SLOTS.put("hud_radar", new HudSlot("hud_radar", "储存数量", "Storage Count", true, 4, 82, 0, 0));
     }
 
     public static void resetSingleHudSlot(String slotId) {
@@ -408,6 +457,38 @@ public final class ConfigManager {
             blockSearchTargets.add("minecraft:nether_portal");
             blockSearchTargets.add("minecraft:end_portal_frame");
         }
+        if (dropTierHigh.isEmpty()) {
+            dropTierHigh.add("minecraft:elytra");
+            dropTierHigh.add("minecraft:totem_of_undying");
+            dropTierHigh.add("minecraft:enchanted_golden_apple");
+            dropTierHigh.add("minecraft:netherite_helmet");
+            dropTierHigh.add("minecraft:netherite_chestplate");
+            dropTierHigh.add("minecraft:netherite_leggings");
+            dropTierHigh.add("minecraft:netherite_boots");
+            dropTierHigh.add("minecraft:netherite_sword");
+            dropTierHigh.add("minecraft:netherite_pickaxe");
+            dropTierHigh.add("minecraft:netherite_ingot");
+            dropTierHigh.add("minecraft:netherite_scrap");
+            dropTierHigh.add("minecraft:ancient_debris");
+            dropTierHigh.add("minecraft:beacon");
+            dropTierHigh.add("minecraft:heavy_core");
+            dropTierHigh.add("minecraft:mace");
+            dropTierHigh.add("minecraft:trident");
+            dropTierHigh.add("minecraft:shulker_box");
+        }
+        if (dropTierMid.isEmpty()) {
+            dropTierMid.add("minecraft:firework_rocket");
+            dropTierMid.add("minecraft:obsidian");
+            dropTierMid.add("minecraft:crying_obsidian");
+            dropTierMid.add("minecraft:end_crystal");
+            dropTierMid.add("minecraft:golden_apple");
+            dropTierMid.add("minecraft:ender_pearl");
+            dropTierMid.add("minecraft:experience_bottle");
+            dropTierMid.add("minecraft:diamond");
+            dropTierMid.add("minecraft:respawn_anchor");
+            dropTierMid.add("minecraft:glowstone");
+            dropTierMid.add("minecraft:chorus_fruit");
+        }
     }
 
     public static void initSystem(String initialUser) {
@@ -418,12 +499,23 @@ public final class ConfigManager {
 
         loadMetaAndBackupIfUpgraded();
 
-        String safeUser = sanitizeProfileName(initialUser);
-        currentAccountName = safeUser;
-        String preferred = playerPinnedProfiles.getOrDefault(safeUser.toLowerCase(Locale.ROOT), safeUser);
-        ensurePlayerProfileExists(safeUser);
+        currentAccountName = sanitizeProfileName(initialUser);
+        String preferred = sanitizeProfileName(savedGlobalProfile);
+        if (preferred.equalsIgnoreCase(DEFAULT_PROFILE) || preferred.isBlank()) {
+            preferred = SHARED_PROFILE;
+        }
         if (!Files.exists(getProfileFile(preferred))) {
-            preferred = safeUser;
+            // Migrate existing account file if present, otherwise clone default
+            Path oldAcct = getProfileFile(currentAccountName);
+            if (Files.exists(oldAcct)) {
+                try {
+                    Files.copy(oldAcct, getProfileFile(preferred), StandardCopyOption.REPLACE_EXISTING);
+                } catch (IOException ignored) {
+                    ensurePlayerProfileExists(preferred);
+                }
+            } else {
+                ensurePlayerProfileExists(preferred);
+            }
         }
         switchToProfile(preferred, false);
     }
@@ -434,18 +526,8 @@ public final class ConfigManager {
 
     public static void checkAccountSwitch(String detectedName) {
         if (detectedName == null || detectedName.isBlank()) return;
-        String safe = sanitizeProfileName(detectedName);
-        if (safe.equalsIgnoreCase(currentAccountName)) return;
-
-        saveNow();
-        currentAccountName = safe;
-        ensurePlayerProfileExists(safe);
-        String preferred = playerPinnedProfiles.getOrDefault(safe.toLowerCase(Locale.ROOT), safe);
-        if (!Files.exists(getProfileFile(preferred))) {
-            preferred = safe;
-        }
-        switchToProfile(preferred, runtimeReady);
-        saveMeta();
+        currentAccountName = sanitizeProfileName(detectedName);
+        // Same client / version folder shares one unified config regardless of player ID!
     }
 
     private static void ensurePlayerProfileExists(String playerName) {
@@ -479,17 +561,14 @@ public final class ConfigManager {
             try {
                 JsonObject obj = JsonParser.parseString(Files.readString(meta, StandardCharsets.UTF_8)).getAsJsonObject();
                 if (obj.has("lastModVersion")) prevVer = obj.get("lastModVersion").getAsString();
-                if (obj.has("playerProfiles") && obj.get("playerProfiles").isJsonObject()) {
-                    JsonObject pp = obj.getAsJsonObject("playerProfiles");
-                    for (String k : pp.keySet()) {
-                        playerPinnedProfiles.put(k.toLowerCase(Locale.ROOT), pp.get(k).getAsString());
-                    }
+                if (obj.has("globalActiveProfile")) {
+                    savedGlobalProfile = obj.get("globalActiveProfile").getAsString();
                 }
             } catch (Exception ignored) {}
         }
 
         if (!MOD_VERSION.equals(prevVer)) {
-            backupAllConfigs(prevVer.isEmpty() ? "pre_1.7.3" : prevVer);
+            backupAllConfigs(prevVer.isEmpty() ? "pre_1.7.4" : prevVer);
             saveMeta();
         }
     }
@@ -523,11 +602,7 @@ public final class ConfigManager {
             ensureDirectories();
             JsonObject meta = new JsonObject();
             meta.addProperty("lastModVersion", MOD_VERSION);
-            JsonObject pp = new JsonObject();
-            for (Map.Entry<String, String> entry : playerPinnedProfiles.entrySet()) {
-                pp.addProperty(entry.getKey(), entry.getValue());
-            }
-            meta.add("playerProfiles", pp);
+            meta.addProperty("globalActiveProfile", activeProfile);
             Files.writeString(getMetaFile(), GSON.toJson(meta), StandardCharsets.UTF_8);
         } catch (Exception ignored) {}
     }
@@ -536,9 +611,7 @@ public final class ConfigManager {
         ensureDirectories();
         List<String> names = new ArrayList<>();
         names.add(DEFAULT_PROFILE);
-        if (!currentAccountName.equalsIgnoreCase(DEFAULT_PROFILE)) {
-            names.add(currentAccountName);
-        }
+        names.add(SHARED_PROFILE);
         try (Stream<Path> files = Files.list(getConfigsDir())) {
             files.filter(p -> Files.isRegularFile(p) && p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".json"))
                     .map(p -> {
@@ -558,7 +631,6 @@ public final class ConfigManager {
     public static void switchToProfile(String profileName, boolean fireCallbacks) {
         String safe = sanitizeProfileName(profileName);
         activeProfile = safe;
-        playerPinnedProfiles.put(currentAccountName.toLowerCase(Locale.ROOT), safe);
         saveMeta();
 
         if (safe.equalsIgnoreCase(DEFAULT_PROFILE)) {
@@ -595,7 +667,6 @@ public final class ConfigManager {
             candidate = candidate + "_1";
         }
         activeProfile = candidate;
-        playerPinnedProfiles.put(currentAccountName.toLowerCase(Locale.ROOT), candidate);
         saveNow();
         saveMeta();
         return candidate;
@@ -619,7 +690,6 @@ public final class ConfigManager {
                 writeJsonToFile(newFile, buildSnapshot());
             }
             activeProfile = target;
-            playerPinnedProfiles.put(currentAccountName.toLowerCase(Locale.ROOT), target);
             saveMeta();
             return true;
         } catch (IOException e) {
@@ -631,8 +701,7 @@ public final class ConfigManager {
     public static void resetCurrentToFactoryDefault() {
         if (factorySnapshot == null) return;
         if (activeProfile.equalsIgnoreCase(DEFAULT_PROFILE)) {
-            activeProfile = currentAccountName;
-            playerPinnedProfiles.put(currentAccountName.toLowerCase(Locale.ROOT), activeProfile);
+            activeProfile = SHARED_PROFILE;
             saveMeta();
         }
         applySnapshot(factorySnapshot, true);
@@ -694,8 +763,7 @@ public final class ConfigManager {
             if (!obj.has("modules")) return false;
 
             if (activeProfile.equalsIgnoreCase(DEFAULT_PROFILE)) {
-                activeProfile = currentAccountName;
-                playerPinnedProfiles.put(currentAccountName.toLowerCase(Locale.ROOT), activeProfile);
+                activeProfile = SHARED_PROFILE;
                 saveMeta();
             }
             applySnapshot(obj, true);
@@ -716,7 +784,9 @@ public final class ConfigManager {
         uiTheme = UiTheme.DARK;
         lightTheme = false;
         uiOpacity = 0.92f;
+        uiBlurStrength = 0.48f;
         glassBlurStrength = 10.0f;
+        rusherSidebar = true;
         useClientFont = false;
         themeAccent = ThemeAccent.BLUE;
         customAccentHue = 0.56f;
@@ -731,6 +801,8 @@ public final class ConfigManager {
         entityEspCustomTypes.clear();
         blockEspTargets.clear();
         blockSearchTargets.clear();
+        dropTierHigh.clear();
+        dropTierMid.clear();
         initDefaultTargetSets();
         resetHudSlotsDefault();
         for (Module m : ModuleManager.getAll()) {
@@ -763,8 +835,12 @@ public final class ConfigManager {
             lightTheme = (uiTheme == UiTheme.LIGHT);
 
             if (root.has("uiOpacity")) uiOpacity = Math.max(0.25f, Math.min(1.0f, root.get("uiOpacity").getAsFloat()));
+            if (root.has("uiBlurStrength")) uiBlurStrength = Math.max(0.0f, Math.min(1.0f, root.get("uiBlurStrength").getAsFloat()));
             if (root.has("glassBlurStrength")) glassBlurStrength = Math.max(2.0f, Math.min(20.0f, root.get("glassBlurStrength").getAsFloat()));
+            if (root.has("rusherSidebar")) rusherSidebar = root.get("rusherSidebar").getAsBoolean();
             if (root.has("useClientFont")) useClientFont = root.get("useClientFont").getAsBoolean();
+            if (root.has("statPlayerKills")) statPlayerKills = Math.max(0, root.get("statPlayerKills").getAsInt());
+            if (root.has("statPlayerDeaths")) statPlayerDeaths = Math.max(0, root.get("statPlayerDeaths").getAsInt());
 
             if (root.has("themeAccent")) {
                 String ta = root.get("themeAccent").getAsString();
@@ -798,6 +874,8 @@ public final class ConfigManager {
             readStringSet(root, "entityEspCustomTypes", entityEspCustomTypes, true);
             if (root.has("blockEspTargets")) readStringSet(root, "blockEspTargets", blockEspTargets, true);
             if (root.has("blockSearchTargets")) readStringSet(root, "blockSearchTargets", blockSearchTargets, true);
+            if (root.has("dropTierHigh")) readStringSet(root, "dropTierHigh", dropTierHigh, true);
+            if (root.has("dropTierMid")) readStringSet(root, "dropTierMid", dropTierMid, true);
 
             if (root.has("hudSlots") && root.get("hudSlots").isJsonObject()) {
                 JsonObject hObj = root.getAsJsonObject("hudSlots");
@@ -846,7 +924,11 @@ public final class ConfigManager {
                 }
                 if (mObj.has("enabled")) {
                     try {
-                        module.applyLoadedEnabled(mObj.get("enabled").getAsBoolean(), fireCallbacks);
+                        boolean en = mObj.get("enabled").getAsBoolean();
+                        if (savedVer.compareTo("1.7.4") < 0 && "ambience".equals(module.getId())) {
+                            en = false;
+                        }
+                        module.applyLoadedEnabled(en, fireCallbacks);
                     } catch (Exception ignored) {}
                 }
             }
@@ -877,8 +959,7 @@ public final class ConfigManager {
     public static void saveAsync() {
         if (loading) return;
         if (activeProfile.equalsIgnoreCase(DEFAULT_PROFILE)) {
-            activeProfile = currentAccountName;
-            playerPinnedProfiles.put(currentAccountName.toLowerCase(Locale.ROOT), activeProfile);
+            activeProfile = SHARED_PROFILE;
             IO_EXECUTOR.submit(ConfigManager::saveMeta);
         }
         final Path targetFile = getProfileFile(activeProfile);
@@ -903,8 +984,12 @@ public final class ConfigManager {
         root.addProperty("uiTheme", uiTheme.name());
         root.addProperty("lightTheme", uiTheme == UiTheme.LIGHT);
         root.addProperty("uiOpacity", uiOpacity);
+        root.addProperty("uiBlurStrength", uiBlurStrength);
         root.addProperty("glassBlurStrength", glassBlurStrength);
+        root.addProperty("rusherSidebar", rusherSidebar);
         root.addProperty("useClientFont", useClientFont);
+        root.addProperty("statPlayerKills", statPlayerKills);
+        root.addProperty("statPlayerDeaths", statPlayerDeaths);
         root.addProperty("themeAccent", themeAccent.name());
         root.addProperty("customAccentHue", customAccentHue);
         root.addProperty("customAccentSat", customAccentSat);
@@ -919,6 +1004,8 @@ public final class ConfigManager {
         writeStringSet(root, "entityEspCustomTypes", entityEspCustomTypes);
         writeStringSet(root, "blockEspTargets", blockEspTargets);
         writeStringSet(root, "blockSearchTargets", blockSearchTargets);
+        writeStringSet(root, "dropTierHigh", dropTierHigh);
+        writeStringSet(root, "dropTierMid", dropTierMid);
 
         JsonObject hObj = new JsonObject();
         for (HudSlot slot : HUD_SLOTS.values()) {

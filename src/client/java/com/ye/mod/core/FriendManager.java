@@ -36,7 +36,7 @@ public final class FriendManager {
     private static final MapNameStore DISPLAY_NAMES = new MapNameStore();
 
     public static volatile boolean middleClickAdd = false;
-    public static volatile double middleClickMaxDist = 6.0;
+    public static final double MIDDLE_CLICK_DIST = 4.5;
     private static boolean prevMiddleDown = false;
 
     private static final class MapNameStore {
@@ -77,7 +77,6 @@ public final class FriendManager {
             } else if (el.isJsonObject()) {
                 JsonObject obj = el.getAsJsonObject();
                 if (obj.has("middleClickAdd")) middleClickAdd = obj.get("middleClickAdd").getAsBoolean();
-                if (obj.has("middleClickMaxDist")) middleClickMaxDist = Math.max(2.0, Math.min(16.0, obj.get("middleClickMaxDist").getAsDouble()));
                 if (obj.has("friends") && obj.get("friends").isJsonArray()) {
                     for (JsonElement item : obj.getAsJsonArray("friends")) {
                         String n = item.getAsString().trim();
@@ -96,7 +95,6 @@ public final class FriendManager {
             ConfigManager.ensureDirectories();
             JsonObject root = new JsonObject();
             root.addProperty("middleClickAdd", middleClickAdd);
-            root.addProperty("middleClickMaxDist", middleClickMaxDist);
             JsonArray arr = new JsonArray();
             for (String n : DISPLAY_NAMES.valuesSorted()) {
                 arr.add(n);
@@ -111,7 +109,7 @@ public final class FriendManager {
         if (mc == null || mc.getWindow() == null) return;
         boolean mDown = GLFW.glfwGetMouseButton(mc.getWindow().handle(), GLFW.GLFW_MOUSE_BUTTON_MIDDLE) == GLFW.GLFW_PRESS;
         if (middleClickAdd && mc.screen == null && mc.player != null && mc.level != null && mDown && !prevMiddleDown) {
-            Player hitPlayer = raycastClosePlayer(mc, middleClickMaxDist);
+            Player hitPlayer = raycastClosePlayer(mc, MIDDLE_CLICK_DIST);
             if (hitPlayer != null) {
                 String name = hitPlayer.getGameProfile().name();
                 boolean added = toggleFriend(name);
@@ -200,7 +198,7 @@ public final class FriendManager {
     public static String toggleCrosshairPlayer() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return null;
-        Player p = raycastClosePlayer(mc, middleClickMaxDist);
+        Player p = raycastClosePlayer(mc, MIDDLE_CLICK_DIST);
         if (p != null) {
             String name = p.getGameProfile().name();
             boolean nowFriend = toggleFriend(name);

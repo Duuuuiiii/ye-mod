@@ -1,6 +1,7 @@
 package com.ye.mod.mixin;
 
 import com.ye.mod.core.ModuleManager;
+import com.ye.mod.modules.render.BodyScaleModule;
 import com.ye.mod.modules.render.FlightModelModule;
 import com.ye.mod.modules.visual.CameraTweaksModule;
 import com.ye.mod.modules.visual.IdleWallpaperModule;
@@ -29,10 +30,19 @@ public abstract class CameraMixin {
     @Inject(method = "setup",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Camera;setPosition(DDD)V", shift = At.Shift.AFTER))
     private void ye$centerRiderAndFreeLook(Level level, Entity entity, boolean thirdPerson, boolean inverseView, float partialTick, CallbackInfo ci) {
-        if (thirdPerson && entity instanceof LocalPlayer lp && lp.isFallFlying()) {
-            FlightModelModule flight = ModuleManager.get(FlightModelModule.class);
-            if (flight != null && flight.isEnabled() && flight.preset.get() != FlightModelModule.FlightPreset.SUPERMAN) {
-                this.setPosition(this.position.x, this.position.y + 1.25, this.position.z);
+        if (entity instanceof LocalPlayer lp) {
+            BodyScaleModule scaleMod = ModuleManager.get(BodyScaleModule.class);
+            if (scaleMod != null && scaleMod.isEnabled()) {
+                float bs = scaleMod.getEffectiveBodyScale();
+                if (Math.abs(bs - 1.0f) > 0.01f) {
+                    this.setPosition(this.position.x, this.position.y + lp.getEyeHeight() * (bs - 1.0f), this.position.z);
+                }
+            }
+            if (thirdPerson && lp.isFallFlying()) {
+                FlightModelModule flight = ModuleManager.get(FlightModelModule.class);
+                if (flight != null && flight.isEnabled() && flight.preset.get() != FlightModelModule.FlightPreset.SUPERMAN) {
+                    this.setPosition(this.position.x, this.position.y + 1.25, this.position.z);
+                }
             }
         }
 

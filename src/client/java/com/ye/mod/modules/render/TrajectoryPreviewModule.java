@@ -3,6 +3,8 @@ package com.ye.mod.modules.render;
 import com.ye.mod.core.Category;
 import com.ye.mod.core.Module;
 import com.ye.mod.core.setting.BoolSetting;
+import com.ye.mod.core.setting.DoubleSetting;
+import com.ye.mod.core.setting.EnumSetting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gizmos.GizmoStyle;
@@ -31,9 +33,26 @@ import net.minecraft.world.phys.Vec3;
  * Bows, Crossbows, Tridents, Potions, Snowballs, and Eggs.
  */
 public class TrajectoryPreviewModule extends Module {
+    public enum EndMarkerMode {
+        SPHERE("3D 落点球"),
+        STANDALONE_CUBE("独立标记方块"),
+        BLOCK_BOX("目标方块框");
+
+        public final String label;
+        EndMarkerMode(String label) { this.label = label; }
+    }
+
     public final BoolSetting highlightTarget = addSetting(new BoolSetting(
-            "highlightTarget", "高亮落点方块/实体", "在抛射物预计命中的位置显示高亮框", true
-    ));
+            "highlightTarget", "显示落点标记", "在抛射物预计命中的位置显示高亮标记", true
+    ).functionGroup());
+
+    public final EnumSetting<EndMarkerMode> endMarkerMode = addSetting(new EnumSetting<>(
+            "endMarkerMode", "落点标记样式", "3D 落点球 / 独立标记方块 / 世界目标方块框", EndMarkerMode.SPHERE
+    ).visible(highlightTarget::get).functionGroup());
+
+    public final DoubleSetting markerSize = addSetting(new DoubleSetting(
+            "markerSize", "落点标记大小", "调节独立球体或独立方块标记的尺寸", 0.45, 0.15, 1.80, 0.05
+    ).visible(() -> highlightTarget.get() && endMarkerMode.get() != EndMarkerMode.BLOCK_BOX).functionGroup());
 
     public TrajectoryPreviewModule() {
         super("trajectory_preview", "弹道预测", "Trajectory", "预测珍珠、弓箭与药水飞行落点", Category.UTILITY);
@@ -81,12 +100,13 @@ public class TrajectoryPreviewModule extends Module {
             color = 0xFFA855F7;
         }
 
-        float yaw = mc.player.getYRot();
-        float pitch = mc.player.getXRot();
+        float pt = mc.getDeltaTracker().getGameTimeDeltaPartialTick(true);
+        float yaw = mc.player.getViewYRot(pt);
+        float pitch = mc.player.getViewXRot(pt);
         double radYaw = Math.toRadians(yaw);
         double radPitch = Math.toRadians(pitch);
 
-        Vec3 pos = mc.player.getEyePosition(1.0f).add(
+        Vec3 pos = mc.player.getEyePosition(pt).add(
                 -Math.cos(radYaw) * 0.16,
                 -0.10,
                 -Math.sin(radYaw) * 0.16
@@ -124,8 +144,7 @@ public class TrajectoryPreviewModule extends Module {
                 Vec3 hitPos = blockHit.getLocation();
                 Gizmos.line(prev, hitPos, color, 2.2f).setAlwaysOnTop();
                 if (highlightTarget.get()) {
-                    BlockPos bp = blockHit.getBlockPos();
-                    Gizmos.cuboid(bp, GizmoStyle.strokeAndFill(color, 2.0f, (0x44 << 24) | (color & 0x00FFFFFF))).setAlwaysOnTop();
+                    drawEndMarker(hitPos, blockHit.getBlockPos(), color);
                 }
                 return;
             }
@@ -134,6 +153,36 @@ public class TrajectoryPreviewModule extends Module {
             prev = next;
             pos = next;
             vel = vel.scale(drag).add(0, -gravity, 0);
+        }
+    }
+
+    private void drawEndMarker(Vec3 hitPos, BlockPos bp, int color) {
+        EndMarkerMode mode = endMarkerMode.get();
+        if (mode == EndMarkerMode.BLOCK_BOX) {
+            Gizmos.cuboid(bp, GizmoStyle.strokeAndFill(color, 2.0f, (0x44 << 24) | (color & 0x00FFFFFF))).setAlwaysOnTop();
+            return;
+        }
+        double sz = markerSize.get();
+        if (mode == EndMarkerMode.STANDALONE_CUBE) {
+            AABB box = AABB.ofSize(hitPos, sz, sz, sz);
+            Gizmos.cuboid(box, GizmoStyle.strokeAndFill(color, 2.0f, (0x55 << 24) | (color & 0x00FFFFFF))).setAlwaysOnTop();
+            return;
+        }
+        // 3D Wireframe Sphere at exact hitPos
+        double r = sz * 0.5;
+        final int segs = 16;
+        for (int i = 0; i < segs; i++) {
+            double a0 = (i / (double) segs) * Math.PI * 2.0;
+            double a1 = ((i + 1) / (double) segs) * Math.PI * 2.0;
+            // Equator ring (XZ)
+            Gizmos.line(hitPos.add(Math.cos(a0) * r, 0, Math.sin(a0) * r),
+                    hitPos.add(Math.cos(a1) * r, 0, Math.sin(a1) * r), color, 2.0f).setAlwaysOnTop();
+            // Meridian XY
+            Gizmos.line(hitPos.add(Math.cos(a0) * r, Math.sin(a0) * r, 0),
+                    hitPos.add(Math.cos(a1) * r, Math.sin(a1) * r, 0), color, 1.8f).setAlwaysOnTop();
+            // Meridian ZY
+            Gizmos.line(hitPos.add(0, Math.sin(a0) * r, Math.cos(a0) * r),
+                    hitPos.add(0, Math.sin(a1) * r, Math.cos(a1) * r), color, 1.8f).setAlwaysOnTop();
         }
     }
 

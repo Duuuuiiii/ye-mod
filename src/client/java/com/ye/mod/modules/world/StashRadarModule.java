@@ -129,6 +129,10 @@ public class StashRadarModule extends Module {
             "mergeDoubleChests", "合并连体大箱子", "相连的大箱子合并为一个完整边框渲染，关闭则各自独立渲染", true
     ).functionGroup());
 
+    public final BoolSetting uniformOpacity = addSetting(new BoolSetting(
+            "uniformOpacity", "统一填充深浅", "相邻或重叠的同类容器保持一致透明深浅，不叠加变深", true
+    ));
+
     public final BoolSetting ignoreNatural = addSetting(new BoolSetting(
             "ignoreNatural", "过滤自然遗迹箱子", "自动跳过刷怪笼、矿井、沙漠神殿、地狱堡垒等自然生成箱子", true
     ).functionGroup());
@@ -143,7 +147,7 @@ public class StashRadarModule extends Module {
 
     public final EnumSetting<ContainerKind> editingKind = addSetting(new EnumSetting<>(
             "editingKind", "当前配置容器", "选择下方要单独调节样式、线条与颜色的储存类型", ContainerKind.SHULKER
-    ).functionGroup());
+    ).functionGroup().gridPicker());
 
     public final Map<ContainerKind, ContainerConfig> configs = new EnumMap<>(ContainerKind.class);
 
@@ -303,11 +307,23 @@ public class StashRadarModule extends Module {
         return baseBox;
     }
 
+    public int getTotalStorageCount() {
+        return isEnabled() ? totalCount : 0;
+    }
+
+    public int getShulkerCount() {
+        return isEnabled() ? shulkerCount : 0;
+    }
+
     public void emitGizmos(Vec3 tracerStart) {
         if (!isEnabled()) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return;
         long nowMs = System.currentTimeMillis();
+        boolean uniform = uniformOpacity.get();
+
+        // When uniformOpacity is enabled, group contiguous same-kind boxes so overlapping/adjacent fills never double-darken!
+        Map<ContainerKind, List<AABB>> rawBoxesByKind = new EnumMap<>(ContainerKind.class);
 
         for (StorageTarget t : cached) {
             ContainerConfig cfg = configs.get(t.kind);
@@ -322,16 +338,70 @@ public class StashRadarModule extends Module {
             int fillA = (bm == BoxRenderMode.OUTLINE_ONLY) ? 0 : Math.max(8, Math.min(240, (int) Math.round(cfg.fillAlpha.get() * 255.0)));
             int fillCol = (fillA << 24) | rgb;
 
-            if (bm == BoxRenderMode.OUTLINE_ONLY) {
-                Gizmos.cuboid(box, GizmoStyle.stroke(strokeCol, width)).setAlwaysOnTop();
+            if (!uniform || bm == BoxRenderMode.OUTLINE_ONLY) {
+                if (bm == BoxRenderMode.OUTLINE_ONLY) {
+                    Gizmos.cuboid(box, GizmoStyle.stroke(strokeCol, width)).setAlwaysOnTop();
+                } else {
+                    Gizmos.cuboid(box, GizmoStyle.strokeAndFill(strokeCol, width, fillCol)).setAlwaysOnTop();
+                }
             } else {
-                Gizmos.cuboid(box, GizmoStyle.strokeAndFill(strokeCol, width, fillCol)).setAlwaysOnTop();
+                if (bm == BoxRenderMode.BOTH) {
+                    Gizmos.cuboid(box, GizmoStyle.stroke(strokeCol, width)).setAlwaysOnTop();
+                }
+                rawBoxesByKind.computeIfAbsent(t.kind, k -> new ArrayList<>()).add(box);
             }
 
             if (cfg.tracer.get() && tracerStart != null) {
                 drawStyledTracer(tracerStart, box.getCenter(), rgb, width, cfg.lineStyle.get(), cfg.blinkHz.get(), nowMs);
             }
         }
+
+        if (uniform) {
+            for (Map.Entry<ContainerKind, List<AABB>> entry : rawBoxesByKind.entrySet()) {
+                ContainerConfig cfg = configs.get(entry.getKey());
+                int rgb = cfg.color.getRgb();
+                int fillA = Math.max(8, Math.min(240, (int) Math.round(cfg.fillAlpha.get() * 255.0)));
+                int fillCol = (fillA << 24) | rgb;
+                List<AABB> merged = mergeTouchingBoxes(entry.getValue());
+                for (AABB mb : merged) {
+                    Gizmos.cuboid(mb, GizmoStyle.fill(fillCol)).setAlwaysOnTop();
+                }
+            }
+        }
+    }
+
+    private static List<AABB> mergeTouchingBoxes(List<AABB> input) {
+        List<AABB> boxes = new ArrayList<>(input);
+        boolean changed = true;
+        int guard = 0;
+        while (changed && guard++ < 6) {
+            changed = false;
+            for (int i = 0; i < boxes.size(); i++) {
+                AABB a = boxes.get(i);
+                for (int j = i + 1; j < boxes.size(); j++) {
+                    AABB b = boxes.get(j);
+                    if (canMergeAligned(a, b)) {
+                        a = a.minmax(b);
+                        boxes.set(i, a);
+                        boxes.remove(j);
+                        changed = true;
+                        j--;
+                    }
+                }
+            }
+        }
+        return boxes;
+    }
+
+    private static boolean canMergeAligned(AABB a, AABB b) {
+        final double eps = 0.08;
+        boolean sameY = Math.abs(a.minY - b.minY) < eps && Math.abs(a.maxY - b.maxY) < eps;
+        boolean sameZ = Math.abs(a.minZ - b.minZ) < eps && Math.abs(a.maxZ - b.maxZ) < eps;
+        boolean sameX = Math.abs(a.minX - b.minX) < eps && Math.abs(a.maxX - b.maxX) < eps;
+        if (sameY && sameZ && (a.maxX + eps >= b.minX && b.maxX + eps >= a.minX)) return true;
+        if (sameY && sameX && (a.maxZ + eps >= b.minZ && b.maxZ + eps >= a.minZ)) return true;
+        if (sameX && sameZ && (a.maxY + eps >= b.minY && b.maxY + eps >= a.minY)) return true;
+        return false;
     }
 
     public static void drawStyledTracer(Vec3 start, Vec3 end, int rgb, float width, LineStyle style, double blinkHz, long nowMs) {
@@ -401,16 +471,6 @@ public class StashRadarModule extends Module {
     }
 
     public void renderHud(GuiGraphics g) {
-        if (!isEnabled() || totalCount == 0) return;
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.options.hideGui) return;
-        ConfigManager.HudSlot slot = ConfigManager.HUD_SLOTS.get("hud_radar");
-        if (slot != null && !slot.enabled) return;
-        String text = ConfigManager.tr("储存: ", "Storage: ") + totalCount
-                + (shulkerCount > 0 ? " (" + ConfigManager.tr("潜影盒 ", "Shulker ") + shulkerCount + ")" : "");
-        int tw = YeHdFont.width(text, 8.6f, false) + 6;
-        int hx = slot != null ? slot.resolveX(g.guiWidth(), tw) : 8;
-        int hy = slot != null ? slot.resolveY(g.guiHeight(), 13) : 82;
-        YeHdFont.draw(g, text, hx, hy, 8.6f, 0xFFD946EF, true, false);
+        // Rendered by dedicated StorageCountHud module inside HUD tab!
     }
 }

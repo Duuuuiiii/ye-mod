@@ -3,6 +3,7 @@ package com.ye.mod.mixin;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.ye.mod.core.ModuleManager;
 import com.ye.mod.modules.visual.AmbienceModule;
+import com.ye.mod.render.YeSkyPanoramaRenderer;
 import net.minecraft.client.Camera;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SkyRenderer;
@@ -43,6 +44,14 @@ public abstract class SkyRendererMixin {
             return ambience.getSkyArgb();
         }
         return color;
+    }
+
+    @Inject(method = "renderSkyDisc", at = @At("TAIL"))
+    private void ye$renderSkyPanorama(int color, CallbackInfo ci) {
+        AmbienceModule ambience = ModuleManager.get(AmbienceModule.class);
+        if (ambience != null && ambience.usesPanoramaDome()) {
+            YeSkyPanoramaRenderer.renderSkyDomeInSkyPass(ambience);
+        }
     }
 
     @Inject(method = "renderDarkDisc", at = @At("HEAD"), cancellable = true)

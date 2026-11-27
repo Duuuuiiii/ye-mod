@@ -177,7 +177,9 @@ public abstract class GuiMixin {
         if (hpBar != null) hpBar.render(guiGraphics, partialTick);
 
         boolean editingHud = Minecraft.getInstance().screen instanceof YeMouseScreen;
-        HudElementModule.renderAllActive(guiGraphics, editingHud);
+        if (!editingHud) {
+            HudElementModule.renderAllActive(guiGraphics, false);
+        }
 
         StashRadarModule stashRadar = ModuleManager.get(StashRadarModule.class);
         if (stashRadar != null) stashRadar.renderHud(guiGraphics);
@@ -193,6 +195,7 @@ public abstract class GuiMixin {
 
         if (Minecraft.getInstance().screen == null) {
             YeQuickMenu.render(guiGraphics, -1, -1, false);
+            YeQuickMenu.renderRusherSidebar(guiGraphics, guiGraphics.guiWidth(), guiGraphics.guiHeight(), -1, -1, false);
         }
     }
 }

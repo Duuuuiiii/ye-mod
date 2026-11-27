@@ -188,7 +188,9 @@ public class AutoLogModule extends Module {
      * Called from ParticleEngineMixin when vanilla spawns TOTEM_OF_UNDYING emitter on an entity!
      */
     public void onEntityTotemPop(Entity entity) {
-        if (entity == null || mc.player == null || entity.getId() != mc.player.getId()) return;
+        if (entity == null) return;
+        com.ye.mod.modules.visual.HealthPlatesModule.recordEntityPop(entity.getId());
+        if (mc.player == null || entity.getId() != mc.player.getId()) return;
         long now = System.currentTimeMillis();
         recentPopTimestamps.addLast(now);
         pruneOldPops(now);

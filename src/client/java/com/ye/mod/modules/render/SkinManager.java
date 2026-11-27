@@ -55,6 +55,12 @@ public final class SkinManager {
             {"anime_saber", "阿尔托莉雅 · 圣剑王"},
             {"anime_kurumi", "时崎狂三 · 梦魇精灵"},
             {"anime_rei", "绫波丽 · 零号机"},
+            // === Chinese Classic Creators (国内经典主播) ===
+            {"cn_zimin", "籽岷 · 经典蓝衫"},
+            {"cn_xiaoshen", "小神先生 · 经典皮肤"},
+            {"cn_muyu", "木鱼 · 经典像素"},
+            {"cn_xiaoben", "小本 · 经典皮肤"},
+            {"cn_xiatiany", "夏天Y · 经典皮肤"},
             // === 50 Classic PvP & Creator Skins ===
             {"technoblade", "皇冠战猪 Technoblade"},
             {"ranboo", "双色末影 Ranboo"},
@@ -174,5 +180,78 @@ public final class SkinManager {
             return SKINS.values().iterator().next();
         }
         return entry;
+    }
+
+    /**
+     * Online skin lookup & local PNG cache (supports Mojang player names & LittleSkin Chinese character keywords).
+     */
+    public static void fetchOnlineSkinAsync(String query, java.util.function.Consumer<String> onResult) {
+        if (query == null || query.isBlank()) return;
+        String clean = query.trim();
+        Thread t = new Thread(() -> {
+            try {
+                Files.createDirectories(getSkinsDir());
+                String safeName = clean.replaceAll("[\\\\/:*?\"<>|]", "_");
+                Path outPath = getSkinsDir().resolve(safeName + ".png");
+
+                // 1) Try LittleSkin keyword search first (great for Chinese anime / creator names)
+                String enc = java.net.URLEncoder.encode(clean, java.nio.charset.StandardCharsets.UTF_8);
+                java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                        .connectTimeout(java.time.Duration.ofSeconds(6)).build();
+                java.net.http.HttpRequest req1 = java.net.http.HttpRequest.newBuilder()
+                        .uri(java.net.URI.create("https://littleskin.cn/skinlib/list?filter=skin&keyword=" + enc + "&sort=likes&page=1"))
+                        .header("Accept", "application/json")
+                        .header("X-Requested-With", "XMLHttpRequest")
+                        .timeout(java.time.Duration.ofSeconds(8)).GET().build();
+                var res1 = client.send(req1, java.net.http.HttpResponse.BodyHandlers.ofString());
+                if (res1.statusCode() == 200) {
+                    var json = com.google.gson.JsonParser.parseString(res1.body()).getAsJsonObject();
+                    if (json.has("data") && json.getAsJsonArray("data").size() > 0) {
+                        int tid = json.getAsJsonArray("data").get(0).getAsJsonObject().get("tid").getAsInt();
+                        var infoReq = java.net.http.HttpRequest.newBuilder()
+                                .uri(java.net.URI.create("https://littleskin.cn/skinlib/info/" + tid))
+                                .timeout(java.time.Duration.ofSeconds(8)).GET().build();
+                        var infoRes = client.send(infoReq, java.net.http.HttpResponse.BodyHandlers.ofString());
+                        var infoObj = com.google.gson.JsonParser.parseString(infoRes.body()).getAsJsonObject();
+                        if (infoObj.has("hash")) {
+                            String hash = infoObj.get("hash").getAsString();
+                            var pngReq = java.net.http.HttpRequest.newBuilder()
+                                    .uri(java.net.URI.create("https://littleskin.cn/textures/" + hash))
+                                    .timeout(java.time.Duration.ofSeconds(10)).GET().build();
+                            var pngRes = client.send(pngReq, java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+                            if (pngRes.statusCode() == 200 && pngRes.body().length > 128) {
+                                Files.write(outPath, pngRes.body());
+                                Minecraft.getInstance().execute(() -> {
+                                    refreshSkins();
+                                    if (onResult != null) onResult.accept("skin:" + safeName + ".png");
+                                });
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                // 2) Fallback to Minotar Mojang official username skin
+                var mReq = java.net.http.HttpRequest.newBuilder()
+                        .uri(java.net.URI.create("https://minotar.net/skin/" + enc))
+                        .timeout(java.time.Duration.ofSeconds(8)).GET().build();
+                var mRes = client.send(mReq, java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+                if (mRes.statusCode() == 200 && mRes.body().length > 128) {
+                    Files.write(outPath, mRes.body());
+                    Minecraft.getInstance().execute(() -> {
+                        refreshSkins();
+                        if (onResult != null) onResult.accept("skin:" + safeName + ".png");
+                    });
+                    return;
+                }
+            } catch (Exception e) {
+                LOGGER.warn("Online skin fetch failed for {}", clean, e);
+            }
+            Minecraft.getInstance().execute(() -> {
+                if (onResult != null) onResult.accept(null);
+            });
+        }, "ye-skin-fetch");
+        t.setDaemon(true);
+        t.start();
     }
 }

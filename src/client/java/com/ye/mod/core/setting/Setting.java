@@ -19,6 +19,7 @@ public abstract class Setting<T> {
     private BooleanSupplier visible = () -> true;
     private Consumer<T> onChange;
     private Boolean explicitDisplayGroup = null;
+    private boolean gridPicker = false;
 
     protected Setting(String id, String name, String description, T defaultValue) {
         this.id = id;
@@ -80,6 +81,16 @@ public abstract class Setting<T> {
     public <S extends Setting<T>> S functionGroup() {
         this.explicitDisplayGroup = Boolean.FALSE;
         return (S) this;
+    }
+
+    @SuppressWarnings("unchecked")
+    public <S extends Setting<T>> S gridPicker() {
+        this.gridPicker = true;
+        return (S) this;
+    }
+
+    public boolean isGridPicker() {
+        return gridPicker;
     }
 
     /**

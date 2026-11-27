@@ -82,17 +82,21 @@ public class BorderlessFullscreenModule extends Module {
 
         GLFW.glfwSetWindowAttrib(handle, GLFW.GLFW_DECORATED, GLFW.GLFW_FALSE);
         GLFW.glfwSetWindowAttrib(handle, GLFW.GLFW_AUTO_ICONIFY, GLFW.GLFW_FALSE);
-        GLFW.glfwSetWindowMonitor(handle, 0L, mx[0], my[0], vidMode.width(), vidMode.height(), vidMode.refreshRate());
+        GLFW.glfwSetWindowAttrib(handle, GLFW.GLFW_FLOATING, GLFW.GLFW_FALSE);
+        // Use height + 1px so Windows DWM stays in composition mode instead of DirectFlip exclusive takeover (zero black-screen flicker on Alt+Tab!)
+        int borderlessH = vidMode.height() + 1;
+        GLFW.glfwSetWindowMonitor(handle, 0L, mx[0], my[0], vidMode.width(), borderlessH, vidMode.refreshRate());
         GLFW.glfwSetWindowPos(handle, mx[0], my[0]);
-        GLFW.glfwSetWindowSize(handle, vidMode.width(), vidMode.height());
+        GLFW.glfwSetWindowSize(handle, vidMode.width(), borderlessH);
 
         // Re-apply on next client frame as well in case MC's internal fullscreen callback ran asynchronously
         final int targetX = mx[0];
         final int targetY = my[0];
         final int targetW = vidMode.width();
-        final int targetH = vidMode.height();
+        final int targetH = borderlessH;
         mc.execute(() -> {
             GLFW.glfwSetWindowAttrib(handle, GLFW.GLFW_DECORATED, GLFW.GLFW_FALSE);
+            GLFW.glfwSetWindowAttrib(handle, GLFW.GLFW_FLOATING, GLFW.GLFW_FALSE);
             GLFW.glfwSetWindowPos(handle, targetX, targetY);
             GLFW.glfwSetWindowSize(handle, targetW, targetH);
             mc.resizeDisplay();

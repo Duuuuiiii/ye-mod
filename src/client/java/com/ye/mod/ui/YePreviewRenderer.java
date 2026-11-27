@@ -69,6 +69,16 @@ public final class YePreviewRenderer {
     }
 
     public static int renderModulePreviewCard(GuiGraphics g, Font unusedFont, Module m, int x, int y, int w) {
+        if (!m.isEnabled()) {
+            // Only show live preview when the module is actually enabled! Otherwise show clean compact intro bar.
+            int h = 24;
+            int rad = AppleUiRenderer.isMechanical() ? 0 : 6;
+            AppleUiRenderer.drawRoundedRect(g, x, y, w, h, rad, AppleUiRenderer.bgCard());
+            AppleUiRenderer.drawRoundedOutline(g, x, y, w, h, rad, 1.0f, AppleUiRenderer.borderSubtle());
+            YeHdFont.draw(g, YeHdFont.clipToWidth(m.getDescription(), 8.3f, false, w - 16),
+                    x + 8, YeHdFont.vCenterY(y, h, 8.3f), 8.3f, AppleUiRenderer.textSecondary(), false, false);
+            return h + 5;
+        }
         YeHighResTextures.ensureInit();
         boolean is3d = is3dCharacterModule(m);
 
@@ -131,7 +141,7 @@ public final class YePreviewRenderer {
         } else if (m instanceof ShaderPackModule sm) {
             g.fillGradient(px + 1, py + 1, px + pw - 1, py + ph - 1, 0xFF1D4ED8, 0xFFF59E0B);
             YeHdFont.drawCentered(g, "Shader", cx, cy - 4, 8.2f, 0xFFFFFFFF, true, true);
-            caption = sm.pack.get().label + (ShaderPackModule.isIrisPresent() ? " · Iris 已就绪" : " · 需安装 Iris");
+            caption = sm.pack.get().label;
         } else if (m instanceof EnchantGlintModule eg) {
             ItemStack sword = new ItemStack(Items.NETHERITE_SWORD);
             g.renderItem(sword, cx - 8, cy - 8);
@@ -163,9 +173,23 @@ public final class YePreviewRenderer {
         } else if (m instanceof StepDecalsModule sd) {
             int outer = GlobalColorModule.resolveArgb(sd.syncGlobalColor.get(), sd.style.get().outerArgb, 6);
             int core = sd.syncGlobalColor.get() ? 0xFFFFFFFF : sd.style.get().coreArgb;
-            AppleUiRenderer.drawRoundedOutline(g, cx - 11, cy - 11, 22, 22, 2, 2.0f, outer);
-            AppleUiRenderer.drawRoundedRect(g, cx - 5, cy - 5, 10, 10, 2, core);
+            float sc = Math.max(0.55f, Math.min(1.45f, sd.scale.get().floatValue() * 3.0f));
+            // Real perspective 3D block-matrix footsteps preview matching in-world rendering!
+            float lcx = cx - 10, lcy = cy + 3;
+            float rcx = cx + 10, rcy = cy - 4;
+            float s1 = 10 * sc, s2 = 5 * sc;
+            AppleUiRenderer.drawRoundedRect(g, lcx - s1 * 0.5f, lcy - s1 * 0.35f, s1, s1 * 0.7f, 1.5f, AppleUiRenderer.withAlpha(outer, 0.45f));
+            AppleUiRenderer.drawRoundedOutline(g, lcx - s1 * 0.5f, lcy - s1 * 0.35f, s1, s1 * 0.7f, 1.5f, 1.5f, outer);
+            AppleUiRenderer.drawRoundedRect(g, lcx - s2 * 0.5f, lcy - s2 * 0.35f, s2, s2 * 0.7f, 1.0f, core);
+
+            AppleUiRenderer.drawRoundedRect(g, rcx - s1 * 0.5f, rcy - s1 * 0.35f, s1, s1 * 0.7f, 1.5f, AppleUiRenderer.withAlpha(outer, 0.45f));
+            AppleUiRenderer.drawRoundedOutline(g, rcx - s1 * 0.5f, rcy - s1 * 0.35f, s1, s1 * 0.7f, 1.5f, 1.5f, outer);
+            AppleUiRenderer.drawRoundedRect(g, rcx - s2 * 0.5f, rcy - s2 * 0.35f, s2, s2 * 0.7f, 1.0f, core);
             caption = sd.style.get().label + " · 尺寸 " + String.format("%.2f", sd.scale.get());
+        } else if (m instanceof com.ye.mod.modules.utility.StatsModule) {
+            YeHdFont.drawCentered(g, ConfigManager.statPlayerKills + " / " + ConfigManager.statPlayerDeaths, cx, cy - 4, 9.2f, 0xFF38BDF8, true, true);
+            caption = String.format(java.util.Locale.ROOT, "击杀玩家: %d · 被击杀: %d · K/D %.2f",
+                    ConfigManager.statPlayerKills, ConfigManager.statPlayerDeaths, com.ye.mod.modules.utility.StatsModule.getKdRatio());
         } else if (m instanceof SpeedLinesModule sl) {
             int col = 0xFF000000 | GlobalColorModule.resolveRgb(sl.syncGlobalColor.get(), sl.color.get().rgb, 4);
             var pose = g.pose();

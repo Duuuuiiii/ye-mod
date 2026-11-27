@@ -29,6 +29,7 @@ import com.ye.mod.modules.system.BorderlessFullscreenModule;
 import com.ye.mod.modules.system.ChatFilterModule;
 import com.ye.mod.modules.system.PlayerStatsManager;
 import com.ye.mod.modules.system.QuickChatModule;
+import com.ye.mod.modules.utility.StatsModule;
 import com.ye.mod.modules.visual.AmbienceModule;
 import com.ye.mod.modules.visual.CameraTweaksModule;
 import com.ye.mod.modules.visual.CinematicBarsModule;
@@ -137,6 +138,7 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new NoRenderModule());
         ModuleManager.register(new NoFovModule());
         ModuleManager.register(new BorderlessFullscreenModule());
+        ModuleManager.register(new StatsModule());
         ModuleManager.register(new ChatFilterModule());
         ModuleManager.register(new SmartAfkModule());
 
@@ -152,6 +154,7 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new HudElements.NearbyDropsHud());
         ModuleManager.register(new HudElements.ModuleListHud());
         ModuleManager.register(new HudElements.PlayerViewHud());
+        ModuleManager.register(new HudElements.StorageCountHud());
         ModuleManager.register(new WthitModule());
 
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
@@ -164,6 +167,8 @@ public class YeClient implements ClientModInitializer {
                 if (dp != null) dp.onAttack(entity);
                 HealthPlatesModule hp = ModuleManager.get(HealthPlatesModule.class);
                 if (hp != null) hp.onAttack(entity);
+                StatsModule stats = ModuleManager.get(StatsModule.class);
+                if (stats != null) stats.onPlayerAttacked(entity);
             }
             return InteractionResult.PASS;
         });

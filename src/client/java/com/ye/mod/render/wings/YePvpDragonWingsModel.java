@@ -77,15 +77,16 @@ public class YePvpDragonWingsModel {
         float flap = (float) Math.sin(t);
         float lagFlap = (float) Math.sin(t - 0.85f);
 
-        // In PlayerModel.body:
-        // yDeg < 0 sweeps left (+X) backward (+Z); zDeg < 0 lifts left (+X) upward (-Y); xDeg > 0 tilts membrane (+Z) downward (+Y)
-        float proxX = 28.0f + (float) Math.cos(t) * 5.0f;
-        float proxY = (gliding ? -22.0f : -36.0f) + flap * (gliding ? 24.0f : 16.0f);
-        float proxZ = -22.0f + flap * 9.0f;
+        // In PlayerModel.body (+X=left, +Y=down, +Z=back):
+        // Negative X rotation (-X deg) pitches the +Z wing membrane downward (+Y) like natural hanging/swept dragon wings!
+        // Negative Y rotation (-Y deg) sweeps +X bone backward (+Z) behind the player's back (never forward into head/chest!).
+        float proxX = -26.0f + (float) Math.cos(t) * 5.0f;
+        float proxY = (gliding ? -16.0f : -28.0f) + flap * (gliding ? 16.0f : 12.0f);
+        float proxZ = -18.0f + flap * 10.0f;
 
         float distX = 6.0f;
-        float distY = (gliding ? -8.0f : -18.0f) + lagFlap * (gliding ? 22.0f : 15.0f);
-        float distZ = 14.0f + lagFlap * 11.0f;
+        float distY = (gliding ? 10.0f : 14.0f) + lagFlap * (gliding ? 14.0f : 10.0f);
+        float distZ = 16.0f + lagFlap * 9.0f;
 
         setAngles(leftProximal, rightProximal, proxX, proxY, proxZ);
         setAngles(leftDistal, rightDistal, distX, distY, distZ);

@@ -21,7 +21,7 @@ import java.awt.Color;
  */
 public class GlobalColorModule extends Module {
     public enum ColorMode {
-        RAINBOW("彩虹渐变"),
+        RAINBOW("渐变"),
         CUSTOM_PICKER("自定义调色"),
         BREATHING("双色渐变"),
         PRESET("精选色板");

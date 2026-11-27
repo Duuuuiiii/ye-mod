@@ -66,25 +66,33 @@ public class WthitModule extends HudElementModule {
                 if (breakPct > 0 && showToolHint.get()) sub.append(" · ").append(breakPct).append("%");
 
                 String subStr = sub.toString();
-                float iconW = icon.isEmpty() ? 0 : 20 * sc;
-                int w = Math.round(Math.max(96 * sc, iconW + Math.max(YeHdFont.widthF(title, fTitle, true), YeHdFont.widthF(subStr, fSub, false)) + 16 * sc));
+                float padX = 7.0f * sc;
+                float iconSize = icon.isEmpty() ? 0.0f : 16.0f * sc;
+                float iconGap = icon.isEmpty() ? 0.0f : 6.0f * sc;
+                float textBlockW = Math.max(YeHdFont.widthF(title, fTitle, true), YeHdFont.widthF(subStr, fSub, false));
+                int w = Math.round(Math.max(88 * sc, padX * 2.0f + iconSize + iconGap + textBlockW));
                 int h = Math.round((subStr.isEmpty() ? 22 : 28) * sc + (breakPct > 0 ? 5 * sc : 0));
                 int x = slot != null ? slot.resolveX(sw, w) : (sw - w) / 2;
                 int y = slot != null ? slot.resolveY(sh, h) : 6;
 
                 drawHudCard(g, x, y, w, h, editMode);
+                float contentCenterY = y + (h - (breakPct > 0 ? 4.0f * sc : 0.0f)) * 0.5f;
                 if (!icon.isEmpty()) {
                     var pose = g.pose();
                     pose.pushMatrix();
-                    pose.translate(x + 5 * sc, y + 5 * sc);
+                    pose.translate(x + padX, contentCenterY - iconSize * 0.5f);
                     pose.scale(sc, sc);
                     g.renderItem(icon, 0, 0);
                     pose.popMatrix();
                 }
-                float tx = x + 7 * sc + iconW;
-                drawHudText(g, title, tx, y + 4.5f * sc, fTitle, resolvePrimaryColor(), true);
-                if (!subStr.isEmpty()) {
-                    drawHudText(g, subStr, tx, y + 15.5f * sc, fSub, 0xFF94A3B8, false);
+                float tx = x + padX + iconSize + iconGap;
+                if (subStr.isEmpty()) {
+                    drawHudText(g, title, tx, contentCenterY - fTitle * 0.52f, fTitle, resolvePrimaryColor(), true);
+                } else {
+                    float totalTextH = fTitle + fSub + 2.0f * sc;
+                    float topTy = contentCenterY - totalTextH * 0.5f;
+                    drawHudText(g, title, tx, topTy, fTitle, resolvePrimaryColor(), true);
+                    drawHudText(g, subStr, tx, topTy + fTitle + 1.5f * sc, fSub, 0xFF94A3B8, false);
                 }
                 if (breakPct > 0) {
                     float bx = x + 6 * sc, by = y + h - 5 * sc, bw = w - 12 * sc;

@@ -4,7 +4,9 @@ import com.ye.mod.core.Category;
 import com.ye.mod.core.ConfigManager;
 import com.ye.mod.core.Module;
 import com.ye.mod.core.setting.ActionSetting;
+import com.ye.mod.core.setting.BoolSetting;
 import com.ye.mod.core.setting.EnumSetting;
+import com.ye.mod.core.setting.KeybindSetting;
 import com.ye.mod.ui.YeQuickMenu;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
@@ -38,18 +40,39 @@ public class ShaderPackModule extends Module {
         }
     }
 
+    private static boolean extractedOnce = false;
+    private boolean shaderActive = false;
+
     public final EnumSetting<BuiltInShader> pack = addSetting(new EnumSetting<>(
-            "pack", "内置光影", "Photon / Complementary / MakeUp 极速光影", BuiltInShader.PHOTON
+            "pack", "选择光影", "挑选内置或已加载的光影预设", BuiltInShader.PHOTON
     ).onChange(p -> {
-        if (isEnabled()) {
+        if (isEnabled() && shaderActive) {
             applyIrisShader(p, true);
         }
     }).functionGroup());
 
-    private static boolean extractedOnce = false;
+    public final BoolSetting autoApplyOnEnable = addSetting(new BoolSetting(
+            "autoApplyOnEnable", "开启模块即加载", "默认关闭：开启模块后需手动启用或按独立光影键加载", false
+    ).functionGroup());
+
+    public final KeybindSetting shaderToggleKey = addSetting(new KeybindSetting(
+            "shaderToggleKey", "独立光影开关键", "单独一键开启或关闭光影渲染", -1
+    ).functionGroup());
 
     public ShaderPackModule() {
-        super("shader_pack", "光影", "Shaders", "内置 Photon、Complementary 与 MakeUp 三款光影包，联动 Iris 一键切换", Category.VISUAL);
+        super("shader_pack", "光影", "Shaders", "管理光影预设与 Iris 光影加载切换", Category.VISUAL);
+
+        addSetting(new ActionSetting("toggleShaderNow", "启用 / 关闭当前光影", "立即加载或卸载当前所选光影", () -> {
+            if (!isEnabled()) setEnabled(true);
+            if (shaderActive) {
+                disableIrisShaders();
+                shaderActive = false;
+                YeQuickMenu.showToast(ConfigManager.tr("已关闭光影", "Shaders Disabled"), 0xFF94A3B8);
+            } else {
+                shaderActive = true;
+                applyIrisShader(pack.get(), true);
+            }
+        }).functionGroup());
 
         addSetting(new ActionSetting("openIrisGui", "打开光影详细设置", "打开 Iris 原生光影参数与本地光影列表界面", () -> {
             ensureBundledPacksExtracted();
@@ -97,12 +120,34 @@ public class ShaderPackModule extends Module {
 
     @Override
     protected void onEnable() {
-        applyIrisShader(pack.get(), true);
+        ensureBundledPacksExtracted();
+        if (autoApplyOnEnable.get()) {
+            shaderActive = true;
+            applyIrisShader(pack.get(), true);
+        }
     }
 
     @Override
     protected void onDisable() {
-        disableIrisShaders();
+        if (shaderActive) {
+            shaderActive = false;
+            disableIrisShaders();
+        }
+    }
+
+    @Override
+    public void onTick() {
+        if (!isEnabled()) return;
+        if (shaderToggleKey.consumePress()) {
+            if (shaderActive) {
+                shaderActive = false;
+                disableIrisShaders();
+                YeQuickMenu.showToast(ConfigManager.tr("已关闭光影", "Shaders Disabled"), 0xFF94A3B8);
+            } else {
+                shaderActive = true;
+                applyIrisShader(pack.get(), true);
+            }
+        }
     }
 
     public static boolean isIrisPresent() {

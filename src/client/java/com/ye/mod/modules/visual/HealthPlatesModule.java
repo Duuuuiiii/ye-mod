@@ -108,6 +108,16 @@ public class HealthPlatesModule extends Module {
         super("health_plates", "血条", "Health Bar", "无抖动生物血条，自动避让生物模型边界，支持视野内常显、盯着显示或保留秒数", Category.UTILITY);
     }
 
+    private static final java.util.Map<Integer, Integer> ENTITY_POPS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static void recordEntityPop(int entityId) {
+        ENTITY_POPS.merge(entityId, 1, Integer::sum);
+    }
+
+    public static int getEntityPopCount(int entityId) {
+        return ENTITY_POPS.getOrDefault(entityId, 0);
+    }
+
     public void onAttack(Entity e) {
         if (e instanceof LivingEntity) {
             targetId = e.getId();

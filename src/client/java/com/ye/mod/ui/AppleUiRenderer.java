@@ -35,6 +35,7 @@ public final class AppleUiRenderer {
     private static final Map<Integer, StampTex> CIRCLE_STAMPS = new HashMap<>();
 
     private static Identifier hueBarTexId = null;
+    private static Identifier resetIconTexId = null;
 
     private static long lastFrameNs = System.nanoTime();
     private static float frameDt = 0.016f;
@@ -53,11 +54,14 @@ public final class AppleUiRenderer {
 
     public static void beginFrame() {
         long now = System.nanoTime();
-        frameDt = Math.max(0.002f, Math.min(0.05f, (now - lastFrameNs) / 1_000_000_000.0f));
-        lastFrameNs = now;
+        long diff = now - lastFrameNs;
+        if (diff >= 1_500_000L) {
+            frameDt = Math.max(0.001f, Math.min(0.05f, diff / 1_000_000_000.0f));
+            lastFrameNs = now;
+        }
         lightTheme = (ConfigManager.uiTheme == ConfigManager.UiTheme.LIGHT);
         float target = lightTheme ? 1.0f : 0.0f;
-        themeAnim = isMechanical() ? target : smooth(themeAnim, target, 15.0f, frameDt);
+        themeAnim = isMechanical() ? target : smooth(themeAnim, target, 18.0f, frameDt);
     }
 
     public static float dt() {
@@ -458,40 +462,146 @@ public final class AppleUiRenderer {
         g.fill(Math.round(hx - 1.5f), hueBarY - 1, Math.round(hx + 1.5f), hueBarY + hueBarH + 1, 0xFFFFFFFF);
     }
 
-    // ==================== CRISP VECTOR MODULE ICONS (FOR LARGE MOUSE UI) ====================
+    private static Identifier getResetIconTexture() {
+        if (resetIconTexId != null) return resetIconTexId;
+        final int S = 64;
+        NativeImage img = new NativeImage(S, S, true);
+        double cx = S * 0.5, cy = S * 0.5;
+        double rOuter = S * 0.36, rInner = S * 0.24, rMid = (rOuter + rInner) * 0.5;
+        for (int py = 0; py < S; py++) {
+            for (int px = 0; px < S; px++) {
+                double dx = px + 0.5 - cx;
+                double dy = py + 0.5 - cy;
+                double dist = Math.hypot(dx, dy);
+                double ang = Math.toDegrees(Math.atan2(dy, dx));
+                if (ang < 0) ang += 360.0;
+                // 290-degree circular arc (from 20 deg to 310 deg)
+                double a = 0.0;
+                if (ang >= 20.0 && ang <= 315.0) {
+                    double dRing = Math.max(rInner - dist, dist - rOuter);
+                    a = Math.max(a, Math.max(0.0, Math.min(1.0, 0.85 - dRing * 0.65)));
+                }
+                // Crisp arrowhead pointing clockwise at ~325 deg
+                double tipX = cx + Math.cos(Math.toRadians(326)) * rMid;
+                double tipY = cy + Math.sin(Math.toRadians(326)) * rMid;
+                double b1X = cx + Math.cos(Math.toRadians(288)) * (rOuter + 5.5);
+                double b1Y = cy + Math.sin(Math.toRadians(288)) * (rOuter + 5.5);
+                double b2X = cx + Math.cos(Math.toRadians(288)) * (rInner - 5.5);
+                double b2Y = cy + Math.sin(Math.toRadians(288)) * (rInner - 5.5);
+                double dTri = signedDistTriangle(px + 0.5, py + 0.5, tipX, tipY, b1X, b1Y, b2X, b2Y);
+                if (dTri < 1.3) {
+                    a = Math.max(a, Math.max(0.0, Math.min(1.0, 0.9 - dTri * 0.7)));
+                }
+                int alpha = Math.max(0, Math.min(255, (int) Math.round(a * 255.0)));
+                img.setPixel(px, py, (alpha << 24) | 0x00FFFFFF);
+            }
+        }
+        resetIconTexId = Identifier.fromNamespaceAndPath("ye", "reset_circle_icon");
+        Minecraft.getInstance().getTextureManager().register(resetIconTexId, new DynamicTexture(() -> "ye_reset_icon", img));
+        return resetIconTexId;
+    }
+
+    private static double signedDistTriangle(double px, double py, double ax, double ay, double bx, double by, double cx, double cy) {
+        double d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by);
+        double d2 = (px - cx) * (by - cy) - (bx - cx) * (py - cy);
+        double d3 = (px - ax) * (cy - ay) - (cx - ax) * (py - ay);
+        boolean hasNeg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+        boolean hasPos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+        if (!(hasNeg && hasPos)) return -1.0;
+        return 2.0;
+    }
+
+    public static void drawResetCircleIcon(GuiGraphics g, float x, float y, float size, int col) {
+        g.blit(RenderPipelines.GUI_TEXTURED, getResetIconTexture(),
+                Math.round(x), Math.round(y), 0f, 0f, Math.round(size), Math.round(size), 64, 64, 64, 64, col);
+    }
+
+    // ==================== CRISP FUNCTIONAL VECTOR MODULE ICONS ====================
 
     public static void drawModuleIcon(GuiGraphics g, Module m, float x, float y, float sz, int col) {
         String id = m.getId();
         float cx = x + sz * 0.5f;
         float cy = y + sz * 0.5f;
 
-        if (id.contains("wings")) {
-            // Symmetrical Wing chevron
-            drawRoundedRect(g, x + 1, y + 2, sz * 0.38f, sz * 0.24f, 1.2f, col);
-            drawRoundedRect(g, x + 2, y + 5, sz * 0.30f, sz * 0.22f, 1.2f, col);
-            drawRoundedRect(g, x + sz - sz * 0.38f - 1, y + 2, sz * 0.38f, sz * 0.24f, 1.2f, col);
-            drawRoundedRect(g, x + sz - sz * 0.30f - 2, y + 5, sz * 0.30f, sz * 0.22f, 1.2f, col);
-        } else if (id.contains("esp") || id.contains("radar") || id.contains("search") || id.contains("portal")) {
-            // Tactical target reticle / cube frame
-            drawRoundedOutline(g, x + 1.5f, y + 1.5f, sz - 3f, sz - 3f, 2.0f, 1.4f, col);
+        if (id.contains("wings") || id.equals("flight_model")) {
+            // Swept Wing / Elytra Silhouette
+            drawRoundedRect(g, x + 0.8f, y + 1.8f, sz * 0.40f, sz * 0.24f, 1.0f, col);
+            drawRoundedRect(g, x + 1.8f, y + 4.8f, sz * 0.30f, sz * 0.22f, 1.0f, col);
+            drawRoundedRect(g, x + sz - sz * 0.40f - 0.8f, y + 1.8f, sz * 0.40f, sz * 0.24f, 1.0f, col);
+            drawRoundedRect(g, x + sz - sz * 0.30f - 1.8f, y + 4.8f, sz * 0.30f, sz * 0.22f, 1.0f, col);
+        } else if (id.equals("custom_skin") || id.equals("body_scale") || id.equals("accessories") || id.equals("stand_buddy")) {
+            // Player Head + Shoulders Silhouette
+            drawRoundedRect(g, cx - sz * 0.22f, y + 1.2f, sz * 0.44f, sz * 0.40f, 1.5f, col);
+            drawRoundedRect(g, x + 1.8f, y + sz * 0.58f, sz - 3.6f, sz * 0.32f, 1.5f, withAlpha(col, 0.85f));
+        } else if (id.equals("custom_cape")) {
+            // Flowing Cape
+            drawRoundedRect(g, cx - sz * 0.26f, y + 1.2f, sz * 0.52f, sz - 2.4f, 1.2f, col);
+        } else if (id.equals("soul_rings")) {
+            // Stacked Concentric Rings
+            drawRoundedOutline(g, x + 1.0f, y + 2.5f, sz - 2.0f, sz * 0.45f, 3.0f, 1.3f, col);
+            drawRoundedOutline(g, x + 2.2f, y + 5.2f, sz - 4.4f, sz * 0.40f, 2.5f, 1.2f, withAlpha(col, 0.78f));
+        } else if (id.equals("step_decals")) {
+            // Dual Footprint Blocks
+            drawRoundedRect(g, x + 1.8f, y + 1.8f, sz * 0.34f, sz * 0.48f, 1.0f, col);
+            drawRoundedRect(g, x + sz * 0.52f, y + sz * 0.36f, sz * 0.34f, sz * 0.48f, 1.0f, withAlpha(col, 0.85f));
+        } else if (id.equals("swing_speed") || id.equals("hit_feedback") || id.equals("damage_popups")) {
+            // Sword / Strike Slash
+            drawRoundedRect(g, x + 1.5f, cy - 1.0f, sz - 3.0f, 2.0f, 0.8f, col);
+            drawRoundedRect(g, cx + 1.0f, y + 2.2f, 2.0f, sz - 4.4f, 0.8f, withAlpha(col, 0.85f));
+        } else if (id.equals("crosshair") || id.equals("hit_crosshair")) {
+            // Precision 4-way Crosshair
+            drawRoundedRect(g, x + 1.0f, cy - 0.8f, sz * 0.30f, 1.6f, 0.5f, col);
+            drawRoundedRect(g, x + sz * 0.70f - 1.0f, cy - 0.8f, sz * 0.30f, 1.6f, 0.5f, col);
+            drawRoundedRect(g, cx - 0.8f, y + 1.0f, 1.6f, sz * 0.30f, 0.5f, col);
+            drawRoundedRect(g, cx - 0.8f, y + sz * 0.70f - 1.0f, 1.6f, sz * 0.30f, 0.5f, col);
+        } else if (id.equals("zoom") || id.equals("camera_tweaks")) {
+            // Optical Lens + Ring
+            drawRoundedOutline(g, x + 1.2f, y + 1.2f, sz - 2.4f, sz - 2.4f, (sz - 2.4f) * 0.5f, 1.4f, col);
             drawCircle(g, cx - 1.8f, cy - 1.8f, 3.6f, col);
+        } else if (id.equals("auto_log") || id.equals("logout_ghosts")) {
+            // Shield / Exit Door
+            drawRoundedOutline(g, x + 1.8f, y + 1.4f, sz - 3.6f, sz - 2.8f, 2.0f, 1.4f, col);
+            drawRoundedRect(g, cx - 1.2f, cy - 2.2f, 2.4f, 4.4f, 0.8f, col);
+        } else if (id.equals("flight_speed") || id.equals("speed_lines")) {
+            // Triple Speed Chevrons
+            drawRoundedRect(g, x + 1.2f, y + 2.2f, sz * 0.55f, 1.8f, 0.8f, col);
+            drawRoundedRect(g, x + 2.8f, cy - 0.9f, sz * 0.62f, 1.8f, 0.8f, col);
+            drawRoundedRect(g, x + 1.2f, y + sz - 4.0f, sz * 0.55f, 1.8f, 0.8f, withAlpha(col, 0.8f));
+        } else if (id.equals("quick_chat")) {
+            // Chat Bubble
+            drawRoundedRect(g, x + 1.2f, y + 1.8f, sz - 2.4f, sz * 0.64f, 2.0f, col);
+            drawRoundedRect(g, x + 2.5f, y + sz * 0.78f, 2.6f, 2.2f, 0.6f, col);
+        } else if (id.equals("stats")) {
+            // Bar Chart
+            drawRoundedRect(g, x + 1.5f, y + sz * 0.45f, 2.4f, sz * 0.45f, 0.8f, col);
+            drawRoundedRect(g, cx - 1.2f, y + sz * 0.18f, 2.4f, sz * 0.72f, 0.8f, col);
+            drawRoundedRect(g, x + sz - 3.9f, y + sz * 0.32f, 2.4f, sz * 0.58f, 0.8f, withAlpha(col, 0.85f));
+        } else if (id.equals("health_plates")) {
+            // HP Bar
+            drawRoundedOutline(g, x + 1.0f, cy - 2.6f, sz - 2.0f, 5.2f, 2.0f, 1.2f, col);
+            drawRoundedRect(g, x + 2.4f, cy - 1.4f, (sz - 4.8f) * 0.68f, 2.8f, 1.0f, col);
+        } else if (id.contains("esp") || id.contains("radar") || id.contains("search") || id.contains("portal") || id.contains("lava")) {
+            // 3D Cube / Scanner Box
+            drawRoundedOutline(g, x + 1.5f, y + 1.5f, sz - 3f, sz - 3f, 1.8f, 1.4f, col);
+            drawRoundedRect(g, cx - 2.0f, cy - 2.0f, 4.0f, 4.0f, 0.8f, withAlpha(col, 0.8f));
+        } else if (id.equals("trajectory_preview")) {
+            // Dotted Arc
+            drawCircle(g, x + 1.5f, y + sz - 4.0f, 2.5f, col);
+            drawCircle(g, cx - 1.2f, y + 2.0f, 2.4f, col);
+            drawCircle(g, x + sz - 4.0f, cy + 0.5f, 2.8f, col);
         } else if (id.contains("color") || id.contains("glint") || id.contains("shader") || id.contains("ambience") || id.contains("sin_city") || id.contains("blur")) {
-            // Optical Spark / Palette Venn
+            // Optical Palette / Sun
             drawCircle(g, x + 1.5f, y + 2.5f, sz * 0.52f, col);
             drawCircle(g, x + sz * 0.38f, y + sz * 0.34f, sz * 0.50f, withAlpha(col, 0.65f));
-        } else if (id.contains("ring") || id.contains("crosshair") || id.contains("zoom") || id.contains("camera")) {
-            // Concentric Lens / Ring
-            drawRoundedOutline(g, x + 1.2f, y + 1.2f, sz - 2.4f, sz - 2.4f, (sz - 2.4f) * 0.5f, 1.4f, col);
-            drawCircle(g, cx - 1.5f, cy - 1.5f, 3.0f, col);
         } else if (id.startsWith("hud_") || id.equals("wthit") || id.equals("player_ui")) {
             // Dashboard Layout Grid
             drawRoundedRect(g, x + 1.2f, y + 1.5f, sz * 0.42f, sz - 3f, 1.2f, col);
             drawRoundedRect(g, x + sz * 0.56f, y + 1.5f, sz * 0.34f, sz * 0.38f, 1.2f, col);
             drawRoundedRect(g, x + sz * 0.56f, y + sz * 0.56f, sz * 0.34f, sz * 0.30f, 1.2f, withAlpha(col, 0.72f));
         } else {
-            // Crisp Diamond / Bolt emblem
-            drawRoundedRect(g, x + 2.0f, cy - 1.2f, sz - 4.0f, 2.4f, 1.0f, col);
-            drawRoundedRect(g, cx - 1.2f, y + 2.0f, 2.4f, sz - 4.0f, 1.0f, col);
+            // Utility Gear / Diamond
+            drawRoundedOutline(g, x + 2.0f, y + 2.0f, sz - 4.0f, sz - 4.0f, 2.5f, 1.4f, col);
+            drawCircle(g, cx - 1.4f, cy - 1.4f, 2.8f, col);
         }
     }
 

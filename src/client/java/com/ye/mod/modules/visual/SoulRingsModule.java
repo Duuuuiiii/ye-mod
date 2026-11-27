@@ -95,7 +95,7 @@ public class SoulRingsModule extends Module {
     public final DoubleSetting[] perRingSpeed = new DoubleSetting[6];
 
     public SoulRingsModule() {
-        super("soul_rings", "魂环", "Soul Rings", "立体曲面圆环与符文光阵，支持独立发光亮度、每环配色与转速控制", Category.VISUAL);
+        super("soul_rings", "魂环", "Soul Rings", "立体曲面圆环与符文光阵，支持独立发光亮度、每环配色与转速控制", Category.PLAYER_MODEL);
         setEnabled(true, true);
 
         SingleColor[] defaults = {
