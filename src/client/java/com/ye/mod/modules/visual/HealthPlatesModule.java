@@ -1,6 +1,7 @@
 package com.ye.mod.modules.visual;
 
 import com.ye.mod.core.Category;
+import com.ye.mod.core.ConfigManager;
 import com.ye.mod.core.Module;
 import com.ye.mod.core.ModuleManager;
 import com.ye.mod.core.setting.BoolSetting;
@@ -8,16 +9,17 @@ import com.ye.mod.core.setting.DoubleSetting;
 import com.ye.mod.core.setting.EnumSetting;
 import com.ye.mod.render.YeWorldFxRenderer;
 import com.ye.mod.ui.AppleUiRenderer;
+import com.ye.mod.ui.YeHdFont;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.EntityHitResult;
 
+import java.util.Locale;
+
 /**
- * Target Health Bar supporting:
- * - Position: 生物头顶 (3D world-projected overhead) / 竖状侧边 (Vertical beside entity/crosshair) / 屏幕顶部 (Top plate)
- * - Style: 详细 (Name + HP + Dist) / 纯条状 (Clean minimal bar)
+ * Target Health Bar rendered with 1:1 physical-pixel YeHdFont and smooth rounded outlines!
  */
 public class HealthPlatesModule extends Module {
     public enum PositionMode {
@@ -90,7 +92,7 @@ public class HealthPlatesModule extends Module {
             for (Entity ent : mc.level.entitiesForRendering()) {
                 if (!(ent instanceof LivingEntity le) || ent == mc.player || !le.isAlive() || le.isInvisible()) continue;
                 if (ent.distanceToSqr(mc.player) > maxD2) continue;
-                renderOverheadForEntity(g, mc, le, sm, sw, sh);
+                renderOverheadForEntity(g, le, sm, sw, sh);
                 if (++count >= 24) break;
             }
             return;
@@ -101,7 +103,7 @@ public class HealthPlatesModule extends Module {
         if (!(e instanceof LivingEntity le) || !le.isAlive()) return;
 
         if (pm == PositionMode.OVERHEAD) {
-            renderOverheadForEntity(g, mc, le, sm, sw, sh);
+            renderOverheadForEntity(g, le, sm, sw, sh);
         } else if (pm == PositionMode.VERTICAL_SIDE) {
             renderVerticalSide(g, mc, le, sm, sw, sh);
         } else {
@@ -109,8 +111,7 @@ public class HealthPlatesModule extends Module {
         }
     }
 
-    private static void renderOverheadForEntity(GuiGraphics g, Minecraft mc, LivingEntity le,
-                                                StyleMode sm, int sw, int sh) {
+    private static void renderOverheadForEntity(GuiGraphics g, LivingEntity le, StyleMode sm, int sw, int sh) {
         float[] proj = YeWorldFxRenderer.projectWorldToGui(
                 le.getX(), le.getY() + le.getBbHeight() + 0.42, le.getZ(), sw, sh);
         if (proj == null) return;
@@ -123,32 +124,30 @@ public class HealthPlatesModule extends Module {
         int fillCol = hpColor(pct);
 
         if (sm == StyleMode.BAR_ONLY) {
-            int bw = 54;
-            int bh = 5;
-            int bx = cx - bw / 2;
-            int by = cy - bh / 2;
+            int bw = 54, bh = 5;
+            int bx = cx - bw / 2, by = cy - bh / 2;
             AppleUiRenderer.drawRoundedRect(g, bx - 1, by - 1, bw + 2, bh + 2, 3, 0xCC090D16);
-            g.fill(bx, by, bx + Math.round(bw * pct), by + bh, fillCol);
+            AppleUiRenderer.drawRoundedRect(g, bx, by, bw * pct, bh, 2.5f, fillCol);
         } else {
             String name = le.getDisplayName().getString();
-            String hpTxt = String.format("%.0f/%.0f", hp, maxHp);
-            int w = Math.max(76, Math.min(130, mc.font.width(name) + mc.font.width(hpTxt) + 18));
+            String hpTxt = String.format(Locale.ROOT, "%.0f/%.0f", hp, maxHp);
+            int w = Math.max(78, Math.min(136, YeHdFont.width(name, 8.2f, true) + YeHdFont.width(hpTxt, 8.0f, false) + 20));
             int h = 21;
-            int x = cx - w / 2;
-            int y = cy - h;
-            AppleUiRenderer.drawRoundedRect(g, x, y, w, h, 5, 0xCC0B101B);
-            g.renderOutline(x, y, w, h, 0x33FFFFFF);
-            String shortName = mc.font.plainSubstrByWidth(name, w - mc.font.width(hpTxt) - 12);
-            g.drawString(mc.font, shortName, x + 5, y + 3, 0xFFF8FAFC, false);
-            g.drawString(mc.font, hpTxt, x + w - 5 - mc.font.width(hpTxt), y + 3, 0xFFCBD5E1, false);
-            int bx = x + 5, by = y + 14, bw = w - 10;
-            g.fill(bx, by, bx + bw, by + 4, 0xFF1E293B);
-            g.fill(bx, by, bx + Math.round(bw * pct), by + 4, fillCol);
+            int x = cx - w / 2, y = cy - h;
+            AppleUiRenderer.drawRoundedRect(g, x, y, w, h, 5, 0xD80B101B);
+            AppleUiRenderer.drawRoundedOutline(g, x, y, w, h, 5, 1.0f, 0x28FFFFFF);
+
+            float hpW = YeHdFont.widthF(hpTxt, 8.0f, false);
+            String shortName = YeHdFont.clipToWidth(name, 8.2f, true, w - hpW - 14);
+            YeHdFont.draw(g, shortName, x + 5, y + 3, 8.2f, 0xFFF8FAFC, false, true);
+            YeHdFont.draw(g, hpTxt, x + w - 5 - hpW, y + 3.2f, 8.0f, 0xFFCBD5E1, false, false);
+
+            AppleUiRenderer.drawRoundedRect(g, x + 5, y + 14, w - 10, 4, 2, 0xFF1E293B);
+            AppleUiRenderer.drawRoundedRect(g, x + 5, y + 14, (w - 10) * pct, 4, 2, fillCol);
         }
     }
 
-    private static void renderVerticalSide(GuiGraphics g, Minecraft mc, LivingEntity le,
-                                           StyleMode sm, int sw, int sh) {
+    private static void renderVerticalSide(GuiGraphics g, Minecraft mc, LivingEntity le, StyleMode sm, int sw, int sh) {
         float[] proj = YeWorldFxRenderer.projectWorldToGui(
                 le.getX(), le.getY() + le.getBbHeight() * 0.55, le.getZ(), sw, sh);
         int bx = (proj != null) ? Math.round(proj[0]) + 22 : (sw / 2 + 24);
@@ -159,20 +158,19 @@ public class HealthPlatesModule extends Module {
         float pct = Math.max(0.0f, Math.min(1.0f, hp / maxHp));
         int fillCol = hpColor(pct);
 
-        int barW = 6;
-        int barH = 48;
+        int barW = 6, barH = 48;
         int by = cy - barH / 2;
         AppleUiRenderer.drawRoundedRect(g, bx - 2, by - 2, barW + 4, barH + 4, 3, 0xD80B101B);
-        g.fill(bx, by, bx + barW, by + barH, 0xFF1E293B);
-        int filled = Math.round(barH * pct);
-        g.fill(bx, by + (barH - filled), bx + barW, by + barH, fillCol);
+        AppleUiRenderer.drawRoundedRect(g, bx, by, barW, barH, 2, 0xFF1E293B);
+        float filled = barH * pct;
+        AppleUiRenderer.drawRoundedRect(g, bx, by + (barH - filled), barW, filled, 2, fillCol);
 
         if (sm == StyleMode.DETAILED) {
             double dist = mc.player.distanceTo(le);
-            String name = mc.font.plainSubstrByWidth(le.getDisplayName().getString(), 72);
-            g.drawString(mc.font, name, bx + barW + 6, by + 2, 0xFFF8FAFC, true);
-            g.drawString(mc.font, String.format("%.1f ❤", hp), bx + barW + 6, by + 14, fillCol, true);
-            g.drawString(mc.font, String.format("%.1fm", dist), bx + barW + 6, by + 26, 0xFF94A3B8, true);
+            String name = YeHdFont.clipToWidth(le.getDisplayName().getString(), 8.4f, true, 78);
+            YeHdFont.draw(g, name, bx + barW + 6, by + 2, 8.4f, 0xFFF8FAFC, true, true);
+            YeHdFont.draw(g, String.format(Locale.ROOT, "%.1f ❤", hp), bx + barW + 6, by + 14, 8.2f, fillCol, true, true);
+            YeHdFont.draw(g, String.format(Locale.ROOT, "%.1fm", dist), bx + barW + 6, by + 26, 8.0f, 0xFF94A3B8, true, false);
         }
     }
 
@@ -183,22 +181,25 @@ public class HealthPlatesModule extends Module {
         int fillCol = hpColor(pct);
 
         if (sm == StyleMode.BAR_ONLY) {
-            int w = 124, h = 7;
+            int w = 128, h = 7;
             int x = (sw - w) / 2, y = 24;
             AppleUiRenderer.drawRoundedRect(g, x - 2, y - 2, w + 4, h + 4, 4, 0xCC0B101B);
-            g.fill(x, y, x + Math.round(w * pct), y + h, fillCol);
+            AppleUiRenderer.drawRoundedRect(g, x, y, w * pct, h, 3.5f, fillCol);
         } else {
             double dist = mc.player.distanceTo(le);
-            int w = 144, h = 26;
+            int w = 152, h = 26;
             int x = (sw - w) / 2, y = 24;
-            AppleUiRenderer.drawRoundedRect(g, x, y, w, h, 6, 0xD80B101B);
-            g.renderOutline(x, y, w, h, 0x33FFFFFF);
-            String name = mc.font.plainSubstrByWidth(le.getDisplayName().getString(), 80);
-            g.drawString(mc.font, name, x + 6, y + 4, 0xFFF8FAFC, false);
-            String hpStr = String.format("%.0f/%.0f · %.1fm", hp, maxHp, dist);
-            g.drawString(mc.font, hpStr, x + w - 6 - mc.font.width(hpStr), y + 4, 0xFF94A3B8, false);
-            g.fill(x + 6, y + 16, x + w - 6, y + 21, 0xFF1E293B);
-            g.fill(x + 6, y + 16, x + 6 + Math.round((w - 12) * pct), y + 21, fillCol);
+            AppleUiRenderer.drawRoundedRect(g, x, y, w, h, 6, 0xDF0B101B);
+            AppleUiRenderer.drawRoundedOutline(g, x, y, w, h, 6, 1.0f, 0x2AFFFFFF);
+
+            String hpStr = String.format(Locale.ROOT, "%.0f/%.0f · %.1fm", hp, maxHp, dist);
+            float hpW = YeHdFont.widthF(hpStr, 8.0f, false);
+            String name = YeHdFont.clipToWidth(le.getDisplayName().getString(), 8.5f, true, w - hpW - 16);
+            YeHdFont.draw(g, name, x + 7, y + 4.5f, 8.5f, 0xFFF8FAFC, false, true);
+            YeHdFont.draw(g, hpStr, x + w - 7 - hpW, y + 4.8f, 8.0f, 0xFF94A3B8, false, false);
+
+            AppleUiRenderer.drawRoundedRect(g, x + 7, y + 17, w - 14, 4.5f, 2.2f, 0xFF1E293B);
+            AppleUiRenderer.drawRoundedRect(g, x + 7, y + 17, (w - 14) * pct, 4.5f, 2.2f, fillCol);
         }
     }
 

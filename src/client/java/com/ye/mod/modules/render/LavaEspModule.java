@@ -28,13 +28,17 @@ import java.util.List;
  */
 public class LavaEspModule extends Module {
     public enum ColorPreset {
-        ORANGE_RED(0xFFFF6B1A),
-        BRIGHT_RED(0xFFFF2A2A),
-        NEON_YELLOW(0xFFFFD60A),
-        CYBER_MAGENTA(0xFFFF2E93);
+        ORANGE_RED("橙红", 0xFFFF6B1A),
+        BRIGHT_RED("亮红", 0xFFFF2A2A),
+        NEON_YELLOW("明黄", 0xFFFFD60A),
+        CYBER_MAGENTA("洋红", 0xFFFF2E93);
 
+        public final String label;
         final int rgb;
-        ColorPreset(int rgb) { this.rgb = rgb; }
+        ColorPreset(String label, int rgb) {
+            this.label = label;
+            this.rgb = rgb;
+        }
     }
 
     public final DoubleSetting radius = addSetting(new DoubleSetting(
@@ -55,6 +59,10 @@ public class LavaEspModule extends Module {
 
     public final EnumSetting<ColorPreset> colorPreset = addSetting(new EnumSetting<>(
             "colorPreset", "高亮配色", "选择岩浆高亮框的颜色风格", ColorPreset.ORANGE_RED
+    ));
+
+    public final BoolSetting syncGlobalColor = addSetting(new BoolSetting(
+            "syncGlobalColor", "同步全局色彩", "岩浆边框颜色跟随全局色彩模块", false
     ));
 
     public final DoubleSetting fillAlpha = addSetting(new DoubleSetting(
@@ -181,7 +189,8 @@ public class LavaEspModule extends Module {
         List<LavaEntry> blocks = cachedBlocks;
         if (blocks.isEmpty()) return;
 
-        int baseRgb = colorPreset.get().rgb & 0x00FFFFFF;
+        int baseRgb = com.ye.mod.modules.visual.GlobalColorModule.resolveRgb(
+                syncGlobalColor.get(), colorPreset.get().rgb & 0x00FFFFFF, 5);
         int alphaByte = Math.max(0, Math.min(255, (int) Math.round(fillAlpha.get() * 255.0)));
 
         for (LavaEntry entry : blocks) {

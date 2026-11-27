@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 3D Head, Face & Tail Accessories with per-item transform controls.
+ * 3D Head & Face Accessories with per-item transform controls (all tail items removed per user request!).
  */
 public class AccessoriesModule extends Module {
     public enum HeadItem {
@@ -46,36 +46,18 @@ public class AccessoriesModule extends Module {
         FaceItem(String label) { this.label = label; }
     }
 
-    public enum TailItem {
-        NONE("无"),
-        NINE_TAILS("九尾"),
-        DEVIL_TAIL("恶魔尾"),
-        DRAGON_TAIL("龙尾");
-
-        public final String label;
-        TailItem(String label) { this.label = label; }
-    }
-
     public record ItemTransform(DoubleSetting scale, DoubleSetting y, DoubleSetting z) {}
 
     public final EnumSetting<HeadItem> headItem = addSetting(new EnumSetting<>(
-            "headItem", "头部", "选择头部挂饰", HeadItem.CAT_EARS
+            "headItem", "头部挂饰", "选择精致头部立体挂饰", HeadItem.CAT_EARS
     ));
 
     public final EnumSetting<FaceItem> faceItem = addSetting(new EnumSetting<>(
-            "faceItem", "面部", "选择面部挂饰", FaceItem.SUNGLASSES
-    ));
-
-    public final EnumSetting<TailItem> tailItem = addSetting(new EnumSetting<>(
-            "tailItem", "尾部", "选择尾部挂饰", TailItem.NONE
+            "faceItem", "面部挂饰", "选择精致面部立体挂饰", FaceItem.SUNGLASSES
     ));
 
     public final BoolSetting customMode = addSetting(new BoolSetting(
-            "customMode", "高级自定义", "展开各部位挂饰微调参数", false
-    ));
-
-    public final DoubleSetting tailScale = addSetting(new DoubleSetting(
-            "tailScale", "尾巴大小", "缩放尾巴尺寸", 1.0, 0.5, 1.8, 0.05
+            "customMode", "高级自定义", "展开各部位挂饰大小与位置微调", false
     ));
 
     public final BoolSetting onlySelf = addSetting(new BoolSetting(
@@ -86,7 +68,7 @@ public class AccessoriesModule extends Module {
     private final Map<FaceItem, ItemTransform> faceTransforms = new EnumMap<>(FaceItem.class);
 
     public AccessoriesModule() {
-        super("accessories", "挂饰", "Accessories", "头/面/尾立体挂饰，支持独立微调", Category.PLAYER_MODEL);
+        super("accessories", "挂饰", "Accessories", "头部与面部精致立体挂饰，支持独立微调", Category.PLAYER_MODEL);
         setEnabled(true, true);
 
         for (HeadItem item : HeadItem.values()) {
@@ -120,7 +102,6 @@ public class AccessoriesModule extends Module {
         List<Setting<?>> out = new ArrayList<>();
         out.add(headItem);
         out.add(faceItem);
-        out.add(tailItem);
         out.add(customMode);
         if (customMode.get()) {
             ItemTransform ht = headTransforms.get(headItem.get());
@@ -134,9 +115,6 @@ public class AccessoriesModule extends Module {
                 out.add(ft.scale());
                 out.add(ft.y());
                 out.add(ft.z());
-            }
-            if (tailItem.get() != TailItem.NONE) {
-                out.add(tailScale);
             }
             out.add(onlySelf);
         }

@@ -1,10 +1,11 @@
 package com.ye.mod.modules.visual;
 
 import com.ye.mod.core.Category;
+import com.ye.mod.core.ConfigManager;
 import com.ye.mod.core.Module;
 import com.ye.mod.core.setting.BoolSetting;
 import com.ye.mod.core.setting.EnumSetting;
-import com.ye.mod.ui.AppleUiRenderer;
+import com.ye.mod.ui.YeHdFont;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.entity.Entity;
@@ -12,11 +13,11 @@ import net.minecraft.world.entity.LivingEntity;
 
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Floating Damage Popups with Display Mode presets (All / Numbers Only / Crit Only)
- * and an independent Combo counter toggle!
+ * Floating Damage Popups rendered with crisp 1:1 physical-pixel YeHdFont!
  */
 public class DamagePopupsModule extends Module {
     public enum DisplayMode {
@@ -35,7 +36,7 @@ public class DamagePopupsModule extends Module {
     ));
 
     public final BoolSetting showCombo = addSetting(new BoolSetting(
-            "showCombo", "连击计数", "单独开关准星下方 COMBO 连击提示", true
+            "showCombo", "连击计数", "单独开关准星下方连击提示", true
     ));
 
     private final List<Popup> popups = new CopyOnWriteArrayList<>();
@@ -46,7 +47,7 @@ public class DamagePopupsModule extends Module {
     private boolean lastWasCrit = false;
 
     public DamagePopupsModule() {
-        super("damage_popups", "伤害飘字", "Damage Popups", "伤害数值、暴击标记与可独立开关的连击计数", Category.UTILITY);
+        super("damage_popups", "伤害飘字", "Damage Popups", "高清矢量伤害数值、暴击标记与连击计数", Category.UTILITY);
     }
 
     public void onAttack(Entity target) {
@@ -64,7 +65,7 @@ public class DamagePopupsModule extends Module {
 
         DisplayMode dm = mode.get();
         if (dm == DisplayMode.ALL || (dm == DisplayMode.CRIT_ONLY && crit)) {
-            String txt = crit ? "✦ 暴击!" : ("命中 ×" + comboCount);
+            String txt = crit ? ConfigManager.tr("✦ 暴击!", "✦ CRIT!") : (ConfigManager.tr("命中 ×", "Hit ×") + comboCount);
             int col = crit ? 0xFFFACC15 : 0xFF38BDF8;
             int ox = ((comboCount % 3) - 1) * 20;
             popups.add(new Popup(txt, col, now, ox, crit));
@@ -85,8 +86,8 @@ public class DamagePopupsModule extends Module {
                 DisplayMode dm = mode.get();
                 if (dm == DisplayMode.ALL || dm == DisplayMode.NUMBERS_ONLY || (dm == DisplayMode.CRIT_ONLY && lastWasCrit)) {
                     String num = (dm == DisplayMode.NUMBERS_ONLY)
-                            ? String.format("%.1f", dmg)
-                            : (lastWasCrit ? String.format("✦ -%.1f", dmg) : String.format("-%.1f", dmg));
+                            ? String.format(Locale.ROOT, "%.1f", dmg)
+                            : (lastWasCrit ? String.format(Locale.ROOT, "✦ -%.1f", dmg) : String.format(Locale.ROOT, "-%.1f", dmg));
                     int col = lastWasCrit ? 0xFFFACC15 : 0xFFEF4444;
                     popups.add(new Popup(num, col, System.currentTimeMillis(), 16, lastWasCrit));
                     while (popups.size() > 8) popups.remove(0);
@@ -108,8 +109,8 @@ public class DamagePopupsModule extends Module {
         int cy = g.guiHeight() / 2;
 
         if (showCombo.get() && comboCount > 1 && now - lastHitMs <= 2600L) {
-            String cStr = comboCount + " COMBO";
-            AppleUiRenderer.drawCenteredText(g, mc.font, cStr, cx, cy + 16, 0xFFFACC15);
+            String cStr = ConfigManager.english ? (comboCount + " COMBO") : (comboCount + " 连击");
+            YeHdFont.drawCentered(g, cStr, cx, cy + 16, 9.2f, 0xFFFACC15, true, true);
         }
 
         Iterator<Popup> it = popups.iterator();
@@ -121,10 +122,10 @@ public class DamagePopupsModule extends Module {
                 continue;
             }
             float t = age / 950.0f;
-            int y = cy - 16 - Math.round(t * 28.0f);
+            float y = cy - 16 - t * 28.0f;
             int alpha = Math.max(15, Math.round((1.0f - t) * 255.0f));
             int col = (alpha << 24) | (p.color & 0x00FFFFFF);
-            g.drawCenteredString(mc.font, p.text, cx + p.offsetX, y, col);
+            YeHdFont.drawCentered(g, p.text, cx + p.offsetX, y, p.isCrit ? 10.0f : 9.0f, col, true, true);
         }
     }
 }

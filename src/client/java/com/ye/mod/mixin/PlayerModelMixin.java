@@ -37,7 +37,6 @@ public abstract class PlayerModelMixin extends HumanoidModel<AvatarRenderState> 
         boolean isSelf = mc.player != null && state.id == mc.player.getId();
         if (flight.onlySelf.get() && !isSelf) return;
 
-        // Prevent vanilla fall-flying pose from locking the head looking straight up
         ye$wasFallFlying = true;
         state.isFallFlying = false;
     }
@@ -72,30 +71,39 @@ public abstract class PlayerModelMixin extends HumanoidModel<AvatarRenderState> 
         if (flight == null || !flight.isEnabled()) return;
 
         FlightModelModule.FlightPreset preset = flight.preset.get();
-        if (preset == FlightModelModule.FlightPreset.MINI_DRAGON
-                || preset == FlightModelModule.FlightPreset.MAGIC_BROOM
+        if (preset.seatedPose || preset == FlightModelModule.FlightPreset.MINI_DRAGON
                 || preset == FlightModelModule.FlightPreset.MINI_PHANTOM) {
-            // Proper sitting pose straddling the mount
-            this.rightLeg.xRot = -1.35F;
-            this.leftLeg.xRot = -1.35F;
-            this.rightLeg.yRot = 0.28F;
-            this.leftLeg.yRot = -0.28F;
+            // Seated riding posture
+            this.rightLeg.xRot = -1.32F;
+            this.leftLeg.xRot = -1.32F;
+            this.rightLeg.yRot = 0.26F;
+            this.leftLeg.yRot = -0.26F;
             this.rightLeg.zRot = 0.08F;
             this.leftLeg.zRot = -0.08F;
 
-            this.rightArm.xRot = -0.62F;
-            this.leftArm.xRot = -0.62F;
-            this.rightArm.yRot = -0.18F;
-            this.leftArm.yRot = 0.18F;
-        } else if (preset == FlightModelModule.FlightPreset.SWORD_SURF) {
-            // Heroic sword-surfing stance
-            this.body.yRot = 0.35F;
-            this.rightLeg.xRot = 0.15F;
-            this.leftLeg.xRot = -0.15F;
-            this.rightArm.xRot = -0.35F;
-            this.leftArm.xRot = -0.35F;
-            this.rightArm.zRot = 0.25F;
-            this.leftArm.zRot = -0.25F;
+            this.rightArm.xRot = -0.58F;
+            this.leftArm.xRot = -0.58F;
+            this.rightArm.yRot = -0.16F;
+            this.leftArm.yRot = 0.16F;
+        } else if (preset == FlightModelModule.FlightPreset.MECHA_JET) {
+            // Sleek Iron-Man / Jetpack angled flight stance
+            this.rightLeg.xRot = 0.22F;
+            this.leftLeg.xRot = 0.22F;
+            this.rightLeg.zRot = 0.06F;
+            this.leftLeg.zRot = -0.06F;
+            this.rightArm.xRot = 0.28F;
+            this.leftArm.xRot = 0.28F;
+            this.rightArm.zRot = 0.26F;
+            this.leftArm.zRot = -0.26F;
+        } else if (preset.standingSurfPose) {
+            // Heroic surfing stance for Sword, Star Astrolabe, Giant Shuriken, Paper Glider
+            this.body.yRot = 0.30F;
+            this.rightLeg.xRot = 0.14F;
+            this.leftLeg.xRot = -0.14F;
+            this.rightArm.xRot = -0.32F;
+            this.leftArm.xRot = -0.32F;
+            this.rightArm.zRot = 0.24F;
+            this.leftArm.zRot = -0.24F;
         }
     }
 }

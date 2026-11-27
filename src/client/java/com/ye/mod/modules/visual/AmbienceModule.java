@@ -11,64 +11,77 @@ import org.joml.Vector4f;
 import java.lang.reflect.Method;
 
 /**
- * Sky, Fog & Oppressive Vignette Atmosphere module.
- * Automatically overrides Nuit custom resourcepack skyboxes when active so sky/fog changes ALWAYS work!
+ * Luminous Dual-Tone Zenith-to-Horizon Sky & Atmosphere Module:
+ * - Eliminates pitch-black flat sky discs (shouldRenderDarkDisc = false even at Y=5!)
+ * - Vibrant zenith + glowing horizon fog gradients + starry sky brightness control
+ * - Automatically overrides Nuit custom skyboxes when active
  */
 public class AmbienceModule extends Module {
     public enum Theme {
-        ABYSS_GRAY("深渊灰黑", 0xFF060709, 0.035f, 0.038f, 0.045f),
-        PURE_VOID("纯黑虚空", 0xFF020305, 0.012f, 0.012f, 0.018f),
-        OBSIDIAN_PURPLE("暗夜紫晶", 0xFF10071E, 0.09f, 0.04f, 0.16f),
-        CRIMSON_MOON("猩红血夜", 0xFF180508, 0.15f, 0.025f, 0.035f),
-        AURORA_CYAN("极光寒夜", 0xFF051822, 0.03f, 0.16f, 0.20f),
-        SAKURA_DUSK("绯樱黄昏", 0xFF2B1226, 0.24f, 0.10f, 0.19f);
+        SAKURA_SUNSET("绯樱晚霞", 0xFF5B3E96, 0xFFFF8FA3, 0.96f, 0.56f, 0.68f, 0.55f),
+        CLEAR_AZURE("蔚蓝晴空", 0xFF2563EB, 0xFF93C5FD, 0.58f, 0.80f, 1.00f, 0.0f),
+        AURORA_TEAL("极光星夜", 0xFF0F2942, 0xFF2DD4BF, 0.16f, 0.68f, 0.64f, 0.95f),
+        DREAM_VIOLET("梦幻紫霞", 0xFF4C1D95, 0xFFD946EF, 0.72f, 0.42f, 0.94f, 0.80f),
+        GOLDEN_DUSK("鎏金黄昏", 0xFF1E40AF, 0xFFFB923C, 0.98f, 0.64f, 0.30f, 0.30f),
+        CRIMSON_MOON("绯红血月", 0xFF581122, 0xFFF43F5E, 0.82f, 0.22f, 0.32f, 0.85f);
 
         public final String label;
-        final int skyArgb;
+        public final int skyArgb;
+        public final int horizonArgb;
         final float fogR;
         final float fogG;
         final float fogB;
+        public final float starAlpha;
 
         public int getSkyArgb() { return skyArgb; }
 
-        Theme(String label, int skyArgb, float fogR, float fogG, float fogB) {
+        Theme(String label, int skyArgb, int horizonArgb, float fogR, float fogG, float fogB, float starAlpha) {
             this.label = label;
             this.skyArgb = skyArgb;
+            this.horizonArgb = horizonArgb;
             this.fogR = fogR;
             this.fogG = fogG;
             this.fogB = fogB;
+            this.starAlpha = starAlpha;
         }
     }
 
     public final EnumSetting<Theme> theme = addSetting(new EnumSetting<>(
-            "theme", "预设", "深渊灰黑 / 纯黑 / 暗紫 / 血夜 / 极光 / 绯樱", Theme.ABYSS_GRAY
+            "theme", "预设", "绯樱晚霞 / 蔚蓝晴空 / 极光星夜 / 梦幻紫霞 / 鎏金黄昏 / 绯红血月", Theme.SAKURA_SUNSET
+    ));
+
+    public final BoolSetting syncGlobalColor = addSetting(new BoolSetting(
+            "syncGlobalColor", "同步全局色彩", "地平线霞光跟随全局色彩模块", false
     ));
 
     public final BoolSetting overridePacks = addSetting(new BoolSetting(
-            "overridePacks", "覆盖材质包天空", "强制接管 Nuit 等材质包自定义天空，确保天空修改生效", true
+            "overridePacks", "覆盖材质包天空", "自动接管 Nuit 等材质包天空，确保天空渲染生效", true
     ));
 
     public final BoolSetting customSkyAndFog = addSetting(new BoolSetting(
-            "customSkyAndFog", "天空与雾色", "替换天空天幕与远景雾气颜色", true
+            "customSkyAndFog", "天空与地平线雾", "启用天顶与地平线双色大气散射渐变", true
     ));
 
-    public final BoolSetting hideCelestial = addSetting(new BoolSetting(
-            "hideCelestial", "隐藏日月星", "移除太阳月亮与星星", true
+    public final BoolSetting showStars = addSetting(new BoolSetting(
+            "showStars", "璀璨繁星", "在天幕上点亮满天繁星", true
+    ));
+
+    public final BoolSetting hideSunMoon = addSetting(new BoolSetting(
+            "hideCelestial", "隐藏日月", "隐藏原版方形太阳与月亮", false
     ));
 
     public final DoubleSetting fogDistanceScale = addSetting(new DoubleSetting(
-            "fogDistanceScale", "雾距缩放", "越小雾气越近越深邃", 0.55, 0.15, 1.50, 0.05
+            "fogDistanceScale", "霞光延伸度", "调节远景地平线雾气过渡距离", 0.85, 0.25, 1.60, 0.05
     ));
 
     public final BoolSetting oppressiveVignette = addSetting(new BoolSetting(
-            "oppressiveVignette", "暗角", "屏幕四周叠加冷冽深邃暗角", true
+            "oppressiveVignette", "电影暗角", "屏幕上下边缘叠加柔和暗角", false
     ));
 
     public final DoubleSetting vignetteStrength = addSetting(new DoubleSetting(
-            "vignetteStrength", "暗角强度", "调节四周暗角浓重程度", 0.55, 0.1, 1.0, 0.05
+            "vignetteStrength", "暗角强度", "调节四周暗角浓重程度", 0.40, 0.1, 1.0, 0.05
     ).visible(oppressiveVignette::get));
 
-    // Cached reflection handle for Nuit mod (me.flashyreese.mods.nuit.SkyboxManager)
     private static boolean nuitChecked = false;
     private static Method nuitGetInstance = null;
     private static Method nuitIsEnabled = null;
@@ -76,7 +89,7 @@ public class AmbienceModule extends Module {
     private boolean disabledNuitByUs = false;
 
     public AmbienceModule() {
-        super("ambience", "天空氛围", "Ambience", "自定义天空雾色、压抑暗角并支持强制覆盖材质包天空", Category.VISUAL);
+        super("ambience", "天空氛围", "Ambience", "通透双色大气渐变天空与繁星氛围，兼容材质包覆盖", Category.VISUAL);
     }
 
     @Override
@@ -109,19 +122,15 @@ public class AmbienceModule extends Module {
                 nuitSetEnabled.invoke(mgr, true);
                 disabledNuitByUs = false;
             }
-        } catch (Throwable ignored) {
-        }
+        } catch (Throwable ignored) {}
     }
 
     private void restoreNuit() {
         if (!disabledNuitByUs || nuitGetInstance == null) return;
         try {
             Object mgr = nuitGetInstance.invoke(null);
-            if (mgr != null) {
-                nuitSetEnabled.invoke(mgr, true);
-            }
-        } catch (Throwable ignored) {
-        }
+            if (mgr != null) nuitSetEnabled.invoke(mgr, true);
+        } catch (Throwable ignored) {}
         disabledNuitByUs = false;
     }
 
@@ -133,17 +142,40 @@ public class AmbienceModule extends Module {
             nuitGetInstance = cls.getMethod("getInstance");
             nuitIsEnabled = cls.getMethod("isEnabled");
             nuitSetEnabled = cls.getMethod("setEnabled", boolean.class);
-        } catch (Throwable ignored) {
-        }
+        } catch (Throwable ignored) {}
     }
 
     public int getSkyArgb() {
+        if (syncGlobalColor.get()) {
+            int gRgb = GlobalColorModule.resolveRgb(true, theme.get().skyArgb, 0);
+            // Deepen zenith to 55% brightness so horizon glows brighter!
+            int r = Math.round(((gRgb >> 16) & 0xFF) * 0.55f);
+            int g = Math.round(((gRgb >> 8) & 0xFF) * 0.55f);
+            int b = Math.round((gRgb & 0xFF) * 0.65f);
+            return 0xFF000000 | (r << 16) | (g << 8) | b;
+        }
         return theme.get().skyArgb;
     }
 
+    public int getHorizonArgb() {
+        if (syncGlobalColor.get()) {
+            return GlobalColorModule.resolveArgb(true, theme.get().horizonArgb, 2);
+        }
+        return theme.get().horizonArgb;
+    }
+
     public Vector4f getFogColor() {
+        if (syncGlobalColor.get()) {
+            int h = getHorizonArgb();
+            return new Vector4f(((h >> 16) & 0xFF) / 255.0f, ((h >> 8) & 0xFF) / 255.0f, (h & 0xFF) / 255.0f, 1.0f);
+        }
         Theme t = theme.get();
         return new Vector4f(t.fogR, t.fogG, t.fogB, 1.0f);
+    }
+
+    public float getStarBrightness(float vanillaStarBrightness) {
+        if (!showStars.get()) return vanillaStarBrightness;
+        return Math.max(vanillaStarBrightness, theme.get().starAlpha);
     }
 
     public void renderOverlay(GuiGraphics g) {
@@ -151,12 +183,9 @@ public class AmbienceModule extends Module {
         int sw = g.guiWidth();
         int sh = g.guiHeight();
         float str = vignetteStrength.get().floatValue();
-        int edgeA = Math.min(210, Math.round(155 * str));
-        int tintA = Math.min(85, Math.round(30 * str));
-
-        g.fill(0, 0, sw, sh, (tintA << 24) | 0x0004060A);
-        int band = Math.max(28, sh / 5);
-        g.fillGradient(0, 0, sw, band, (edgeA << 24) | 0x00020305, 0x00020305);
-        g.fillGradient(0, sh - band, sw, sh, 0x00020305, (edgeA << 24) | 0x00020305);
+        int edgeA = Math.min(180, Math.round(135 * str));
+        int band = Math.max(24, sh / 5);
+        g.fillGradient(0, 0, sw, band, (edgeA << 24) | 0x00020308, 0x00020308);
+        g.fillGradient(0, sh - band, sw, sh, 0x00020308, (edgeA << 24) | 0x00020308);
     }
 }

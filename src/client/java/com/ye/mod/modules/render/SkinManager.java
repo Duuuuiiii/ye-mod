@@ -21,7 +21,8 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * Manages 50 bundled 64x64 HD skins + user-provided local PNG skins under config/ye/skins/.
+ * Manages 73 bundled 64x64 HD skins (23 Iconic Anime Characters + 50 PvP/Creator Classics)
+ * + user-provided local PNG skins under config/ye/skins/.
  */
 public final class SkinManager {
     private static final Logger LOGGER = LoggerFactory.getLogger("ye-skins");
@@ -29,57 +30,82 @@ public final class SkinManager {
 
     public record SkinEntry(String id, String displayName, Identifier textureId) {}
 
-    private static final String[][] BUNDLED_50 = {
-            {"technoblade", "Technoblade 皇冠战猪"},
-            {"ranboo", "Ranboo 双色末影"},
-            {"philza", "Philza 翠绿死神"},
-            {"grian", "Grian 红衣建筑师"},
-            {"sapnap", "Sapnap 烈焰少年"},
-            {"illumina", "Illumina 暗影速通"},
-            {"purpled", "Purpled 紫晶战神"},
-            {"wallibear", "Wallibear 冰熊战士"},
-            {"hannahxxrose", "Hannah 玫瑰女武神"},
-            {"gamerboy80", "Gamerboy80 墨镜刺客"},
-            {"inteledits", "IntelEdits 极简蓝调"},
-            {"xnestorio", "xNestorio 金眸猎手"},
-            {"tapl", "TapL 苹果骑士"},
-            {"fruitberries", "Fruitberries 翠果高手"},
-            {"feinberg", "Feinberg 黄金智者"},
-            {"couriway", "Couriway 圣光游侠"},
-            {"petezahhutt", "PeteZahHutt 史莱姆王"},
-            {"hbomb94", "HBomb 暗黑绅士"},
-            {"punz", "Punz 白金卫衣"},
-            {"krtzyy", "Krtzyy 紫焰斗士"},
-            {"seapeekay", "Seapeekay 灵狐少年"},
-            {"smajor1995", "Smajor 星彩礼服"},
-            {"ldshadowlady", "LDShadowLady 樱粉魔女"},
-            {"geminitay", "GeminiTay 森系精灵"},
-            {"pearlescentmoon", "Pearl 月光少女"},
-            {"mumbojumbo", "Mumbo 西装绅士"},
-            {"goodtimeswithscar", "Scar 荒野游侠"},
-            {"iskall85", "Iskall 机械义眼"},
-            {"ethoslab", "Etho 暗部忍者"},
-            {"bdoubleo100", "Bdubs 苔原旅人"},
-            {"docm77", "Docm77 赛博半机械"},
-            {"impulsesv", "Impulse 黑黄极客"},
-            {"zombiecleo", "Cleo 幽魂女王"},
-            {"smallishbeans", "Joel 神殿武士"},
-            {"solidaritygaming", "Jimmy 金发警长"},
-            {"inthelittlewood", "Martyn 森林猎人"},
-            {"captainsparklez", "Sparklez 皇家舰长"},
-            {"dantdm", "DanTDM 蓝钻博士"},
-            {"sb737", "SB737 极地企鹅"},
-            {"rekrap2", "Rekrap 暗夜礼帽"},
-            {"clownpierce", "ClownPierce 死神小丑"},
-            {"branzy", "Branzy 虚空紫客"},
-            {"parrotx2", "Parrot 绯红羽客"},
-            {"spokeishere", "Spoke 暗影特工"},
-            {"flamefrags", "FlameFrags 业火剑圣"},
-            {"sammygreen", "SammyGreen 翡翠潮人"},
-            {"tommyinnit", "Tommy 红白少年"},
-            {"tubbo", "Tubbo 翠蜂少年"},
-            {"wilbursoot", "Wilbur 风衣诗人"},
-            {"georgenotfound", "George 蓝白护目镜"}
+    private static final String[][] BUNDLED_SKINS = {
+            // === 23 Featured Anime Character Skins ===
+            {"anime_miku", "初音未来 · 苍绿歌姬"},
+            {"anime_frieren", "芙莉莲 · 葬送魔法使"},
+            {"anime_hutao", "胡桃 · 往生堂主"},
+            {"anime_furina", "芙宁娜 · 水神礼装"},
+            {"anime_raiden", "雷电将军 · 鸣神影"},
+            {"anime_firefly", "流萤 · 星核猎手"},
+            {"anime_kafka", "卡芙卡 · 支配剧幕"},
+            {"anime_hoshinoai", "星野爱 · 传奇偶像"},
+            {"anime_bocchi", "后藤一里 · 孤独摇滚"},
+            {"anime_rem", "蕾姆 · 蓝发女仆"},
+            {"anime_nezuko", "灶门祢豆子 · 鬼灭"},
+            {"anime_gojo", "五条悟 · 六眼无下限"},
+            {"anime_jotaro", "空条承太郎 · 替身使者"},
+            {"anime_dio", "迪奥 DIO · 世界"},
+            {"anime_makima", "玛奇玛 · 支配恶魔"},
+            {"anime_power", "帕瓦 · 血之魔人"},
+            {"anime_megumin", "惠惠 · 爆裂红魔族"},
+            {"anime_zerotwo", "02 · 鹤望兰"},
+            {"anime_asuna", "亚丝娜 · 闪光剑士"},
+            {"anime_kirito", "桐人 · 黑衣剑士"},
+            {"anime_saber", "阿尔托莉雅 · 圣剑王"},
+            {"anime_kurumi", "时崎狂三 · 梦魇精灵"},
+            {"anime_rei", "绫波丽 · 零号机"},
+            // === 50 Classic PvP & Creator Skins ===
+            {"technoblade", "皇冠战猪 Technoblade"},
+            {"ranboo", "双色末影 Ranboo"},
+            {"philza", "翠绿死神 Philza"},
+            {"grian", "红衣建筑师 Grian"},
+            {"sapnap", "烈焰少年 Sapnap"},
+            {"illumina", "暗影速通 Illumina"},
+            {"purpled", "紫晶战神 Purpled"},
+            {"wallibear", "冰熊战士 Wallibear"},
+            {"hannahxxrose", "玫瑰女武神 Hannah"},
+            {"gamerboy80", "墨镜刺客 Gamerboy80"},
+            {"inteledits", "极简蓝调 IntelEdits"},
+            {"xnestorio", "金眸猎手 xNestorio"},
+            {"tapl", "苹果骑士 TapL"},
+            {"fruitberries", "翠果高手 Fruitberries"},
+            {"feinberg", "黄金智者 Feinberg"},
+            {"couriway", "圣光游侠 Couriway"},
+            {"petezahhutt", "史莱姆王 Pete"},
+            {"hbomb94", "暗黑绅士 HBomb"},
+            {"punz", "白金卫衣 Punz"},
+            {"krtzyy", "紫焰斗士 Krtzyy"},
+            {"seapeekay", "灵狐少年 Seapeekay"},
+            {"smajor1995", "星彩礼服 Smajor"},
+            {"ldshadowlady", "樱粉魔女 ShadowLady"},
+            {"geminitay", "森系精灵 GeminiTay"},
+            {"pearlescentmoon", "月光少女 Pearl"},
+            {"mumbojumbo", "西装绅士 Mumbo"},
+            {"goodtimeswithscar", "荒野游侠 Scar"},
+            {"iskall85", "机械义眼 Iskall"},
+            {"ethoslab", "暗部忍者 Etho"},
+            {"bdoubleo100", "苔原旅人 Bdubs"},
+            {"docm77", "赛博半机械 Docm77"},
+            {"impulsesv", "黑黄极客 Impulse"},
+            {"zombiecleo", "幽魂女王 Cleo"},
+            {"smallishbeans", "神殿武士 Joel"},
+            {"solidaritygaming", "金发警长 Jimmy"},
+            {"inthelittlewood", "森林猎人 Martyn"},
+            {"captainsparklez", "皇家舰长 Sparklez"},
+            {"dantdm", "蓝钻博士 DanTDM"},
+            {"sb737", "极地企鹅 SB737"},
+            {"rekrap2", "暗夜礼帽 Rekrap"},
+            {"clownpierce", "死神小丑 ClownPierce"},
+            {"branzy", "虚空紫客 Branzy"},
+            {"parrotx2", "绯红羽客 Parrot"},
+            {"spokeishere", "暗影特工 Spoke"},
+            {"flamefrags", "业火剑圣 FlameFrags"},
+            {"sammygreen", "翡翠潮人 SammyGreen"},
+            {"tommyinnit", "红白少年 Tommy"},
+            {"tubbo", "翠蜂少年 Tubbo"},
+            {"wilbursoot", "风衣诗人 Wilbur"},
+            {"georgenotfound", "蓝白护目镜 George"}
     };
 
     private SkinManager() {}
@@ -94,7 +120,7 @@ public final class SkinManager {
 
     public static void refreshSkins() {
         SKINS.clear();
-        for (String[] row : BUNDLED_50) {
+        for (String[] row : BUNDLED_SKINS) {
             registerBundledPreset("preset:" + row[0], row[1], row[0]);
         }
         try {

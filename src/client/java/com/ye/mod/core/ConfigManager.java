@@ -45,7 +45,7 @@ import java.util.zip.GZIPOutputStream;
  * - GZIP+Base64 compact clipboard share code ("YE1:...")
  */
 public final class ConfigManager {
-    public static final String MOD_VERSION = "1.7.1";
+    public static final String MOD_VERSION = "1.7.2";
     public static final String DEFAULT_PROFILE = "default";
     public static final String TEMPLATE_FILE_STEM = "template";
     private static final String SHARE_PREFIX = "YE1:";
@@ -72,6 +72,8 @@ public final class ConfigManager {
     public static volatile boolean lightTheme = false;
     public static volatile boolean blurBackground = true;
     public static volatile boolean english = false;
+    public static volatile YeSoundPresets.SoundType uiClickSound = YeSoundPresets.SoundType.MECH_SWITCH;
+    public static volatile float uiSoundVolume = 0.85f;
     public static volatile int widgetX = -1;
     public static volatile int widgetY = -1;
     public static final Set<String> customRadarIgnoreBlocks = ConcurrentHashMap.newKeySet();
@@ -103,7 +105,13 @@ public final class ConfigManager {
         saveAsync();
     }
 
-    public static int getAccentColor() { return themeAccent.argb; }
+    public static int getAccentColor() {
+        com.ye.mod.modules.visual.GlobalColorModule gc = ModuleManager.get(com.ye.mod.modules.visual.GlobalColorModule.class);
+        if (gc != null && gc.isEnabled() && gc.syncUiAccent.get()) {
+            return gc.getCurrentArgb(0);
+        }
+        return themeAccent.argb;
+    }
 
     public static final class HudSlot {
         public final String id;
@@ -207,9 +215,23 @@ public final class ConfigManager {
         HUD_SLOTS.put("hud_inv", new HudSlot("hud_inv", "背包预览", "Inventory", false, 6, 168, 2, 0));
         HUD_SLOTS.put("hud_drops", new HudSlot("hud_drops", "附近掉落物", "Nearby Drops", true, 4, 110, 0, 0));
         HUD_SLOTS.put("hud_modules", new HudSlot("hud_modules", "开启列表", "Module List", false, 6, 6, 2, 2));
-        HUD_SLOTS.put("hud_wthit", new HudSlot("hud_wthit", "方块信息", "WTHIT", true, 0, 6, 1, 0));
-        HUD_SLOTS.put("hud_portal", new HudSlot("hud_portal", "坐标换算", "Portal Sync", true, 4, 68, 0, 0));
+        HUD_SLOTS.put("hud_wthit", new HudSlot("hud_wthit", "方块信息", "Block Info", false, 0, 6, 1, 0));
         HUD_SLOTS.put("hud_radar", new HudSlot("hud_radar", "雷达计数", "Radar Count", true, 4, 82, 0, 0));
+    }
+
+    public static void resetSingleHudSlot(String slotId) {
+        Map<String, HudSlot> copy = new LinkedHashMap<>(HUD_SLOTS);
+        resetHudSlotsDefault();
+        HudSlot fresh = HUD_SLOTS.get(slotId);
+        HUD_SLOTS.clear();
+        HUD_SLOTS.putAll(copy);
+        if (fresh != null && HUD_SLOTS.containsKey(slotId)) {
+            HudSlot cur = HUD_SLOTS.get(slotId);
+            cur.x = fresh.x;
+            cur.y = fresh.y;
+            cur.anchorX = fresh.anchorX;
+            cur.anchorY = fresh.anchorY;
+        }
     }
 
     public static String tr(String zh, String en) {
@@ -611,6 +633,8 @@ public final class ConfigManager {
         lightTheme = false;
         blurBackground = true;
         english = false;
+        uiClickSound = YeSoundPresets.SoundType.MECH_SWITCH;
+        uiSoundVolume = 0.85f;
         customRadarIgnoreBlocks.clear();
         resetHudSlotsDefault();
         for (Module m : ModuleManager.getAll()) {
@@ -638,6 +662,12 @@ public final class ConfigManager {
             if (root.has("lightTheme")) lightTheme = root.get("lightTheme").getAsBoolean();
             if (root.has("blurBackground")) blurBackground = root.get("blurBackground").getAsBoolean();
             if (root.has("english")) english = root.get("english").getAsBoolean();
+            if (root.has("uiClickSound")) {
+                try {
+                    uiClickSound = YeSoundPresets.SoundType.valueOf(root.get("uiClickSound").getAsString());
+                } catch (Exception ignored) {}
+            }
+            if (root.has("uiSoundVolume")) uiSoundVolume = root.get("uiSoundVolume").getAsFloat();
 
             if (root.has("customRadarIgnoreBlocks") && root.get("customRadarIgnoreBlocks").isJsonArray()) {
                 customRadarIgnoreBlocks.clear();
@@ -728,6 +758,8 @@ public final class ConfigManager {
         root.addProperty("lightTheme", lightTheme);
         root.addProperty("blurBackground", blurBackground);
         root.addProperty("english", english);
+        root.addProperty("uiClickSound", uiClickSound.name());
+        root.addProperty("uiSoundVolume", uiSoundVolume);
 
         JsonArray ignoreArr = new JsonArray();
         for (String id : customRadarIgnoreBlocks) ignoreArr.add(id);

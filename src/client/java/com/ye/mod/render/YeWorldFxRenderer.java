@@ -4,17 +4,15 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.ye.mod.core.ModuleManager;
-import com.ye.mod.modules.visual.BlackHoleSkyModule;
+import com.ye.mod.modules.visual.GlobalColorModule;
 import com.ye.mod.modules.visual.HitFeedbackModule;
 import com.ye.mod.modules.visual.SoulAscendModule;
 import com.ye.mod.modules.visual.StepDecalsModule;
 import com.ye.mod.modules.visual.VoxelShatterModule;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.state.LevelRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.resources.Identifier;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
@@ -23,9 +21,11 @@ import org.joml.Vector4f;
 import java.util.List;
 
 /**
- * High-resolution 3D World Textured Geometry Renderer + 3D->2D Screen Projector.
- * Renders 512x512 Black Hole, 256x256 Step Decals, 256x256 Hit Shockwaves,
- * 128x128 Soul Wisps, and Single-Batch Voxel Shatter Shards directly through SubmitNodeCollector!
+ * High-resolution 3D World Geometry Renderer + 3D->2D Screen Projector:
+ * - Crisp 3D Glowing Voxel/Block Matrix Footprints (single GPU batch!)
+ * - 256x256 Hit Shockwaves
+ * - 128x128 Soul Wisps
+ * - 144/240Hz Frame-Interpolated Voxel Shatter Shards (single GPU batch!)
  */
 public final class YeWorldFxRenderer {
     private static final Matrix4f LAST_VIEW_PROJ = new Matrix4f();
@@ -40,9 +40,6 @@ public final class YeWorldFxRenderer {
         hasValidMatrix = true;
     }
 
-    /**
-     * Projects a 3D world position onto 2D GUI screen coordinates [x, y], or returns null if behind camera.
-     */
     public static float[] projectWorldToGui(double wx, double wy, double wz, int guiW, int guiH) {
         if (!hasValidMatrix) return null;
         float rx = (float) (wx - lastCameraPos.x);
@@ -66,87 +63,98 @@ public final class YeWorldFxRenderer {
         Quaternionf camRot = state.cameraRenderState.orientation;
         long now = System.currentTimeMillis();
 
-        renderBlackHole(poseStack, collector, cam, camRot, now);
-        renderStepDecals(poseStack, collector, cam, now);
+        renderBlockStepMatrix(poseStack, collector, cam, now);
         renderHitShockwaves(poseStack, collector, cam, camRot, now);
         renderSoulWisps(poseStack, collector, cam, camRot, now);
         renderVoxelShardsSingleBatch(poseStack, collector, cam, now);
     }
 
-    private static void renderBlackHole(PoseStack ps, SubmitNodeCollector collector, Vec3 cam, Quaternionf camRot, long now) {
-        BlackHoleSkyModule bh = ModuleManager.get(BlackHoleSkyModule.class);
-        if (bh == null || !bh.isEnabled()) return;
-
-        float sz = bh.size.get().floatValue();
-        float elev = bh.elevation.get().floatValue();
-        float spinDeg = (float) (((now / 25.0) * bh.spinSpeed.get()) % 360.0);
-        BlackHoleSkyModule.Theme th = bh.theme.get();
-
-        // Positioned high in the sky relative to camera so it hangs majestically like a celestial body
-        float dx = 0.0f;
-        float dy = elev;
-        float dz = -78.0f;
-        float coreHalf = 15.5f * sz;
-        float diskHalf = 34.0f * sz;
-
-        // 1) Camera-facing Gargantua Shadow + Photon Ring + Einstein Lensing Halo (512x512)
-        ps.pushPose();
-        ps.translate(dx, dy, dz);
-        if (camRot != null) ps.mulPose(camRot);
-        int haloArgb = 0xFF000000 | (th.innerCol & 0x00FFFFFF);
-        collector.submitCustomGeometry(ps, RenderTypes.entityTranslucent(YeHighResTextures.BLACK_HOLE_CORE_TEX), (pose, vc) ->
-                emitBillboardQuad(pose, vc, coreHalf, haloArgb));
-        ps.popPose();
-
-        // 2) Tilted 3D Relativistic Accretion Disk (outer + hot inner counter-swirl, 512x512)
-        ps.pushPose();
-        ps.translate(dx, dy, dz);
-        ps.mulPose(Axis.XP.rotationDegrees(72.0f));
-        ps.mulPose(Axis.ZP.rotationDegrees(-12.0f));
-        ps.pushPose();
-        ps.mulPose(Axis.YP.rotationDegrees(spinDeg));
-        int diskCol = 0xFA000000 | (th.midCol & 0x00FFFFFF);
-        collector.submitCustomGeometry(ps, RenderTypes.entityTranslucent(YeHighResTextures.BLACK_HOLE_DISK_TEX), (pose, vc) ->
-                emitHorizontalQuad(pose, vc, diskHalf, diskCol));
-        ps.popPose();
-
-        ps.pushPose();
-        ps.translate(0.0f, 0.18f, 0.0f);
-        ps.mulPose(Axis.YP.rotationDegrees(spinDeg * 1.65f + 45.0f));
-        int innerCol = 0xDD000000 | (th.innerCol & 0x00FFFFFF);
-        collector.submitCustomGeometry(ps, RenderTypes.entityTranslucent(YeHighResTextures.BLACK_HOLE_DISK_TEX), (pose, vc) ->
-                emitHorizontalQuad(pose, vc, diskHalf * 0.68f, innerCol));
-        ps.popPose();
-        ps.popPose();
-    }
-
-    private static void renderStepDecals(PoseStack ps, SubmitNodeCollector collector, Vec3 cam, long now) {
+    /**
+     * Crisp 3D Voxel/Block Matrix Footprints (single-batch or clean rotated 3D slabs — zero blurry grey rings!).
+     */
+    private static void renderBlockStepMatrix(PoseStack ps, SubmitNodeCollector collector, Vec3 cam, long now) {
         StepDecalsModule sd = ModuleManager.get(StepDecalsModule.class);
         if (sd == null || !sd.isEnabled()) return;
-        List<StepDecalsModule.Decal> list = sd.getDecals();
+        List<StepDecalsModule.Decal> list = sd.snapshotDecals();
         if (list.isEmpty()) return;
 
-        Identifier tex = switch (sd.style.get()) {
-            case LAVA_SCORCH -> YeHighResTextures.STEP_LAVA_TEX;
-            case CYBER_RUNE -> YeHighResTextures.STEP_CYBER_TEX;
-            case VOID_ASTROLABE -> YeHighResTextures.STEP_VOID_TEX;
-            case STAR_SIGIL -> YeHighResTextures.STEP_STAR_TEX;
-        };
-        float baseR = sd.scale.get().floatValue();
+        StepDecalsModule.Style st = sd.style.get();
+        int outerRgb = GlobalColorModule.resolveRgb(sd.syncGlobalColor.get(), st.outerArgb & 0x00FFFFFF, 6);
+        int coreRgb = sd.syncGlobalColor.get() ? 0xFFFFFF : (st.coreArgb & 0x00FFFFFF);
+        float baseS = sd.scale.get().floatValue();
 
         for (StepDecalsModule.Decal d : list) {
             long age = now - d.spawnMs();
-            if (age < 0 || age > 2600L) continue;
-            float t = age / 2600.0f;
-            float r = baseR * (0.85f + 0.25f * t);
-            int alpha = Math.max(8, Math.round((1.0f - t * t) * 240.0f));
-            int col = (alpha << 24) | 0x00FFFFFF;
+            if (age < 0 || age > 2400L) continue;
+            float t = age / 2400.0f;
+            float fade = (1.0f - t) * (1.0f - t * 0.5f);
+            int aMain = Math.max(12, Math.round(fade * 235.0f));
+            int aSub = Math.max(8, Math.round(fade * 145.0f));
+            int colOuter = (aMain << 24) | outerRgb;
+            int colCore = (aMain << 24) | coreRgb;
+            int colRim = (aSub << 24) | outerRgb;
+
+            float r = baseS * (0.92f + t * 0.16f);
+            float h = 0.026f * (1.0f - t * 0.45f);
 
             ps.pushPose();
             ps.translate(d.x() - cam.x, d.y() - cam.y, d.z() - cam.z);
-            ps.mulPose(Axis.YP.rotationDegrees(-d.yaw() + t * 28.0f));
-            collector.submitCustomGeometry(ps, RenderTypes.entityTranslucent(tex), (pose, vc) ->
-                    emitHorizontalQuad(pose, vc, r, col));
+            ps.mulPose(Axis.YP.rotationDegrees(-d.yaw()));
+
+            collector.submitCustomGeometry(ps, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
+                switch (st) {
+                    case CYBER_MATRIX -> {
+                        // Crisp 3D pixel-frame borders + glowing center block + floating corner micro-voxels!
+                        float tk = r * 0.18f;
+                        drawSmallBox(pose, vc, colOuter, -r, 0f, -r, r, h, -r + tk);
+                        drawSmallBox(pose, vc, colOuter, -r, 0f, r - tk, r, h, r);
+                        drawSmallBox(pose, vc, colOuter, -r, 0f, -r + tk, -r + tk, h, r - tk);
+                        drawSmallBox(pose, vc, colOuter, r - tk, 0f, -r + tk, r, h, r - tk);
+                        float cr = r * 0.36f;
+                        drawSmallBox(pose, vc, colCore, -cr, 0.005f, -cr, cr, h * 1.45f, cr);
+                        float lift = t * 0.14f;
+                        float cs = r * 0.16f;
+                        drawSmallBox(pose, vc, colRim, -r - cs, lift, -r - cs, -r, lift + cs, -r);
+                        drawSmallBox(pose, vc, colRim, r, lift, r, r + cs, lift + cs, r + cs);
+                    }
+                    case MAGMA_EMBER -> {
+                        // Dark basalt outer slab + bright molten lava core blocks + rising ember cubes!
+                        int crustCol = (aMain << 24) | 0x291D1E;
+                        drawSmallBox(pose, vc, crustCol, -r, 0f, -r, r, h * 0.85f, r);
+                        float mr = r * 0.72f;
+                        drawSmallBox(pose, vc, colOuter, -mr, 0.004f, -mr, mr, h * 1.35f, mr);
+                        float ir = r * 0.38f;
+                        drawSmallBox(pose, vc, colCore, -ir, 0.008f, -ir, ir, h * 1.75f, ir);
+                        float emberY = 0.03f + t * 0.22f;
+                        float es = r * 0.14f;
+                        drawSmallBox(pose, vc, colCore, -es, emberY, -es, es, emberY + es * 1.5f, es);
+                    }
+                    case FROST_CRYSTAL -> {
+                        // Crossed 3D ice-crystal bars + elevated central prism cube
+                        float wBar = r * 0.28f;
+                        drawSmallBox(pose, vc, colOuter, -r, 0f, -wBar, r, h * 1.2f, wBar);
+                        drawSmallBox(pose, vc, colOuter, -wBar, 0f, -r, wBar, h * 1.2f, r);
+                        float diag = r * 0.62f;
+                        drawSmallBox(pose, vc, colRim, -diag, 0.003f, -diag, diag, h * 0.9f, diag);
+                        float pc = r * 0.26f;
+                        drawSmallBox(pose, vc, colCore, -pc, 0.008f, -pc, pc, h * 2.0f, pc);
+                    }
+                    case GOLD_SEAL -> {
+                        // Stepped imperial square seal with four corner pillars
+                        drawSmallBox(pose, vc, colRim, -r, 0f, -r, r, h * 0.8f, r);
+                        float r2 = r * 0.66f;
+                        drawSmallBox(pose, vc, colOuter, -r2, h * 0.8f, -r2, r2, h * 1.5f, r2);
+                        float psSz = r * 0.22f;
+                        for (int sx : new int[]{-1, 1}) {
+                            for (int sz : new int[]{-1, 1}) {
+                                float px0 = sx > 0 ? r - psSz : -r;
+                                float pz0 = sz > 0 ? r - psSz : -r;
+                                drawSmallBox(pose, vc, colCore, px0, 0f, pz0, px0 + psSz, h * 2.1f, pz0 + psSz);
+                            }
+                        }
+                    }
+                }
+            });
             ps.popPose();
         }
     }
@@ -173,10 +181,11 @@ public final class YeWorldFxRenderer {
             int aWave = Math.max(10, Math.round((1.0f - t) * 245.0f));
             int aFlare = Math.max(10, Math.round((1.0f - t) * (1.0f - t) * 255.0f));
 
-            int colOuter = (aWave << 24) | pType.outerRgb;
-            int colCore = (aFlare << 24) | pType.coreRgb;
+            int outerRgb = GlobalColorModule.resolveRgb(hf.syncGlobalColor.get(), pType.outerRgb, 7);
+            int coreRgb = hf.syncGlobalColor.get() ? 0xFFFFFF : pType.coreRgb;
+            int colOuter = (aWave << 24) | outerRgb;
+            int colCore = (aFlare << 24) | coreRgb;
 
-            // 1) Camera-facing star flare & shockwave burst
             ps.pushPose();
             ps.translate(p.pos().x - cam.x, p.pos().y - cam.y, p.pos().z - cam.z);
             if (camRot != null) ps.mulPose(camRot);
@@ -185,7 +194,6 @@ public final class YeWorldFxRenderer {
                     emitBillboardQuad(pose, vc, flareR, colCore));
             ps.popPose();
 
-            // 2) Horizontal expanding 3D shockwave ring
             ps.pushPose();
             ps.translate(p.pos().x - cam.x, p.pos().y - cam.y, p.pos().z - cam.z);
             ps.mulPose(Axis.YP.rotationDegrees(p.rotOffset() - t * 90.0f));
@@ -224,16 +232,15 @@ public final class YeWorldFxRenderer {
     private static void renderVoxelShardsSingleBatch(PoseStack ps, SubmitNodeCollector collector, Vec3 cam, long now) {
         VoxelShatterModule vs = ModuleManager.get(VoxelShatterModule.class);
         if (vs == null || !vs.isEnabled()) return;
-        List<VoxelShatterModule.VoxelPiece> pieces = vs.getPieces();
+        List<VoxelShatterModule.VoxelPiece> pieces = vs.stepAndSnapshot(now);
         if (pieces.isEmpty()) return;
 
-        // ONE SINGLE GPU draw call for all active shards -> ZERO FPS drop!
         final double cx = cam.x, cy = cam.y, cz = cam.z;
         collector.submitCustomGeometry(ps, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
             for (VoxelShatterModule.VoxelPiece p : pieces) {
                 float age = (now - p.spawnMs) / 1600.0f;
                 if (age < 0f || age > 1f) continue;
-                int a = Math.max(15, Math.round((1.0f - age) * 240.0f));
+                int a = Math.max(15, Math.round((1.0f - age) * 245.0f));
                 int argb = (a << 24) | (p.rgb & 0x00FFFFFF);
                 float hs = (float) (p.size * 0.5 * (1.0f - age * 0.35f));
                 float rx = (float) (p.x - cx);

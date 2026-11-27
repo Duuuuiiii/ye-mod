@@ -8,6 +8,7 @@ import com.ye.mod.modules.render.AccessoriesModule;
 import com.ye.mod.modules.render.DragonWingsModule;
 import com.ye.mod.modules.render.FlightModelModule;
 import com.ye.mod.modules.render.StandBuddyModule;
+import com.ye.mod.modules.visual.GlobalColorModule;
 import com.ye.mod.modules.visual.SoulRingsModule;
 import com.ye.mod.render.stand.YeBedrockGeoModel;
 import com.ye.mod.render.wings.YeAvianWingsModel;
@@ -30,10 +31,11 @@ import net.minecraft.resources.Identifier;
 
 /**
  * High-resolution 3D Cosmetic Layer on AvatarRenderer:
- * - Dual-category Wings: Hypixel/Lunar PvP DragonWings + 4-joint Fantastic Avian Wings
+ * - Correctly oriented Lunar/Badlion PvP DragonWings + 4-joint Fantastic Avian Wings (with Only-When-Gliding support)
  * - 7 Authentic JoJo 3D Stand Models + Player Avatar Stand
- * - Properly seated Magic Broom + Forward EnderDragon + Phantom + Xianxia Spirit Sword
- * - 512x512 Ultra-HD Soul Rings with per-ring custom colors, speeds, and spacing
+ * - 10 Sculpted 3D Flight Mounts (Cloud Nimbus, Mecha Jet, Star Astrolabe, Giant Shuriken, Paper Glider, Sword, Broom, Dragon, Phantom)
+ * - Head & Face 3D Accessories (all tails removed!)
+ * - 512x512 Ultra-HD Soul Rings
  */
 public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
     private static final Identifier DRAGON_TEX = Identifier.withDefaultNamespace("textures/entity/enderdragon/dragon.png");
@@ -64,19 +66,19 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
         boolean isSelf = mc.player != null && state.id == mc.player.getId();
 
         DragonWingsModule wings = ModuleManager.get(DragonWingsModule.class);
-        if (wings != null && wings.isEnabled() && (!wings.onlySelf.get() || isSelf)) {
-            if (!wings.hideWithElytra.get() || !state.isFallFlying) {
-                renderWings(poseStack, collector, packedLight, state, wings);
-            }
+        boolean forceWingsPreview = com.ye.mod.ui.YePreviewRenderer.isPreviewingWings;
+        if (wings != null && (forceWingsPreview || wings.shouldRenderWings(state.isFallFlying)) && (!wings.onlySelf.get() || isSelf)) {
+            renderWings(poseStack, collector, packedLight, state, wings);
         }
 
         AccessoriesModule acc = ModuleManager.get(AccessoriesModule.class);
         if (acc != null && acc.isEnabled() && (!acc.onlySelf.get() || isSelf)) {
-            renderHeadAccessory(poseStack, collector, packedLight, acc);
+            renderHeadAndFaceAccessory(poseStack, collector, packedLight, acc);
         }
 
         FlightModelModule flight = ModuleManager.get(FlightModelModule.class);
-        if (flight != null && flight.isEnabled() && state.isFallFlying && (!flight.onlySelf.get() || isSelf)) {
+        boolean forceMountPreview = com.ye.mod.ui.YePreviewRenderer.isPreviewingMount;
+        if (flight != null && (forceMountPreview || (flight.isEnabled() && state.isFallFlying)) && (!flight.onlySelf.get() || isSelf)) {
             renderFlightMount(poseStack, collector, packedLight, state, flight);
         }
 
@@ -133,7 +135,6 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
         float oy = stand.offsetY.get().floatValue();
         float oz = stand.offsetZ.get().floatValue();
         if (attacking) {
-            // Lunge forward in front-side of user when delivering Ora-Ora / Muda-Muda barrage!
             ox *= 0.45f;
             oz = -0.55f;
         }
@@ -153,7 +154,8 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
                 standPlayerModel.rightArm.xRot = -0.38f;
                 standPlayerModel.leftArm.xRot = -0.32f;
             }
-            int col = (alphaByte << 24) | 0x00A5F3FC;
+            int tintRgb = stand.syncGlobalColor.get() ? GlobalColorModule.resolveRgb(true, 0xA5F3FC, 1) : 0x00A5F3FC;
+            int col = (alphaByte << 24) | tintRgb;
             collector.submitModelPart(
                     standPlayerModel.root(),
                     poseStack,
@@ -166,13 +168,14 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
             YeBedrockGeoModel geo = YeBedrockGeoModel.getOrLoad(mType.geoPath);
             geo.setupStandAnim(yRot, xRot, attacking, now);
             Identifier tex = Identifier.fromNamespaceAndPath("ye-mod", mType.texPath);
-            int col = (alphaByte << 24) | 0x00FFFFFF;
+            int tintRgb = stand.syncGlobalColor.get() ? GlobalColorModule.resolveRgb(true, 0xFFFFFF, 1) : 0x00FFFFFF;
+            int col = (alphaByte << 24) | tintRgb;
             geo.submit(poseStack, collector, tex, 0xF000F0, col);
         }
         poseStack.popPose();
     }
 
-    private void renderHeadAccessory(PoseStack poseStack, SubmitNodeCollector collector, int light, AccessoriesModule acc) {
+    private void renderHeadAndFaceAccessory(PoseStack poseStack, SubmitNodeCollector collector, int light, AccessoriesModule acc) {
         AccessoriesModule.HeadItem head = acc.headItem.get();
         if (head != AccessoriesModule.HeadItem.NONE) {
             AccessoriesModule.ItemTransform ht = acc.getHeadTransform(head);
@@ -307,122 +310,237 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
             });
             poseStack.popPose();
         }
-
-        AccessoriesModule.TailItem tail = acc.tailItem.get();
-        if (tail != AccessoriesModule.TailItem.NONE) {
-            poseStack.pushPose();
-            this.getParentModel().body.translateAndRotate(poseStack);
-            poseStack.translate(0.0f, 0.62f, 0.14f);
-            float ts = acc.tailScale.get().floatValue();
-            poseStack.scale(ts, ts, ts);
-            float wag = (float) Math.sin(System.currentTimeMillis() / 240.0) * 14.0f;
-            poseStack.mulPose(Axis.YP.rotationDegrees(wag));
-            collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
-                switch (tail) {
-                    case NINE_TAILS -> {
-                        for (int i = -2; i <= 2; i++) {
-                            float ox = i * 0.12f;
-                            float oz = 0.20f + Math.abs(i) * 0.04f;
-                            drawBox(pose, vc, light, 0xFFF8FAFC, ox - 0.05f, -0.08f, 0.0f, ox + 0.05f, 0.06f, oz + 0.18f);
-                            drawBox(pose, vc, 0xF000F0, 0xFFF472B6, ox - 0.04f, -0.14f, oz + 0.14f, ox + 0.04f, -0.02f, oz + 0.30f);
-                        }
-                    }
-                    case DEVIL_TAIL -> {
-                        drawBox(pose, vc, light, 0xFF7F1D1D, -0.03f, -0.04f, 0.0f, 0.03f, 0.02f, 0.34f);
-                        drawBox(pose, vc, 0xF000F0, 0xFFEF4444, -0.07f, -0.07f, 0.32f, 0.07f, 0.05f, 0.44f);
-                    }
-                    case DRAGON_TAIL -> {
-                        drawBox(pose, vc, light, 0xFF1E1B2E, -0.05f, -0.05f, 0.0f, 0.05f, 0.05f, 0.42f);
-                        drawBox(pose, vc, 0xF000F0, 0xFFA855F7, -0.03f, -0.09f, 0.16f, 0.03f, -0.04f, 0.24f);
-                        drawBox(pose, vc, 0xF000F0, 0xFFA855F7, -0.03f, -0.09f, 0.32f, 0.03f, -0.04f, 0.40f);
-                    }
-                    default -> {}
-                }
-            });
-            poseStack.popPose();
-        }
     }
 
     private void renderFlightMount(PoseStack poseStack, SubmitNodeCollector collector, int packedLight,
                                    AvatarRenderState state, FlightModelModule flight) {
         FlightModelModule.FlightPreset preset = flight.preset.get();
-        if (preset == FlightModelModule.FlightPreset.UPRIGHT || preset == FlightModelModule.FlightPreset.SUPERMAN) {
+        if (preset == FlightModelModule.FlightPreset.SUPERMAN) {
             return;
         }
 
         float sc = flight.modelScale.get().floatValue();
         float wSpeed = flight.wingSpeed.get().floatValue();
+        boolean trail = flight.energyTrail.get();
+        float offY = flight.customMode.get() ? flight.offsetY.get().floatValue() : 0.0f;
+        float offZ = flight.customMode.get() ? flight.offsetZ.get().floatValue() : 0.0f;
+        float tilt = flight.customMode.get() ? flight.tiltAngle.get().floatValue() : 0.0f;
         long now = System.currentTimeMillis();
+        int accentArgb = GlobalColorModule.resolveArgb(flight.syncGlobalColor.get(), 0xFF38BDF8, 3);
+        int goldArgb = GlobalColorModule.resolveArgb(flight.syncGlobalColor.get(), 0xFFFACC15, 1);
 
-        if (preset == FlightModelModule.FlightPreset.MAGIC_BROOM) {
-            poseStack.pushPose();
-            // Fixed Y from 1.38f -> 0.86f so the sitting player's hips rest directly on the broomstick shaft!
-            poseStack.translate(0.0f, 0.86f, 0.0f);
-            poseStack.scale(sc, sc, sc);
-            collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
-                // Sculpted mahogany shaft + ergonomic curved nose + cushion saddle pad
-                drawBox(pose, vc, packedLight, 0xFF4A2C16, -0.052f, -0.052f, -1.08f, 0.052f, 0.052f, 0.62f);
-                drawBox(pose, vc, packedLight, 0xFF6B3E1E, -0.042f, -0.105f, -1.24f, 0.042f, -0.015f, -1.04f);
-                drawBox(pose, vc, 0xF000F0, 0xFFFACC15, -0.062f, -0.115f, -1.28f, 0.062f, -0.055f, -1.20f);
-                // Velvet saddle wrap right under rider
-                drawBox(pose, vc, packedLight, 0xFF7F1D1D, -0.072f, -0.068f, -0.22f, 0.072f, 0.062f, 0.22f);
-                // Dual gold arcane binding collars
-                drawBox(pose, vc, 0xF000F0, 0xFFFACC15, -0.088f, -0.088f, 0.54f, 0.088f, 0.088f, 0.64f);
-                drawBox(pose, vc, 0xF000F0, 0xFFF59E0B, -0.125f, -0.115f, 0.78f, 0.125f, 0.115f, 0.84f);
-                // Rich multi-tiered straw bristles tail
-                drawBox(pose, vc, packedLight, 0xFFD97706, -0.145f, -0.125f, 0.64f, 0.145f, 0.125f, 1.04f);
-                drawBox(pose, vc, packedLight, 0xFFF59E0B, -0.195f, -0.165f, 0.84f, 0.195f, 0.165f, 1.28f);
-                drawBox(pose, vc, packedLight, 0xFFB45309, -0.125f, -0.105f, 1.22f, 0.125f, 0.105f, 1.44f);
-            });
-            poseStack.popPose();
-            return;
-        }
-
-        if (preset == FlightModelModule.FlightPreset.MINI_DRAGON) {
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 1.35f, 0.0f);
-            float dScale = sc * 0.24f;
-            poseStack.scale(dScale, dScale, dScale);
-            dragonState.flapTime = (now % 60000L) / 1000.0f * wSpeed;
-            dragonState.ageInTicks = state.ageInTicks;
-            collector.submitModel(dragonModel, dragonState, poseStack, RenderTypes.entityCutoutNoCull(DRAGON_TEX),
-                    packedLight, OverlayTexture.NO_OVERLAY, state.outlineColor, null);
-            poseStack.popPose();
-            return;
-        }
-
-        if (preset == FlightModelModule.FlightPreset.MINI_PHANTOM) {
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 1.45f, 0.0f);
-            float pScale = sc * 1.15f;
-            poseStack.scale(pScale, pScale, pScale);
-            phantomState.flapTime = (now % 60000L) / 1000.0f * wSpeed * 2.2f;
-            phantomState.ageInTicks = state.ageInTicks;
-            collector.submitModel(phantomModel, phantomState, poseStack, RenderTypes.entityCutoutNoCull(PHANTOM_TEX),
-                    packedLight, OverlayTexture.NO_OVERLAY, state.outlineColor, null);
-            poseStack.popPose();
-            return;
-        }
-
-        // Textured Xianxia Spirit Sword
         poseStack.pushPose();
-        poseStack.translate(0.0f, 1.48f, 0.0f);
-        poseStack.scale(sc, sc, sc);
-        float spin = ((now % 4000L) / 4000.0f) * 360.0f;
-        collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
-            drawBox(pose, vc, 0xF000F0, 0xFFE0F2FE, -0.055f, -0.03f, -1.08f, 0.055f, 0.03f, 0.55f);
-            drawBox(pose, vc, 0xF000F0, 0xCC38BDF8, -0.14f, -0.015f, -0.98f, 0.14f, 0.015f, 0.55f);
-            drawBox(pose, vc, 0xF000F0, 0xFFFBBF24, -0.36f, -0.045f, 0.53f, 0.36f, 0.045f, 0.65f);
-            drawBox(pose, vc, packedLight, 0xFF7C2D12, -0.048f, -0.035f, 0.65f, 0.048f, 0.035f, 1.00f);
-            drawBox(pose, vc, 0xF000F0, 0xFFA855F7, -0.075f, -0.055f, 1.00f, 0.075f, 0.055f, 1.12f);
-        });
-        poseStack.mulPose(Axis.YP.rotationDegrees(spin));
-        collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.RING_ARRAY_TEX), (pose, vc) ->
-                drawDoubleUvQuad(pose, vc, 0xF000F0, 0xCC38BDF8,
-                        -0.75f, 0.07f, -0.75f, 0f, 0f,
-                        0.75f, 0.07f, -0.75f, 1f, 0f,
-                        0.75f, 0.07f, 0.75f, 1f, 1f,
-                        -0.75f, 0.07f, 0.75f, 0f, 1f));
+        poseStack.translate(0.0f, offY, offZ);
+        if (Math.abs(tilt) > 0.01f) {
+            poseStack.mulPose(Axis.XP.rotationDegrees(tilt));
+        }
+
+        switch (preset) {
+            case CLOUD_NIMBUS -> {
+                // Billowing Multi-Layered Somersault Cloud (筋斗祥云) + Golden Thunder Trim & Floating Tail Puffs!
+                float bob = (float) Math.sin((now / 260.0) * wSpeed) * 0.045f;
+                poseStack.translate(0.0f, 0.92f + bob, 0.0f);
+                poseStack.scale(sc, sc, sc);
+                collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
+                    int cPure = 0xF5FFFBEB;
+                    int cWarm = 0xEEFEF3C7;
+                    int cGold = (0xEE << 24) | (goldArgb & 0x00FFFFFF);
+                    // Central main cloud cushion
+                    drawBox(pose, vc, 0xF000F0, cPure, -0.52f, -0.14f, -0.68f, 0.52f, 0.16f, 0.58f);
+                    drawBox(pose, vc, 0xF000F0, cWarm, -0.66f, -0.06f, -0.48f, 0.66f, 0.18f, 0.42f);
+                    // Front billowing crest
+                    drawBox(pose, vc, 0xF000F0, cPure, -0.38f, -0.22f, -0.88f, 0.38f, 0.12f, -0.52f);
+                    drawBox(pose, vc, 0xF000F0, cGold, -0.42f, -0.10f, -0.92f, 0.42f, -0.03f, -0.86f);
+                    // Side cloud curls
+                    drawBox(pose, vc, 0xF000F0, cPure, -0.78f, -0.12f, -0.25f, -0.52f, 0.12f, 0.28f);
+                    drawBox(pose, vc, 0xF000F0, cPure, 0.52f, -0.12f, -0.25f, 0.78f, 0.12f, 0.28f);
+                    // Golden auspicious trim bands
+                    drawBox(pose, vc, 0xF000F0, cGold, -0.56f, 0.15f, -0.60f, 0.56f, 0.19f, 0.50f);
+                    if (trail) {
+                        for (int i = 1; i <= 3; i++) {
+                            float tz = 0.55f + i * 0.34f;
+                            float ty = (float) Math.sin((now / 180.0) * wSpeed - i) * 0.06f;
+                            float hw = Math.max(0.12f, 0.40f - i * 0.09f);
+                            int a = Math.max(60, 235 - i * 50);
+                            drawBox(pose, vc, 0xF000F0, (a << 24) | 0x00FEF3C7, -hw, ty - 0.08f, tz, hw, ty + 0.10f, tz + 0.26f);
+                        }
+                    }
+                });
+            }
+            case MECHA_JET -> {
+                // Back-mounted Armored Mecha Thruster Pack + Swept Hard-Light Blades + Dual Plasma Cones!
+                poseStack.translate(0.0f, 0.22f, 0.18f);
+                poseStack.scale(sc, sc, sc);
+                float pulse = 0.85f + 0.28f * (float) Math.sin((now / 55.0) * wSpeed);
+                collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
+                    int armorDark = 0xFF1E293B;
+                    int armorSilver = 0xFFCBD5E1;
+                    int plasma = (0xEE << 24) | (accentArgb & 0x00FFFFFF);
+                    int plasmaCore = 0xFFFFFFFF;
+
+                    // Spine reactor core
+                    drawBox(pose, vc, packedLight, armorDark, -0.20f, -0.10f, 0.0f, 0.20f, 0.44f, 0.15f);
+                    drawBox(pose, vc, 0xF000F0, plasma, -0.08f, 0.04f, 0.14f, 0.08f, 0.28f, 0.18f);
+
+                    for (int s : new int[]{-1, 1}) {
+                        // Angled twin turbine pods
+                        float px = s * 0.28f;
+                        drawBox(pose, vc, packedLight, armorSilver, px - 0.09f, -0.08f, 0.04f, px + 0.09f, 0.36f, 0.22f);
+                        drawBox(pose, vc, packedLight, armorDark, px - 0.07f, 0.36f, 0.06f, px + 0.07f, 0.46f, 0.20f);
+                        // Swept hard-light aero blades
+                        drawBox(pose, vc, packedLight, armorSilver, s * 0.36f - 0.05f, -0.04f, 0.08f, s * 0.92f + 0.05f, 0.04f, 0.16f);
+                        drawBox(pose, vc, 0xF000F0, plasma, s * 0.38f - 0.04f, 0.04f, 0.10f, s * 1.15f + 0.04f, 0.14f, 0.14f);
+
+                        if (trail) {
+                            float flameLen = 0.58f * pulse;
+                            drawBox(pose, vc, 0xF000F0, plasma, px - 0.065f, 0.46f, 0.07f, px + 0.065f, 0.46f + flameLen, 0.19f);
+                            drawBox(pose, vc, 0xF000F0, plasmaCore, px - 0.03f, 0.46f, 0.10f, px + 0.03f, 0.46f + flameLen * 0.65f, 0.16f);
+                        }
+                    }
+                });
+            }
+            case STAR_ASTROLABE -> {
+                // Dual Counter-Rotating 512x512 Star Astrolabe Discs + Floating Crystal Nodes under feet!
+                poseStack.translate(0.0f, 1.48f, 0.0f);
+                poseStack.scale(sc, sc, sc);
+                float spin1 = (float) (((now / 18.0) * wSpeed) % 360.0);
+                float spin2 = -spin1 * 1.45f;
+
+                poseStack.pushPose();
+                poseStack.mulPose(Axis.YP.rotationDegrees(spin1));
+                collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.RING_ARRAY_TEX), (pose, vc) ->
+                        drawDoubleUvQuad(pose, vc, 0xF000F0, accentArgb,
+                                -1.15f, 0.0f, -1.15f, 0f, 0f,
+                                1.15f, 0.0f, -1.15f, 1f, 0f,
+                                1.15f, 0.0f, 1.15f, 1f, 1f,
+                                -1.15f, 0.0f, 1.15f, 0f, 1f));
+                poseStack.popPose();
+
+                poseStack.pushPose();
+                poseStack.translate(0.0f, -0.05f, 0.0f);
+                poseStack.mulPose(Axis.YP.rotationDegrees(spin2));
+                collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.RING_ARRAY_TEX), (pose, vc) ->
+                        drawDoubleUvQuad(pose, vc, 0xF000F0, goldArgb,
+                                -0.78f, 0.0f, -0.78f, 0f, 0f,
+                                0.78f, 0.0f, -0.78f, 1f, 0f,
+                                0.78f, 0.0f, 0.78f, 1f, 1f,
+                                -0.78f, 0.0f, 0.78f, 0f, 1f));
+                if (trail) {
+                    collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
+                        for (int i = 0; i < 4; i++) {
+                            float ang = (float) (i * Math.PI * 0.5);
+                            float cx = (float) Math.cos(ang) * 0.92f;
+                            float cz = (float) Math.sin(ang) * 0.92f;
+                            drawBox(pose, vc, 0xF000F0, goldArgb, cx - 0.05f, -0.10f, cz - 0.05f, cx + 0.05f, 0.06f, cz + 0.05f);
+                        }
+                    });
+                }
+                poseStack.popPose();
+            }
+            case GIANT_SHURIKEN -> {
+                // High-Speed Spinning 4-Bladed Wind Demon Shuriken under feet!
+                poseStack.translate(0.0f, 1.48f, 0.0f);
+                poseStack.scale(sc, sc, sc);
+                float spin = (float) (((now / 7.0) * wSpeed) % 360.0);
+                poseStack.mulPose(Axis.YP.rotationDegrees(spin));
+                collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
+                    int steelDark = 0xFF1E293B;
+                    int steelEdge = 0xFFE2E8F0;
+                    // Center hub ring
+                    drawBox(pose, vc, packedLight, steelDark, -0.26f, -0.025f, -0.26f, 0.26f, 0.025f, 0.26f);
+                    drawBox(pose, vc, 0xF000F0, accentArgb, -0.14f, -0.032f, -0.14f, 0.14f, 0.032f, 0.14f);
+                    // 4 symmetrical beveled blades
+                    drawBox(pose, vc, packedLight, steelDark, -0.16f, -0.02f, -1.05f, 0.16f, 0.02f, -0.26f);
+                    drawBox(pose, vc, 0xF000F0, steelEdge, 0.04f, -0.012f, -1.18f, 0.22f, 0.012f, -0.35f);
+
+                    drawBox(pose, vc, packedLight, steelDark, -0.16f, -0.02f, 0.26f, 0.16f, 0.02f, 1.05f);
+                    drawBox(pose, vc, 0xF000F0, steelEdge, -0.22f, -0.012f, 0.35f, -0.04f, 0.012f, 1.18f);
+
+                    drawBox(pose, vc, packedLight, steelDark, -1.05f, -0.02f, -0.16f, -0.26f, 0.02f, 0.16f);
+                    drawBox(pose, vc, 0xF000F0, steelEdge, -1.18f, -0.012f, -0.22f, -0.35f, 0.012f, -0.04f);
+
+                    drawBox(pose, vc, packedLight, steelDark, 0.26f, -0.02f, -0.16f, 1.05f, 0.02f, 0.16f);
+                    drawBox(pose, vc, 0xF000F0, steelEdge, 0.35f, -0.012f, 0.04f, 1.18f, 0.012f, 0.22f);
+                });
+            }
+            case PAPER_GLIDER -> {
+                // Crisp Origami Paper Airplane / Delta Glider under feet!
+                float sway = (float) Math.sin((now / 380.0) * wSpeed) * 4.5f;
+                poseStack.translate(0.0f, 1.48f, 0.0f);
+                poseStack.scale(sc, sc, sc);
+                poseStack.mulPose(Axis.ZP.rotationDegrees(sway));
+                collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
+                    int paperWhite = 0xFFF8FAFC;
+                    int paperFold = 0xFFCBD5E1;
+                    // Sharp nose -> widening delta wings + center keel crease + upturned winglets!
+                    drawBox(pose, vc, packedLight, paperFold, -0.03f, 0.0f, -1.25f, 0.03f, 0.16f, 0.85f);
+                    for (int step = 0; step < 6; step++) {
+                        float z0 = -1.20f + step * 0.34f;
+                        float z1 = z0 + 0.35f;
+                        float halfSpan = 0.10f + step * 0.17f;
+                        drawBox(pose, vc, packedLight, paperWhite, -halfSpan, -0.015f, z0, halfSpan, 0.012f, z1);
+                    }
+                    // Accent stripe & upturned wingtips
+                    drawBox(pose, vc, 0xF000F0, accentArgb, -0.95f, -0.12f, 0.35f, -0.91f, 0.0f, 0.85f);
+                    drawBox(pose, vc, 0xF000F0, accentArgb, 0.91f, -0.12f, 0.35f, 0.95f, 0.0f, 0.85f);
+                });
+            }
+            case MAGIC_BROOM -> {
+                poseStack.translate(0.0f, 0.86f, 0.0f);
+                poseStack.scale(sc, sc, sc);
+                collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
+                    drawBox(pose, vc, packedLight, 0xFF4A2C16, -0.052f, -0.052f, -1.08f, 0.052f, 0.052f, 0.62f);
+                    drawBox(pose, vc, packedLight, 0xFF6B3E1E, -0.042f, -0.105f, -1.24f, 0.042f, -0.015f, -1.04f);
+                    drawBox(pose, vc, 0xF000F0, goldArgb, -0.062f, -0.115f, -1.28f, 0.062f, -0.055f, -1.20f);
+                    drawBox(pose, vc, packedLight, 0xFF7F1D1D, -0.072f, -0.068f, -0.22f, 0.072f, 0.062f, 0.22f);
+                    drawBox(pose, vc, 0xF000F0, goldArgb, -0.088f, -0.088f, 0.54f, 0.088f, 0.088f, 0.64f);
+                    drawBox(pose, vc, 0xF000F0, 0xFFF59E0B, -0.125f, -0.115f, 0.78f, 0.125f, 0.115f, 0.84f);
+                    drawBox(pose, vc, packedLight, 0xFFD97706, -0.145f, -0.125f, 0.64f, 0.145f, 0.125f, 1.04f);
+                    drawBox(pose, vc, packedLight, 0xFFF59E0B, -0.195f, -0.165f, 0.84f, 0.195f, 0.165f, 1.28f);
+                    drawBox(pose, vc, packedLight, 0xFFB45309, -0.125f, -0.105f, 1.22f, 0.125f, 0.105f, 1.44f);
+                });
+            }
+            case MINI_DRAGON -> {
+                poseStack.translate(0.0f, 1.35f, 0.0f);
+                float dScale = sc * 0.24f;
+                poseStack.scale(dScale, dScale, dScale);
+                dragonState.flapTime = (now % 60000L) / 1000.0f * wSpeed;
+                dragonState.ageInTicks = state.ageInTicks;
+                collector.submitModel(dragonModel, dragonState, poseStack, RenderTypes.entityCutoutNoCull(DRAGON_TEX),
+                        packedLight, OverlayTexture.NO_OVERLAY, state.outlineColor, null);
+            }
+            case MINI_PHANTOM -> {
+                poseStack.translate(0.0f, 1.45f, 0.0f);
+                float pScale = sc * 1.15f;
+                poseStack.scale(pScale, pScale, pScale);
+                phantomState.flapTime = (now % 60000L) / 1000.0f * wSpeed * 2.2f;
+                phantomState.ageInTicks = state.ageInTicks;
+                collector.submitModel(phantomModel, phantomState, poseStack, RenderTypes.entityCutoutNoCull(PHANTOM_TEX),
+                        packedLight, OverlayTexture.NO_OVERLAY, state.outlineColor, null);
+            }
+            case SWORD_SURF -> {
+                poseStack.translate(0.0f, 1.48f, 0.0f);
+                poseStack.scale(sc, sc, sc);
+                float spin = ((now % 4000L) / 4000.0f) * 360.0f * wSpeed;
+                collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
+                    drawBox(pose, vc, 0xF000F0, 0xFFE0F2FE, -0.055f, -0.03f, -1.12f, 0.055f, 0.03f, 0.55f);
+                    drawBox(pose, vc, 0xF000F0, accentArgb, -0.145f, -0.015f, -1.00f, 0.145f, 0.015f, 0.55f);
+                    drawBox(pose, vc, 0xF000F0, goldArgb, -0.36f, -0.045f, 0.53f, 0.36f, 0.045f, 0.65f);
+                    drawBox(pose, vc, packedLight, 0xFF7C2D12, -0.048f, -0.035f, 0.65f, 0.048f, 0.035f, 1.00f);
+                    drawBox(pose, vc, 0xF000F0, 0xFFA855F7, -0.075f, -0.055f, 1.00f, 0.075f, 0.055f, 1.12f);
+                });
+                if (trail) {
+                    poseStack.mulPose(Axis.YP.rotationDegrees(spin));
+                    collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.RING_ARRAY_TEX), (pose, vc) ->
+                            drawDoubleUvQuad(pose, vc, 0xF000F0, (0xCC << 24) | (accentArgb & 0x00FFFFFF),
+                                    -0.75f, 0.07f, -0.75f, 0f, 0f,
+                                    0.75f, 0.07f, -0.75f, 1f, 0f,
+                                    0.75f, 0.07f, 0.75f, 1f, 1f,
+                                    -0.75f, 0.07f, 0.75f, 0f, 1f));
+                }
+            }
+            default -> {}
+        }
         poseStack.popPose();
     }
 
@@ -444,7 +562,6 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
             poseStack.pushPose();
             poseStack.translate(0.0f, y, 0.0f);
             poseStack.mulPose(Axis.YP.rotationDegrees(spin));
-            // Render crisp 512x512 main ring + subtle vertical thickness glow ring
             collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.RING_ARRAY_TEX), (pose, vc) -> {
                 drawDoubleUvQuad(pose, vc, 0xF000F0, col,
                         -r, 0f, -r, 0f, 0f,

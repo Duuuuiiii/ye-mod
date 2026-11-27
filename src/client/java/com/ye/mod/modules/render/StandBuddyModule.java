@@ -45,6 +45,10 @@ public class StandBuddyModule extends Module {
             "alpha", "不透明度", "替身实体灵体透明度", 0.88, 0.3, 1.0, 0.05
     ));
 
+    public final BoolSetting syncGlobalColor = addSetting(new BoolSetting(
+            "syncGlobalColor", "同步全局色彩", "让替身染上全局色彩的灵体光晕", false
+    ));
+
     public final BoolSetting customMode = addSetting(new BoolSetting(
             "customMode", "高级自定义", "调节替身悬浮偏移与归属", false
     ));

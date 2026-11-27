@@ -32,5 +32,8 @@ public abstract class DebugRendererMixin {
 
         PortalFinderModule portal = ModuleManager.get(PortalFinderModule.class);
         if (portal != null) portal.emitGizmos();
+
+        com.ye.mod.modules.render.EntityEspModule entityEsp = ModuleManager.get(com.ye.mod.modules.render.EntityEspModule.class);
+        if (entityEsp != null) entityEsp.emitGizmos(partialTick);
     }
 }

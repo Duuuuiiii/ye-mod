@@ -12,26 +12,29 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 256x256 8x8-Supersampled SDF UI Renderer with 3D surface depth,
- * ambient drop shadows, specular top bevel highlights, and silky spring-lerp state animations.
+ * 1:1 Native Monitor-Pixel Vector UI Renderer:
+ * - Renders rounded rects, true rounded hairline borders (NEVER sharp square outlines!),
+ *   soft Gaussian drop shadows, pill switches, and circles at exact 1:1 physical screen pixels!
+ * - Zero UV edge bleeding (eliminating bottom white lines) and zero corner square artifacts!
+ * - Integrates YeHdFont for desktop-grade anti-aliased Microsoft YaHei UI / Segoe UI typography.
  */
 public final class AppleUiRenderer {
-    public static final int TEXT_PRIMARY = 0xFFF5F7FA;
+    public static final int TEXT_PRIMARY = 0xFFF8FAFC;
     public static final int APPLE_GREEN = 0xFF30D158;
-    public static final int TOGGLE_OFF = 0xFF2D3342;
+    public static final int TOGGLE_OFF = 0xFF2B3242;
 
     public static boolean lightTheme = false;
     public static float themeAnim = 0.0f;
 
     private static final Map<String, Float> ANIM_CHANNELS = new HashMap<>();
+    private static final Map<Integer, StampTex> CORNER_STAMPS = new HashMap<>();
+    private static final Map<Integer, StampTex> BORDER_STAMPS = new HashMap<>();
+    private static final Map<Integer, StampTex> CIRCLE_STAMPS = new HashMap<>();
+
     private static long lastFrameNs = System.nanoTime();
     private static float frameDt = 0.016f;
 
-    private static final int TEX_SIZE = 256;
-    private static final int CORNER_PX = 80;
-    private static final Identifier ROUNDED_TEX = Identifier.fromNamespaceAndPath("ye", "ui/sdf_rounded_256");
-    private static final Identifier CIRCLE_TEX = Identifier.fromNamespaceAndPath("ye", "ui/sdf_circle_128");
-    private static boolean initialized = false;
+    private record StampTex(Identifier id, int sizePx, DynamicTexture tex) {}
 
     private AppleUiRenderer() {}
 
@@ -55,15 +58,13 @@ public final class AppleUiRenderer {
         return next;
     }
 
-    public static int bgWindowTop() { return lerpColor(0xF412151E, 0xF8F8FAFC, themeAnim); }
-    public static int bgWindowBot() { return lerpColor(0xF60B0D14, 0xF8EAEFF7, themeAnim); }
-    public static int bgHeader()    { return lerpColor(0xFA090B11, 0xFCE2E8F2, themeAnim); }
-    public static int bgCard()      { return lerpColor(0xFF171B26, 0xFFFFFFFF, themeAnim); }
-    public static int bgCardBot()   { return lerpColor(0xFF12151F, 0xFFF1F5FB, themeAnim); }
-    public static int bgCardHover() { return lerpColor(0xFF212737, 0xFFE6EEF8, themeAnim); }
-    public static int borderOuter() { return lerpColor(0x36FFFFFF, 0x260F172A, themeAnim); }
-    public static int bevelTop()    { return lerpColor(0x30FFFFFF, 0xDDFFFFFF, themeAnim); }
-    public static int textPrimary() { return lerpColor(0xFFF5F7FA, 0xFF0F172A, themeAnim); }
+    public static int bgWindowTop()   { return lerpColor(0xF610141D, 0xFAF8FAFC, themeAnim); }
+    public static int bgHeader()      { return lerpColor(0xFA0B0E16, 0xFCEBF0F7, themeAnim); }
+    public static int bgCard()        { return lerpColor(0xFF171C28, 0xFFFFFFFF, themeAnim); }
+    public static int bgCardHover()   { return lerpColor(0xFF212838, 0xFFEAF1FB, themeAnim); }
+    public static int borderOuter()   { return lerpColor(0x32FFFFFF, 0x240F172A, themeAnim); }
+    public static int borderSubtle()  { return lerpColor(0x1EFFFFFF, 0x180F172A, themeAnim); }
+    public static int textPrimary()   { return lerpColor(0xFFF8FAFC, 0xFF0F172A, themeAnim); }
     public static int textSecondary() { return lerpColor(0xFF94A3B8, 0xFF475569, themeAnim); }
     public static int textTertiary()  { return lerpColor(0xFF64748B, 0xFF64748B, themeAnim); }
 
@@ -73,157 +74,267 @@ public final class AppleUiRenderer {
         com.ye.mod.core.ConfigManager.saveAsync();
     }
 
-    public static void drawText(GuiGraphics g, Font font, String text, int x, int y, int color) {
-        if (text == null) return;
-        g.drawString(font, text, x, y, color, themeAnim < 0.5f);
+    // ==================== HIGH-DPI VECTOR TYPOGRAPHY ====================
+
+    public static void drawText(GuiGraphics g, Font unusedMcFont, String text, int x, int y, int color) {
+        YeHdFont.draw(g, text, x, y - 0.5f, 8.8f, color, themeAnim < 0.45f, false);
     }
 
-    public static void drawCenteredText(GuiGraphics g, Font font, String text, int cx, int y, int color) {
-        if (text == null) return;
-        drawText(g, font, text, cx - font.width(text) / 2, y, color);
+    public static void drawBoldText(GuiGraphics g, String text, float x, float y, float size, int color) {
+        YeHdFont.draw(g, text, x, y, size, color, themeAnim < 0.45f, true);
     }
 
-    public static void ensureInit() {
-        if (initialized) return;
-        initialized = true;
-        Minecraft mc = Minecraft.getInstance();
-        mc.getTextureManager().register(ROUNDED_TEX, new DynamicTexture(() -> "ye_sdf_rounded_256", buildRoundedImage()));
-        mc.getTextureManager().register(CIRCLE_TEX, new DynamicTexture(() -> "ye_sdf_circle_128", buildCircleImage()));
+    public static void drawSmoothText(GuiGraphics g, String text, float x, float y, float size, int color, boolean shadow) {
+        YeHdFont.draw(g, text, x, y, size, color, shadow, false);
     }
 
-    private static NativeImage buildRoundedImage() {
-        NativeImage img = new NativeImage(TEX_SIZE, TEX_SIZE, true);
-        double r = CORNER_PX - 2.0;
-        double half = TEX_SIZE / 2.0;
-        double boxHalf = half - 2.0 - r;
+    public static void drawCenteredText(GuiGraphics g, Font unusedMcFont, String text, int cx, int y, int color) {
+        YeHdFont.drawCentered(g, text, cx, y - 0.5f, 8.8f, color, themeAnim < 0.45f, false);
+    }
 
-        for (int y = 0; y < TEX_SIZE; y++) {
-            for (int x = 0; x < TEX_SIZE; x++) {
-                int cov = 0;
-                for (int sy = 0; sy < 6; sy++) {
-                    for (int sx = 0; sx < 6; sx++) {
-                        double px = x + (sx + 0.5) / 6.0 - half;
-                        double py = y + (sy + 0.5) / 6.0 - half;
-                        double qx = Math.max(0.0, Math.abs(px) - boxHalf);
-                        double qy = Math.max(0.0, Math.abs(py) - boxHalf);
-                        if (Math.hypot(qx, qy) <= r) cov++;
+    public static void drawCenteredSmooth(GuiGraphics g, String text, float cx, float y, float size, int color, boolean bold) {
+        YeHdFont.drawCentered(g, text, cx, y, size, color, themeAnim < 0.45f, bold);
+    }
+
+    // ==================== 1:1 NATIVE PIXEL SDF ROUNDED SHAPES ====================
+
+    private static StampTex getCornerStamp(int rPx) {
+        int clamped = Math.max(2, Math.min(96, rPx));
+        return CORNER_STAMPS.computeIfAbsent(clamped, r -> {
+            int s = r * 2;
+            NativeImage img = new NativeImage(s, s, true);
+            double rad = r - 0.35;
+            for (int y = 0; y < s; y++) {
+                for (int x = 0; x < s; x++) {
+                    int cov = 0;
+                    for (int sy = 0; sy < 8; sy++) {
+                        double py = y + (sy + 0.5) / 8.0 - r;
+                        for (int sx = 0; sx < 8; sx++) {
+                            double px = x + (sx + 0.5) / 8.0 - r;
+                            if (px * px + py * py <= rad * rad) cov++;
+                        }
                     }
+                    int a = (cov * 255 + 32) / 64;
+                    img.setPixel(x, y, (a << 24) | 0x00FFFFFF);
                 }
-                int alpha = (cov * 255) / 36;
-                img.setPixel(x, y, (alpha << 24) | 0x00FFFFFF);
             }
-        }
-        return img;
+            Identifier id = Identifier.fromNamespaceAndPath("ye", "sdf_corner_px_" + r);
+            DynamicTexture dt = new DynamicTexture(() -> "ye_sdf_corner_" + r, img);
+            Minecraft.getInstance().getTextureManager().register(id, dt);
+            return new StampTex(id, s, dt);
+        });
     }
 
-    private static NativeImage buildCircleImage() {
-        int s = 128;
-        NativeImage img = new NativeImage(s, s, true);
-        double half = s / 2.0;
-        double r = half - 2.0;
-        for (int y = 0; y < s; y++) {
-            for (int x = 0; x < s; x++) {
-                int cov = 0;
-                for (int sy = 0; sy < 6; sy++) {
-                    for (int sx = 0; sx < 6; sx++) {
-                        double px = x + (sx + 0.5) / 6.0 - half;
-                        double py = y + (sy + 0.5) / 6.0 - half;
-                        if (Math.hypot(px, py) <= r) cov++;
+    private static StampTex getBorderCornerStamp(int rPx, int strokePx) {
+        int rClamped = Math.max(2, Math.min(96, rPx));
+        int stClamped = Math.max(1, Math.min(6, strokePx));
+        int key = (rClamped << 4) | stClamped;
+        return BORDER_STAMPS.computeIfAbsent(key, k -> {
+            int s = rClamped * 2;
+            NativeImage img = new NativeImage(s, s, true);
+            double outerR = rClamped - 0.35;
+            double innerR = Math.max(0.0, outerR - stClamped);
+            double outerSq = outerR * outerR;
+            double innerSq = innerR * innerR;
+            for (int y = 0; y < s; y++) {
+                for (int x = 0; x < s; x++) {
+                    int cov = 0;
+                    for (int sy = 0; sy < 8; sy++) {
+                        double py = y + (sy + 0.5) / 8.0 - rClamped;
+                        for (int sx = 0; sx < 8; sx++) {
+                            double px = x + (sx + 0.5) / 8.0 - rClamped;
+                            double dSq = px * px + py * py;
+                            if (dSq <= outerSq && dSq >= innerSq) cov++;
+                        }
                     }
+                    int a = (cov * 255 + 32) / 64;
+                    img.setPixel(x, y, (a << 24) | 0x00FFFFFF);
                 }
-                int alpha = (cov * 255) / 36;
-                img.setPixel(x, y, (alpha << 24) | 0x00FFFFFF);
             }
+            Identifier id = Identifier.fromNamespaceAndPath("ye", "sdf_border_px_" + rClamped + "_" + stClamped);
+            DynamicTexture dt = new DynamicTexture(() -> "ye_sdf_border_" + rClamped, img);
+            Minecraft.getInstance().getTextureManager().register(id, dt);
+            return new StampTex(id, s, dt);
+        });
+    }
+
+    private static StampTex getCircleStamp(int diamPx) {
+        int d = Math.max(4, Math.min(128, diamPx));
+        return CIRCLE_STAMPS.computeIfAbsent(d, sz -> {
+            NativeImage img = new NativeImage(sz, sz, true);
+            double half = sz * 0.5;
+            double rad = half - 0.4;
+            double radSq = rad * rad;
+            for (int y = 0; y < sz; y++) {
+                for (int x = 0; x < sz; x++) {
+                    int cov = 0;
+                    for (int sy = 0; sy < 8; sy++) {
+                        double py = y + (sy + 0.5) / 8.0 - half;
+                        for (int sx = 0; sx < 8; sx++) {
+                            double px = x + (sx + 0.5) / 8.0 - half;
+                            if (px * px + py * py <= radSq) cov++;
+                        }
+                    }
+                    int a = (cov * 255 + 32) / 64;
+                    img.setPixel(x, y, (a << 24) | 0x00FFFFFF);
+                }
+            }
+            Identifier id = Identifier.fromNamespaceAndPath("ye", "sdf_disc_px_" + sz);
+            DynamicTexture dt = new DynamicTexture(() -> "ye_sdf_disc_" + sz, img);
+            Minecraft.getInstance().getTextureManager().register(id, dt);
+            return new StampTex(id, sz, dt);
+        });
+    }
+
+    /**
+     * Seam-free, 1:1 physical-pixel anti-aliased rounded rectangle!
+     * Zero overlap between quads (eliminating alpha double-blending seams & bottom white lines!).
+     */
+    public static void drawRoundedRect(GuiGraphics g, float x, float y, float w, float h, float radius, int color) {
+        if (w <= 0.1f || h <= 0.1f || ((color >>> 24) & 0xFF) == 0) return;
+        float gs = YeHdFont.guiScale();
+        int pxX = Math.round(x * gs);
+        int pxY = Math.round(y * gs);
+        int pxW = Math.max(1, Math.round((x + w) * gs) - pxX);
+        int pxH = Math.max(1, Math.round((y + h) * gs) - pxY);
+        int rPx = Math.min(Math.round(radius * gs), Math.min(pxW / 2, pxH / 2));
+
+        var pose = g.pose();
+        pose.pushMatrix();
+        pose.scale(1.0f / gs, 1.0f / gs);
+
+        if (rPx <= 1) {
+            g.fill(pxX, pxY, pxX + pxW, pxY + pxH, color);
+            pose.popMatrix();
+            return;
         }
-        return img;
+
+        StampTex st = getCornerStamp(rPx);
+        int ts = st.sizePx;
+
+        // 4 exact 1:1 quarter-circle corners (non-overlapping!)
+        g.blit(RenderPipelines.GUI_TEXTURED, st.id, pxX, pxY, 0f, 0f, rPx, rPx, rPx, rPx, ts, ts, color);
+        g.blit(RenderPipelines.GUI_TEXTURED, st.id, pxX + pxW - rPx, pxY, (float) rPx, 0f, rPx, rPx, rPx, rPx, ts, ts, color);
+        g.blit(RenderPipelines.GUI_TEXTURED, st.id, pxX, pxY + pxH - rPx, 0f, (float) rPx, rPx, rPx, rPx, rPx, ts, ts, color);
+        g.blit(RenderPipelines.GUI_TEXTURED, st.id, pxX + pxW - rPx, pxY + pxH - rPx, (float) rPx, (float) rPx, rPx, rPx, rPx, rPx, ts, ts, color);
+
+        // 3 exact non-overlapping interior solid fills (zero UV edge sampling = zero white lines!)
+        if (pxW > rPx * 2) {
+            g.fill(pxX + rPx, pxY, pxX + pxW - rPx, pxY + pxH, color);
+        }
+        if (pxH > rPx * 2) {
+            g.fill(pxX, pxY + rPx, pxX + rPx, pxY + pxH - rPx, color);
+            g.fill(pxX + pxW - rPx, pxY + rPx, pxX + pxW, pxY + pxH - rPx, color);
+        }
+
+        pose.popMatrix();
     }
 
     public static void drawRoundedRect(GuiGraphics g, int x, int y, int w, int h, int radius, int color) {
-        if (w <= 0 || h <= 0) return;
-        ensureInit();
-        int r = Math.min(radius, Math.min(w / 2, h / 2));
-        if (r <= 1) {
-            g.fill(x, y, x + w, y + h, color);
+        drawRoundedRect(g, (float) x, (float) y, (float) w, (float) h, (float) radius, color);
+    }
+
+    /**
+     * True anti-aliased rounded hairline border — NEVER protrudes sharp 90-degree corners!
+     */
+    public static void drawRoundedOutline(GuiGraphics g, float x, float y, float w, float h, float radius, float strokePxF, int color) {
+        if (w <= 0.1f || h <= 0.1f || ((color >>> 24) & 0xFF) == 0) return;
+        float gs = YeHdFont.guiScale();
+        int pxX = Math.round(x * gs);
+        int pxY = Math.round(y * gs);
+        int pxW = Math.max(2, Math.round((x + w) * gs) - pxX);
+        int pxH = Math.max(2, Math.round((y + h) * gs) - pxY);
+        int stPx = Math.max(1, Math.round(strokePxF));
+        int rPx = Math.min(Math.round(radius * gs), Math.min(pxW / 2, pxH / 2));
+
+        var pose = g.pose();
+        pose.pushMatrix();
+        pose.scale(1.0f / gs, 1.0f / gs);
+
+        if (rPx <= 1) {
+            g.fill(pxX, pxY, pxX + pxW, pxY + stPx, color);
+            g.fill(pxX, pxY + pxH - stPx, pxX + pxW, pxY + pxH, color);
+            g.fill(pxX, pxY + stPx, pxX + stPx, pxY + pxH - stPx, color);
+            g.fill(pxX + pxW - stPx, pxY + stPx, pxX + pxW, pxY + pxH - stPx, color);
+            pose.popMatrix();
             return;
         }
-        int c = CORNER_PX;
-        int midTex = TEX_SIZE - c * 2;
-        int midW = w - r * 2;
-        int midH = h - r * 2;
 
-        g.blit(RenderPipelines.GUI_TEXTURED, ROUNDED_TEX, x, y, 0, 0, r, r, c, c, TEX_SIZE, TEX_SIZE, color);
-        g.blit(RenderPipelines.GUI_TEXTURED, ROUNDED_TEX, x + w - r, y, TEX_SIZE - c, 0, r, r, c, c, TEX_SIZE, TEX_SIZE, color);
-        g.blit(RenderPipelines.GUI_TEXTURED, ROUNDED_TEX, x, y + h - r, 0, TEX_SIZE - c, r, r, c, c, TEX_SIZE, TEX_SIZE, color);
-        g.blit(RenderPipelines.GUI_TEXTURED, ROUNDED_TEX, x + w - r, y + h - r, TEX_SIZE - c, TEX_SIZE - c, r, r, c, c, TEX_SIZE, TEX_SIZE, color);
+        StampTex st = getBorderCornerStamp(rPx, stPx);
+        int ts = st.sizePx;
 
-        if (midW > 0) {
-            g.blit(RenderPipelines.GUI_TEXTURED, ROUNDED_TEX, x + r, y, c, 0, midW, r, midTex, c, TEX_SIZE, TEX_SIZE, color);
-            g.blit(RenderPipelines.GUI_TEXTURED, ROUNDED_TEX, x + r, y + h - r, c, TEX_SIZE - c, midW, r, midTex, c, TEX_SIZE, TEX_SIZE, color);
+        g.blit(RenderPipelines.GUI_TEXTURED, st.id, pxX, pxY, 0f, 0f, rPx, rPx, rPx, rPx, ts, ts, color);
+        g.blit(RenderPipelines.GUI_TEXTURED, st.id, pxX + pxW - rPx, pxY, (float) rPx, 0f, rPx, rPx, rPx, rPx, ts, ts, color);
+        g.blit(RenderPipelines.GUI_TEXTURED, st.id, pxX, pxY + pxH - rPx, 0f, (float) rPx, rPx, rPx, rPx, rPx, ts, ts, color);
+        g.blit(RenderPipelines.GUI_TEXTURED, st.id, pxX + pxW - rPx, pxY + pxH - rPx, (float) rPx, (float) rPx, rPx, rPx, rPx, rPx, ts, ts, color);
+
+        if (pxW > rPx * 2) {
+            g.fill(pxX + rPx, pxY, pxX + pxW - rPx, pxY + stPx, color);
+            g.fill(pxX + rPx, pxY + pxH - stPx, pxX + pxW - rPx, pxY + pxH, color);
         }
-        if (midH > 0) {
-            g.blit(RenderPipelines.GUI_TEXTURED, ROUNDED_TEX, x, y + r, 0, c, r, midH, c, midTex, TEX_SIZE, TEX_SIZE, color);
-            g.blit(RenderPipelines.GUI_TEXTURED, ROUNDED_TEX, x + w - r, y + r, TEX_SIZE - c, c, r, midH, c, midTex, TEX_SIZE, TEX_SIZE, color);
+        if (pxH > rPx * 2) {
+            g.fill(pxX, pxY + rPx, pxX + stPx, pxY + pxH - rPx, color);
+            g.fill(pxX + pxW - stPx, pxY + rPx, pxX + pxW, pxY + pxH - rPx, color);
         }
-        if (midW > 0 && midH > 0) {
-            g.fill(x + r, y + r, x + w - r, y + h - r, color);
-        }
+
+        pose.popMatrix();
     }
 
     /**
-     * Multi-layered 3D Window shell with soft outer drop-shadow, vertical depth gradient, and top specular rim.
+     * Clean modern desktop window shell with multi-layer soft rounded shadow and true rounded border!
      */
     public static void drawElevatedWindow(GuiGraphics g, int x, int y, int w, int h, int radius) {
-        // Soft multi-pass ambient drop shadow
-        drawRoundedRect(g, x - 3, y + 2, w + 6, h + 6, radius + 3, 0x24000000);
-        drawRoundedRect(g, x - 1, y + 1, w + 2, h + 3, radius + 1, 0x44000000);
-        // Main body + subtle bottom depth shade
+        drawRoundedRect(g, x - 3.0f, y - 1.0f, w + 6.0f, h + 5.0f, radius + 3.0f, 0x16000000);
+        drawRoundedRect(g, x - 1.5f, y, w + 3.0f, h + 3.0f, radius + 1.5f, 0x2C000000);
         drawRoundedRect(g, x, y, w, h, radius, bgWindowTop());
-        g.fillGradient(x + 2, y + radius, x + w - 2, y + h - radius, 0x00000000, 0x35000000);
-        // Specular top rim & crisp hairline outline
-        g.fill(x + radius, y, x + w - radius, y + 1, bevelTop());
-        g.renderOutline(x, y, w, h, borderOuter());
+        drawRoundedOutline(g, x, y, w, h, radius, 1.4f, borderOuter());
     }
 
     /**
-     * 3D Elevated Card with drop shadow, active color blend, subtle inner top highlight, and hover glow!
+     * Clean elevated card with zero bottom white line and true rounded hover/active border!
      */
     public static void drawElevatedCard(GuiGraphics g, int x, int y, int w, int h, int radius,
                                         float activeProg, float hoverProg, int accent) {
-        // Subtle 3D under-shadow
-        drawRoundedRect(g, x, y + 1, w, h + 1, radius, 0x36000000);
+        drawRoundedRect(g, x, y + 0.8f, w, h + 0.6f, radius, 0x22000000);
 
         int idleBg = lerpColor(bgCard(), bgCardHover(), hoverProg);
-        int activeDark = darken(accent, 0.78f);
-        int topCol = lerpColor(idleBg, accent, activeProg);
-        int botCol = lerpColor(bgCardBot(), activeDark, activeProg);
+        int fillCol = lerpColor(idleBg, accent, activeProg);
+        drawRoundedRect(g, x, y, w, h, radius, fillCol);
 
-        drawRoundedRect(g, x, y, w, h, radius, topCol);
-        if (h > radius * 2) {
-            g.fillGradient(x + 1, y + radius, x + w - 1, y + h - radius + 1, 0x00000000, withAlpha(botCol, 0.45f));
-        }
-        // Top 1px specular bevel highlight for tactile 3D depth
-        int rim = lerpColor(bevelTop(), 0x66FFFFFF, activeProg);
-        g.fill(x + Math.max(3, radius - 1), y, x + w - Math.max(3, radius - 1), y + 1, rim);
+        int borderCol = activeProg > 0.5f
+                ? withAlpha(0xFFFFFFFF, 0.22f)
+                : lerpColor(borderSubtle(), withAlpha(accent, 0.72f), hoverProg);
+        drawRoundedOutline(g, x, y, w, h, radius, 1.0f, borderCol);
+    }
 
-        if (hoverProg > 0.05f && activeProg < 0.5f) {
-            g.renderOutline(x, y, w, h, withAlpha(accent, hoverProg * 0.48f));
-        }
+    public static void drawCircle(GuiGraphics g, float x, float y, float size, int color) {
+        float gs = YeHdFont.guiScale();
+        int pxX = Math.round(x * gs);
+        int pxY = Math.round(y * gs);
+        int dPx = Math.max(2, Math.round(size * gs));
+        StampTex st = getCircleStamp(dPx);
+
+        var pose = g.pose();
+        pose.pushMatrix();
+        pose.scale(1.0f / gs, 1.0f / gs);
+        g.blit(RenderPipelines.GUI_TEXTURED, st.id, pxX, pxY, 0f, 0f, dPx, dPx, dPx, dPx, st.sizePx, st.sizePx, color);
+        pose.popMatrix();
     }
 
     public static void drawCircle(GuiGraphics g, int x, int y, int size, int color) {
-        ensureInit();
-        g.blit(RenderPipelines.GUI_TEXTURED, CIRCLE_TEX, x, y, 0, 0, size, size, 128, 128, 128, 128, color);
+        drawCircle(g, (float) x, (float) y, (float) size, color);
     }
 
     public static void drawPillSwitch(GuiGraphics g, int x, int y, int w, int h, float progress, int accent) {
         int bg = lerpColor(TOGGLE_OFF, accent, progress);
-        drawRoundedRect(g, x, y + 1, w, h, h / 2, 0x33000000);
-        drawRoundedRect(g, x, y, w, h, h / 2, bg);
-        int knobSize = h - 4;
-        float travel = w - knobSize - 4;
-        int knobX = Math.round(x + 2 + travel * progress);
-        drawCircle(g, knobX, y + 3, knobSize, 0x38000000);
-        drawCircle(g, knobX, y + 2, knobSize, 0xFFFFFFFF);
+        drawRoundedRect(g, x, y, w, h, h * 0.5f, bg);
+        drawRoundedOutline(g, x, y, w, h, h * 0.5f, 1.0f, 0x24FFFFFF);
+        float knobSize = h - 3.6f;
+        float travel = w - knobSize - 3.6f;
+        float knobX = x + 1.8f + travel * progress;
+        float knobY = y + 1.8f;
+        drawCircle(g, knobX, knobY + 0.5f, knobSize, 0x35000000);
+        drawCircle(g, knobX, knobY, knobSize, 0xFFFFFFFF);
     }
 
     public static int darken(int argb, float factor) {

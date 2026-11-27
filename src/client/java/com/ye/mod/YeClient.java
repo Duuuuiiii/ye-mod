@@ -1,7 +1,10 @@
 package com.ye.mod;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.ye.mod.core.ConfigManager;
+import com.ye.mod.core.FriendManager;
 import com.ye.mod.core.ModuleManager;
+import com.ye.mod.modules.hud.HudElements;
 import com.ye.mod.modules.player.SmartAfkModule;
 import com.ye.mod.modules.render.AccessoriesModule;
 import com.ye.mod.modules.render.AntiLagModule;
@@ -10,6 +13,7 @@ import com.ye.mod.modules.render.CapeManager;
 import com.ye.mod.modules.render.CustomCapeModule;
 import com.ye.mod.modules.render.CustomSkinModule;
 import com.ye.mod.modules.render.DragonWingsModule;
+import com.ye.mod.modules.render.EntityEspModule;
 import com.ye.mod.modules.render.FlightModelModule;
 import com.ye.mod.modules.render.LavaEspModule;
 import com.ye.mod.modules.render.NoRenderModule;
@@ -21,14 +25,13 @@ import com.ye.mod.modules.system.BorderlessFullscreenModule;
 import com.ye.mod.modules.system.ChatFilterModule;
 import com.ye.mod.modules.system.PlayerStatsManager;
 import com.ye.mod.modules.visual.AmbienceModule;
-import com.ye.mod.modules.visual.BlackHoleSkyModule;
 import com.ye.mod.modules.visual.CinematicBarsModule;
 import com.ye.mod.modules.visual.CrosshairModule;
 import com.ye.mod.modules.visual.DamagePopupsModule;
+import com.ye.mod.modules.visual.GlobalColorModule;
 import com.ye.mod.modules.visual.HealthPlatesModule;
 import com.ye.mod.modules.visual.HitCrosshairModule;
 import com.ye.mod.modules.visual.HitFeedbackModule;
-import com.ye.mod.modules.visual.HudModule;
 import com.ye.mod.modules.visual.IdleWallpaperModule;
 import com.ye.mod.modules.visual.LowHpVignetteModule;
 import com.ye.mod.modules.visual.NoFovModule;
@@ -39,18 +42,21 @@ import com.ye.mod.modules.visual.SpeedLinesModule;
 import com.ye.mod.modules.visual.StepDecalsModule;
 import com.ye.mod.modules.visual.VoxelShatterModule;
 import com.ye.mod.modules.visual.ZoomModule;
+import com.ye.mod.modules.world.AutoLogModule;
 import com.ye.mod.modules.world.LogoutGhostsModule;
 import com.ye.mod.modules.world.PortalFinderModule;
-import com.ye.mod.modules.world.PortalSyncModule;
 import com.ye.mod.modules.world.StashRadarModule;
 import com.ye.mod.modules.world.WthitModule;
 import com.ye.mod.ui.YeMouseScreen;
 import com.ye.mod.ui.YeQuickMenu;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
 import org.lwjgl.glfw.GLFW;
 
@@ -58,7 +64,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Client entrypoint for the Ye 1.21.11 Fabric mod (v1.7.1).
+ * Client entrypoint for the Ye 1.21.11 Fabric mod (v1.7.2).
  */
 public class YeClient implements ClientModInitializer {
     private static boolean prevMenuKeyDown = false;
@@ -68,7 +74,7 @@ public class YeClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        // 1. 玩家模型 (PLAYER_MODEL)
+        // 1. 玩家模型 (PLAYER_MODEL — unified vertical-scroll "功能" page)
         ModuleManager.register(new DragonWingsModule());
         ModuleManager.register(new FlightModelModule());
         ModuleManager.register(new AccessoriesModule());
@@ -78,11 +84,12 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new BodyScaleModule());
         ModuleManager.register(new SwingSpeedModule());
 
-        // 2. 视觉渲染 (VISUAL)
+        // 2. 视觉渲染 (VISUAL — unified vertical-scroll "功能" page)
+        ModuleManager.register(new GlobalColorModule());
+        ModuleManager.register(new EntityEspModule());
         ModuleManager.register(new SoulRingsModule());
         ModuleManager.register(new AmbienceModule());
         ModuleManager.register(new SinCityFilterModule());
-        ModuleManager.register(new BlackHoleSkyModule());
         ModuleManager.register(new CrosshairModule());
         ModuleManager.register(new HitCrosshairModule());
         ModuleManager.register(new HitFeedbackModule());
@@ -95,14 +102,12 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new LowHpVignetteModule());
         ModuleManager.register(new ZoomModule());
 
-        // 3. 特定功能 (UTILITY)
-        ModuleManager.register(new HudModule());
-        ModuleManager.register(new WthitModule());
+        // 3. 特定功能 (UTILITY — unified vertical-scroll "功能" page)
+        ModuleManager.register(new AutoLogModule());
         ModuleManager.register(new HealthPlatesModule());
         ModuleManager.register(new DamagePopupsModule());
         ModuleManager.register(new StashRadarModule());
         ModuleManager.register(new PortalFinderModule());
-        ModuleManager.register(new PortalSyncModule());
         ModuleManager.register(new LavaEspModule());
         ModuleManager.register(new TrajectoryPreviewModule());
         ModuleManager.register(new LogoutGhostsModule());
@@ -112,6 +117,19 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new BorderlessFullscreenModule());
         ModuleManager.register(new ChatFilterModule());
         ModuleManager.register(new SmartAfkModule());
+
+        // 4. 独立 HUD 子模块板块 (Category.HUD — dedicated "HUD" page + screen right-click!)
+        ModuleManager.register(new HudElements.PotionsHud());
+        ModuleManager.register(new HudElements.CoordsHud());
+        ModuleManager.register(new HudElements.SpeedHud());
+        ModuleManager.register(new HudElements.TimeHud());
+        ModuleManager.register(new HudElements.FpsPingHud());
+        ModuleManager.register(new HudElements.ArmorHud());
+        ModuleManager.register(new HudElements.PvpItemsHud());
+        ModuleManager.register(new HudElements.InventoryHud());
+        ModuleManager.register(new HudElements.NearbyDropsHud());
+        ModuleManager.register(new HudElements.ModuleListHud());
+        ModuleManager.register(new WthitModule());
 
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
             if (world.isClientSide()) {
@@ -134,7 +152,40 @@ public class YeClient implements ClientModInitializer {
             }
         } catch (Throwable ignored) {}
         ConfigManager.initSystem(initialUser);
+        FriendManager.init();
         PlayerStatsManager.init();
+
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
+                dispatcher.register(ClientCommandManager.literal("ye")
+                        .then(ClientCommandManager.literal("friend")
+                                .executes(ctx -> {
+                                    var list = FriendManager.getFriends();
+                                    String msg = list.isEmpty() ? "§7当前白名单为空" : ("§a白名单好友 (" + list.size() + "): §f" + String.join(", ", list));
+                                    ctx.getSource().sendFeedback(Component.literal("§b[Ye] " + msg));
+                                    return 1;
+                                })
+                                .then(ClientCommandManager.literal("add")
+                                        .then(ClientCommandManager.argument("name", StringArgumentType.word())
+                                                .executes(ctx -> {
+                                                    String n = StringArgumentType.getString(ctx, "name");
+                                                    FriendManager.addFriend(n);
+                                                    ctx.getSource().sendFeedback(Component.literal("§b[Ye] §a已添加白名单好友: §f" + n));
+                                                    return 1;
+                                                })))
+                                .then(ClientCommandManager.literal("remove")
+                                        .then(ClientCommandManager.argument("name", StringArgumentType.word())
+                                                .executes(ctx -> {
+                                                    String n = StringArgumentType.getString(ctx, "name");
+                                                    FriendManager.removeFriend(n);
+                                                    ctx.getSource().sendFeedback(Component.literal("§b[Ye] §e已移除白名单好友: §f" + n));
+                                                    return 1;
+                                                })))
+                                .then(ClientCommandManager.literal("clear")
+                                        .executes(ctx -> {
+                                            FriendManager.clearFriends();
+                                            ctx.getSource().sendFeedback(Component.literal("§b[Ye] §7已清空好友白名单"));
+                                            return 1;
+                                        })))));
 
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
             CapeManager.init();
@@ -155,7 +206,6 @@ public class YeClient implements ClientModInitializer {
         });
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            // Periodically check if player switched Minecraft accounts in-session
             if (++accountCheckTicks >= 40) {
                 accountCheckTicks = 0;
                 String who = client.player != null

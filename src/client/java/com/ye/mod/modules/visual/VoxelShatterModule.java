@@ -11,15 +11,17 @@ import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.entity.monster.skeleton.AbstractSkeleton;
 import net.minecraft.world.entity.player.Player;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Zero-lag single-batch 3D Voxel Shatter Death Explosion.
- * Capped shard count + cached ground bounce height + 1 single GPU draw call in YeWorldFxRenderer!
+ * 144/240Hz Frame-Continuous Voxel Shatter Death Explosion:
+ * Eliminates the 20-TPS choppy stutter & CopyOnWriteArrayList GC stalls by integrating physics
+ * smoothly on every render frame using high-precision nanosecond delta-time!
  */
 public class VoxelShatterModule extends Module {
     public static final class VoxelPiece {
@@ -37,21 +39,25 @@ public class VoxelShatterModule extends Module {
     }
 
     public final DoubleSetting pieceCount = addSetting(new DoubleSetting(
-            "pieceCount", "碎块数", "单个目标爆裂碎块数（低开销单批次渲染）", 14.0, 6.0, 24.0, 2.0
+            "pieceCount", "碎块数", "单个目标爆裂立体碎块数", 16.0, 6.0, 32.0, 2.0
     ));
 
-    private final List<VoxelPiece> pieces = new CopyOnWriteArrayList<>();
+    private final List<VoxelPiece> pieces = new ArrayList<>();
     private final Set<Integer> shatteredIds = new HashSet<>();
     private final Random rng = new Random();
+    private long lastPhysicsNs = 0L;
 
     public VoxelShatterModule() {
-        super("voxel_shatter", "击杀碎裂", "Voxel Shatter", "击杀目标爆散弹跳立体碎块（单批次零掉帧）", Category.VISUAL);
+        super("voxel_shatter", "击杀碎裂", "Voxel Shatter", "满帧丝滑物理插值的立体碎块爆散特效", Category.VISUAL);
     }
 
     @Override
     protected void onDisable() {
-        pieces.clear();
+        synchronized (pieces) {
+            pieces.clear();
+        }
         shatteredIds.clear();
+        lastPhysicsNs = 0L;
     }
 
     @Override
@@ -70,42 +76,66 @@ public class VoxelShatterModule extends Module {
             }
         }
         if (shatteredIds.size() > 128) shatteredIds.clear();
+    }
 
-        for (VoxelPiece p : pieces) {
-            if (now - p.spawnMs > 1600L) {
-                pieces.remove(p);
-                continue;
+    /**
+     * Called directly from YeWorldFxRenderer every render frame (144Hz/240Hz+)!
+     */
+    public List<VoxelPiece> stepAndSnapshot(long nowMs) {
+        long nowNs = System.nanoTime();
+        double tickScale = 0.0;
+        if (lastPhysicsNs != 0L) {
+            double dtSec = Math.min(0.05, Math.max(0.0, (nowNs - lastPhysicsNs) / 1_000_000_000.0));
+            tickScale = dtSec * 20.0; // Normalize velocities to 20 ticks/sec scale at arbitrary 240+ FPS!
+        }
+        lastPhysicsNs = nowNs;
+
+        synchronized (pieces) {
+            if (pieces.isEmpty()) return List.of();
+            Iterator<VoxelPiece> it = pieces.iterator();
+            while (it.hasNext()) {
+                VoxelPiece p = it.next();
+                if (nowMs - p.spawnMs > 1600L) {
+                    it.remove();
+                    continue;
+                }
+                if (tickScale > 0.0) {
+                    p.vy -= 0.032 * tickScale;
+                    p.x += p.vx * tickScale;
+                    p.y += p.vy * tickScale;
+                    p.z += p.vz * tickScale;
+                    if (p.y < p.floorY + p.size * 0.5 && p.vy < 0) {
+                        p.y = p.floorY + p.size * 0.5;
+                        p.vy = -p.vy * 0.48;
+                        double drag = Math.pow(0.72, tickScale);
+                        p.vx *= drag;
+                        p.vz *= drag;
+                    }
+                }
             }
-            p.vy -= 0.032;
-            p.x += p.vx;
-            p.y += p.vy;
-            p.z += p.vz;
-            if (p.y < p.floorY + p.size * 0.5 && p.vy < 0) {
-                p.y = p.floorY + p.size * 0.5;
-                p.vy = -p.vy * 0.46;
-                p.vx *= 0.72;
-                p.vz *= 0.72;
-            }
+            return new ArrayList<>(pieces);
         }
     }
 
     private void spawnBurst(LivingEntity le, long now) {
-        int count = Math.max(6, Math.min(24, (int) Math.round(pieceCount.get())));
+        int count = Math.max(6, Math.min(32, (int) Math.round(pieceCount.get())));
         int[] palette = pickPalette(le);
         double h = Math.max(0.8, le.getBbHeight());
         double floorY = Math.floor(le.getY());
-        for (int i = 0; i < count; i++) {
-            double px = le.getX() + (rng.nextDouble() - 0.5) * le.getBbWidth();
-            double py = le.getY() + 0.15 + rng.nextDouble() * (h * 0.85);
-            double pz = le.getZ() + (rng.nextDouble() - 0.5) * le.getBbWidth();
-            double vx = (rng.nextDouble() - 0.5) * 0.30;
-            double vy = 0.10 + rng.nextDouble() * 0.25;
-            double vz = (rng.nextDouble() - 0.5) * 0.30;
-            double sz = 0.11 + rng.nextDouble() * 0.09;
-            int rgb = palette[rng.nextInt(palette.length)];
-            pieces.add(new VoxelPiece(px, py, pz, vx, vy, vz, sz, floorY, rgb, now));
+        synchronized (pieces) {
+            for (int i = 0; i < count; i++) {
+                double px = le.getX() + (rng.nextDouble() - 0.5) * le.getBbWidth();
+                double py = le.getY() + 0.15 + rng.nextDouble() * (h * 0.85);
+                double pz = le.getZ() + (rng.nextDouble() - 0.5) * le.getBbWidth();
+                double vx = (rng.nextDouble() - 0.5) * 0.32;
+                double vy = 0.12 + rng.nextDouble() * 0.26;
+                double vz = (rng.nextDouble() - 0.5) * 0.32;
+                double sz = 0.12 + rng.nextDouble() * 0.09;
+                int rgb = palette[rng.nextInt(palette.length)];
+                pieces.add(new VoxelPiece(px, py, pz, vx, vy, vz, sz, floorY, rgb, now));
+            }
+            while (pieces.size() > 96) pieces.remove(0);
         }
-        while (pieces.size() > 72) pieces.remove(0);
     }
 
     private static int[] pickPalette(LivingEntity le) {
@@ -114,9 +144,5 @@ public class VoxelShatterModule extends Module {
         if (le instanceof EnderMan) return new int[]{0x1E1B2E, 0xA855F7, 0xD946EF};
         if (le instanceof Player) return new int[]{0x38BDF8, 0xFACC15, 0xEF4444};
         return new int[]{0xEF4444, 0xF97316, 0xFACC15};
-    }
-
-    public List<VoxelPiece> getPieces() {
-        return pieces;
     }
 }

@@ -6,22 +6,22 @@ import com.ye.mod.core.setting.EnumSetting;
 import net.minecraft.resources.Identifier;
 
 /**
- * Multi-preset GLSL Stylized Post-Processing Filter:
- * - 无主之地漫染 (Borderlands Cel-Shading + Ink Outline)
- * - JoJo撞色 (JoJo Split-Toning + Manga Ink)
- * - 罪恶留红 (Sin City Selective Red + Manga Screentone)
- * - 赛博霓虹 (Cyberpunk Chromatic Aberration + Neon Glow)
- * - 复古胶片 (35mm Teal-Orange Cinema Film + Grain)
- * - CRT扫描线 (Retro Super-Secret Phosphor Scanlines)
+ * 6 Zero-Moiré Distinct Optical Post-Processing Filters:
+ * - 梦幻柔光 (HDR Bright-Pass Bloom — natural hues, luminous highlights)
+ * - 超清锐化 (CAS Texture Sharpening + Clarity)
+ * - 原色漫描 (Anti-aliased Ink Outline keeping 100% original world colors)
+ * - 极速光学 (Radial Motion & Edge Prism Dispersion — crystal sharp crosshair)
+ * - 光学景深 (Center Focus + Creamy Peripheral Bokeh Blur)
+ * - 黑白留红 (Moiré-free Silver Noir + Selective Vivid Scarlet)
  */
 public class SinCityFilterModule extends Module {
     public enum FilterPreset {
-        BORDERLANDS("无主漫染", "borderlands", 0xFFF59E0B, 0xFF0F172A),
-        JOJO("JoJo撞色", "jojo", 0xFFD946EF, 0xFFFACC15),
-        SIN_CITY("罪恶留红", "sincity", 0xFFEF4444, 0xFF18181B),
-        CYBER_NEON("赛博霓虹", "cyber", 0xFF22D3EE, 0xFFA855F7),
-        CINEMA_FILM("复古胶片", "cinema", 0xFFD97706, 0xFF0F2933),
-        RETRO_CRT("CRT扫描", "crt", 0xFF4ADE80, 0xFF09140E);
+        DREAM_BLOOM("梦幻柔光", "jojo", 0xFF38BDF8, 0xFFFDE047),
+        CAS_SHARPEN("超清锐化", "crt", 0xFF4ADE80, 0xFF0EA5E9),
+        NATURAL_INK("原色漫描", "borderlands", 0xFFF8FAFC, 0xFF334155),
+        SPEED_OPTICS("极速光学", "cyber", 0xFF22D3EE, 0xFFF43F5E),
+        CINEMA_BOKEH("光学景深", "cinema", 0xFFFBBF24, 0xFF1E293B),
+        SIN_CITY("黑白留红", "sincity", 0xFFEF4444, 0xFF18181B);
 
         public final String label;
         public final Identifier effectId;
@@ -37,11 +37,11 @@ public class SinCityFilterModule extends Module {
     }
 
     public final EnumSetting<FilterPreset> preset = addSetting(new EnumSetting<>(
-            "preset", "预设", "无主漫染 / JoJo撞色 / 罪恶留红 / 赛博霓虹 / 复古胶片 / CRT扫描", FilterPreset.BORDERLANDS
+            "preset", "光学预设", "梦幻柔光 / 超清锐化 / 原色漫描 / 极速光学 / 光学景深 / 黑白留红", FilterPreset.DREAM_BLOOM
     ));
 
     public SinCityFilterModule() {
-        super("sin_city", "滤镜", "Filters", "6款真实 GLSL 后处理漫画与电影级视觉滤镜", Category.VISUAL);
+        super("sin_city", "滤镜", "Filters", "6款无摩尔纹光学后期滤镜（柔光/锐化/原色漫描/极速光学/景深/留红）", Category.VISUAL);
     }
 
     public Identifier getActiveEffectId() {

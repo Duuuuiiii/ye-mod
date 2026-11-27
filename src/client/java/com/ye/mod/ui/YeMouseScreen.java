@@ -1,9 +1,8 @@
 package com.ye.mod.ui;
 
 import com.ye.mod.core.ConfigManager;
-import com.ye.mod.core.ModuleManager;
 import com.ye.mod.core.setting.DoubleSetting;
-import com.ye.mod.modules.visual.HudModule;
+import com.ye.mod.modules.hud.HudElementModule;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.CharacterEvent;
@@ -15,9 +14,9 @@ import org.lwjgl.glfw.GLFW;
 import java.util.List;
 
 /**
- * Transparent mouse-UI & RusherHack-style HUD Layout Editor (toggled with F10):
- * - Drag & magnetic-snap ANY HUD widget directly on screen with live snap alignment guides!
- * - Supports inline text typing for creating/renaming Config Profiles!
+ * Transparent Mouse-UI & HUD Interactive Canvas (F10):
+ * - Left-click drag ANY HUD element on screen with magnetic alignment guides!
+ * - Right-click ANY HUD element on screen to jump straight into its dedicated settings panel!
  */
 public class YeMouseScreen extends Screen {
     private boolean draggingWindow = false;
@@ -43,7 +42,6 @@ public class YeMouseScreen extends Screen {
 
     @Override
     public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // Keep live 3D world & character crystal clear while tuning visuals and dragging HUD!
     }
 
     @Override
@@ -59,21 +57,32 @@ public class YeMouseScreen extends Screen {
             } else if (draggingHudSlot.anchorX == 2 && draggingHudSlot.x <= 6) {
                 g.fill(this.width - 5, 0, this.width - 4, this.height, 0x8838BDF8);
             }
-            String tip = draggingHudSlot.zhName + " (" + anchorLabel(draggingHudSlot) + ")";
-            g.drawCenteredString(this.font, tip, cx, cy + 28, 0xFF38BDF8);
+            String nm = ConfigManager.english ? draggingHudSlot.enName : draggingHudSlot.zhName;
+            String tip = nm + " · " + anchorLabel(draggingHudSlot);
+            int tw = YeHdFont.width(tip, 8.8f, true) + 18;
+            AppleUiRenderer.drawRoundedRect(g, cx - tw / 2f, cy + 24, tw, 18, 6, 0xE60B0F19);
+            AppleUiRenderer.drawRoundedOutline(g, cx - tw / 2f, cy + 24, tw, 18, 6, 1.0f, 0xCC38BDF8);
+            YeHdFont.drawCentered(g, tip, cx, cy + 28.5f, 8.8f, 0xFF38BDF8, false, true);
         }
 
         YeQuickMenu.render(g, mouseX, mouseY, true);
     }
 
     private static String anchorLabel(ConfigManager.HudSlot s) {
+        if (ConfigManager.english) {
+            String h = switch (s.anchorX) {
+                case 1 -> "Center";
+                case 2 -> "Right";
+                default -> "Left";
+            };
+            return h + " · " + (s.anchorY == 2 ? "Bottom" : "Top");
+        }
         String h = switch (s.anchorX) {
             case 1 -> "居中对齐";
-            case 2 -> "右吸附";
-            default -> "左吸附";
+            case 2 -> "右侧吸附";
+            default -> "左侧吸附";
         };
-        String v = (s.anchorY == 2) ? "底吸附" : "顶吸附";
-        return h + " · " + v;
+        return h + " · " + (s.anchorY == 2 ? "底部吸附" : "顶部吸附");
     }
 
     @Override
@@ -106,20 +115,26 @@ public class YeMouseScreen extends Screen {
 
         int wx = YeQuickMenu.getWinX(this.width);
         int wy = YeQuickMenu.getWinY(this.height);
-        if (event.button() == 0 && mx >= wx && mx <= wx + YeQuickMenu.WIN_W && my >= wy && my <= wy + 29) {
+        if (event.button() == 0 && mx >= wx && mx <= wx + YeQuickMenu.WIN_W && my >= wy && my <= wy + 31) {
             draggingWindow = true;
             dragOffX = (int) mx - wx;
             dragOffY = (int) my - wy;
             return true;
         }
 
-        if (event.button() == 0 && !YeQuickMenu.isPointInsideMenuOrDropdown(mx, my, this.width, this.height)) {
-            HudModule hm = ModuleManager.get(HudModule.class);
-            if (hm != null && hm.isEnabled()) {
-                for (ConfigManager.HudSlot slot : ConfigManager.HUD_SLOTS.values()) {
-                    if (!slot.enabled || slot.lastW <= 0 || slot.lastH <= 0) continue;
-                    if (mx >= slot.lastScreenX && mx <= slot.lastScreenX + slot.lastW
-                            && my >= slot.lastScreenY && my <= slot.lastScreenY + slot.lastH) {
+        // Screen HUD interaction: Left-click drags, Right-click opens dedicated HUD Settings!
+        if (!YeQuickMenu.isPointInsideMenuOrDropdown(mx, my, this.width, this.height)) {
+            for (ConfigManager.HudSlot slot : ConfigManager.HUD_SLOTS.values()) {
+                if (!slot.enabled || slot.lastW <= 0 || slot.lastH <= 0) continue;
+                if (mx >= slot.lastScreenX && mx <= slot.lastScreenX + slot.lastW
+                        && my >= slot.lastScreenY && my <= slot.lastScreenY + slot.lastH) {
+                    if (event.button() == 1) {
+                        HudElementModule targetHud = HudElementModule.findBySlotId(slot.id);
+                        if (targetHud != null) {
+                            YeQuickMenu.openHudElementSettings(targetHud);
+                            return true;
+                        }
+                    } else if (event.button() == 0) {
                         draggingHudSlot = slot;
                         hudDragOffX = (int) mx - slot.lastScreenX;
                         hudDragOffY = (int) my - slot.lastScreenY;
@@ -196,7 +211,6 @@ public class YeMouseScreen extends Screen {
     public boolean keyPressed(KeyEvent event) {
         int key = event.key();
 
-        // Inline Profile Name Editor
         if (YeQuickMenu.profileInputMode != 0) {
             if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
                 YeQuickMenu.confirmProfileInput();
@@ -217,7 +231,6 @@ public class YeMouseScreen extends Screen {
             return true;
         }
 
-        // Per-module keybind capture
         if (YeQuickMenu.listeningModuleKey != null) {
             YeQuickMenu.playClick();
             if (key == GLFW.GLFW_KEY_ESCAPE || key == GLFW.GLFW_KEY_DELETE || key == GLFW.GLFW_KEY_BACKSPACE) {
@@ -229,7 +242,6 @@ public class YeMouseScreen extends Screen {
             return true;
         }
 
-        // Global UI keybind capture
         if (YeQuickMenu.listeningKeySlot != 0) {
             YeQuickMenu.playClick();
             if (key != GLFW.GLFW_KEY_ESCAPE) {

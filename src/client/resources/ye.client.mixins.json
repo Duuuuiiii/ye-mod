@@ -20,6 +20,7 @@
     "LivingEntityMixin",
     "LocalPlayerMixin",
     "MinecraftMixin",
+    "MouseHandlerMixin",
     "ParticleEngineMixin",
     "PlayerModelMixin",
     "ScreenEffectRendererMixin",

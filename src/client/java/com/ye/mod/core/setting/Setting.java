@@ -27,7 +27,8 @@ public abstract class Setting<T> {
     }
 
     public String getId() { return id; }
-    public String getName() { return name; }
+    public String getName() { return com.ye.mod.core.YeI18n.text(name); }
+    public String getRawName() { return name; }
     public String getDescription() { return description; }
     public T getDefaultValue() { return defaultValue; }
     public T get() { return value; }

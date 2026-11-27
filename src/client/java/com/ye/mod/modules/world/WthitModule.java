@@ -1,13 +1,10 @@
 package com.ye.mod.modules.world;
 
-import com.ye.mod.core.Category;
 import com.ye.mod.core.ConfigManager;
-import com.ye.mod.core.Module;
-import com.ye.mod.core.ModuleManager;
 import com.ye.mod.core.setting.BoolSetting;
-import com.ye.mod.modules.visual.IdleWallpaperModule;
+import com.ye.mod.modules.hud.HudElementModule;
 import com.ye.mod.ui.AppleUiRenderer;
-import net.minecraft.client.Minecraft;
+import com.ye.mod.ui.YeHdFont;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -20,120 +17,118 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 
+import java.util.Locale;
+
 /**
- * WTHIT ("What The Hell Is That" / 我在看什么) crosshair inspector card.
- * Displays 3D block icon, localized block/entity name, coordinates, recommended tool, and mining progress!
+ * Crosshair Block/Entity Inspector HUD Sub-Module (方块信息 / WTHIT).
+ * Kept in the HUD tab with default OFF per user preference (since Jade is installed).
+ * Rendered with 1:1 physical-pixel YeHdFont and smooth rounded outlines!
  */
-public class WthitModule extends Module {
+public class WthitModule extends HudElementModule {
     public final BoolSetting showCoords = addSetting(new BoolSetting(
-            "showCoords", "显示坐标", "卡片副标题显示目标方块坐标", true
+            "showCoords", "显示目标坐标", "卡片副标题显示指向方块的精确坐标", true
     ));
 
     public final BoolSetting showToolHint = addSetting(new BoolSetting(
-            "showToolHint", "挖掘工具提示", "显示推荐挖掘工具与实时挖掘进度%", true
+            "showToolHint", "挖掘工具与进度", "显示推荐挖掘工具与实时破坏百分比%", true
     ));
 
     public final BoolSetting showEntities = addSetting(new BoolSetting(
-            "showEntities", "包含实体信息", "指向生物或实体时也显示信息卡片", true
+            "showEntities", "包含生物实体", "准星指向生物或实体时显示血量与距离", true
     ));
 
     public WthitModule() {
-        super("wthit", "方块信息", "WTHIT", "实时显示准星指向的方块图标、名称、工具与挖掘进度", Category.UTILITY);
-        setEnabled(true, true);
+        super("wthit", "hud_wthit", "方块信息", "Block Info",
+                "准星指向方块/生物信息卡片（默认关闭，可随时开启与拖拽）",
+                false, true, ColorStyle.ICE_CYAN, 10);
+        addResetPositionButton();
     }
 
-    public void render(GuiGraphics g) {
-        if (!isEnabled()) return;
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null || mc.player == null || mc.options.hideGui || mc.hitResult == null) return;
-        IdleWallpaperModule idle = ModuleManager.get(IdleWallpaperModule.class);
-        if (idle != null && idle.shouldHideHud()) return;
+    @Override
+    public void renderElement(GuiGraphics g, int sw, int sh, boolean editMode) {
+        ConfigManager.HudSlot slot = getSlot();
+        float sc = scale.get().floatValue();
+        float fTitle = 8.8f * sc;
+        float fSub = 7.8f * sc;
 
-        ConfigManager.HudSlot slot = ConfigManager.HUD_SLOTS.get("hud_wthit");
-        if (slot != null && !slot.enabled) return;
-
-        int sw = g.guiWidth();
-        int sh = g.guiHeight();
-
-        if (mc.hitResult.getType() == HitResult.Type.BLOCK && mc.hitResult instanceof BlockHitResult bhr) {
+        if (mc.hitResult != null && mc.hitResult.getType() == HitResult.Type.BLOCK && mc.hitResult instanceof BlockHitResult bhr) {
             BlockPos pos = bhr.getBlockPos();
             BlockState state = mc.level.getBlockState(pos);
-            if (state.isAir()) return;
+            if (!state.isAir()) {
+                ItemStack icon = state.getBlock().asItem().getDefaultInstance();
+                String title = state.getBlock().getName().getString();
+                StringBuilder sub = new StringBuilder();
+                if (showToolHint.get()) sub.append(resolveToolTag(state));
+                if (showCoords.get()) {
+                    if (!sub.isEmpty()) sub.append(" · ");
+                    sub.append(pos.getX()).append(", ").append(pos.getY()).append(", ").append(pos.getZ());
+                }
+                int breakStage = (mc.gameMode != null && mc.gameMode.isDestroying()) ? mc.gameMode.getDestroyStage() : -1;
+                int breakPct = breakStage >= 0 ? Math.min(100, (breakStage + 1) * 10) : -1;
+                if (breakPct > 0 && showToolHint.get()) sub.append(" · ").append(breakPct).append("%");
 
-            ItemStack icon = state.getBlock().asItem().getDefaultInstance();
-            String title = state.getBlock().getName().getString();
-            StringBuilder sub = new StringBuilder();
-            if (showToolHint.get()) {
-                sub.append(resolveToolTag(state));
-            }
-            if (showCoords.get()) {
-                if (!sub.isEmpty()) sub.append(" · ");
-                sub.append(pos.getX()).append(", ").append(pos.getY()).append(", ").append(pos.getZ());
-            }
+                String subStr = sub.toString();
+                float iconW = icon.isEmpty() ? 0 : 20 * sc;
+                int w = Math.round(Math.max(96 * sc, iconW + Math.max(YeHdFont.widthF(title, fTitle, true), YeHdFont.widthF(subStr, fSub, false)) + 16 * sc));
+                int h = Math.round((subStr.isEmpty() ? 22 : 28) * sc + (breakPct > 0 ? 5 * sc : 0));
+                int x = slot != null ? slot.resolveX(sw, w) : (sw - w) / 2;
+                int y = slot != null ? slot.resolveY(sh, h) : 6;
 
-            int breakStage = (mc.gameMode != null && mc.gameMode.isDestroying()) ? mc.gameMode.getDestroyStage() : -1;
-            int breakPct = breakStage >= 0 ? Math.min(100, (breakStage + 1) * 10) : -1;
-            if (breakPct > 0 && showToolHint.get()) {
-                sub.append(" · ").append(breakPct).append("%");
+                drawHudCard(g, x, y, w, h, editMode);
+                if (!icon.isEmpty()) {
+                    var pose = g.pose();
+                    pose.pushMatrix();
+                    pose.translate(x + 5 * sc, y + 5 * sc);
+                    pose.scale(sc, sc);
+                    g.renderItem(icon, 0, 0);
+                    pose.popMatrix();
+                }
+                float tx = x + 7 * sc + iconW;
+                drawHudText(g, title, tx, y + 4.5f * sc, fTitle, resolvePrimaryColor(), true);
+                if (!subStr.isEmpty()) {
+                    drawHudText(g, subStr, tx, y + 15.5f * sc, fSub, 0xFF94A3B8, false);
+                }
+                if (breakPct > 0) {
+                    float bx = x + 6 * sc, by = y + h - 5 * sc, bw = w - 12 * sc;
+                    AppleUiRenderer.drawRoundedRect(g, bx, by, bw, 3 * sc, 1.5f * sc, 0xFF1E293B);
+                    AppleUiRenderer.drawRoundedRect(g, bx, by, bw * (breakPct / 100.0f), 3 * sc, 1.5f * sc, resolvePrimaryColor());
+                }
+                return;
             }
+        }
 
-            String subStr = sub.toString();
-            int hasIcon = icon.isEmpty() ? 0 : 20;
-            int w = Math.max(96, hasIcon + Math.max(mc.font.width(title), mc.font.width(subStr)) + 16);
-            int h = subStr.isEmpty() ? 22 : 28;
-            if (breakPct > 0) h += 5;
-
-            int x = slot != null ? slot.resolveX(sw, w) : (sw - w) / 2;
-            int y = slot != null ? slot.resolveY(sh, h) : 6;
-
-            // Layered depth card
-            AppleUiRenderer.drawRoundedRect(g, x + 1, y + 2, w, h, 6, 0x55000000);
-            AppleUiRenderer.drawRoundedRect(g, x, y, w, h, 6, 0xDF0D111A);
-            g.fill(x + 4, y, x + w - 4, y + 1, 0x38FFFFFF);
-            g.renderOutline(x, y, w, h, 0x26FFFFFF);
-
-            if (!icon.isEmpty()) {
-                g.renderItem(icon, x + 5, y + (h - (breakPct > 0 ? 5 : 0) - 16) / 2);
-            }
-            int tx = x + 7 + hasIcon;
-            g.drawString(mc.font, title, tx, y + 5, 0xFFF8FAFC, false);
-            if (!subStr.isEmpty()) {
-                g.drawString(mc.font, subStr, tx, y + 16, 0xFF94A3B8, false);
-            }
-            if (breakPct > 0) {
-                int bx = x + 5, by = y + h - 5, bw = w - 10;
-                g.fill(bx, by, bx + bw, by + 3, 0xFF1E293B);
-                g.fill(bx, by, bx + Math.round(bw * (breakPct / 100.0f)), by + 3, ConfigManager.getAccentColor());
-            }
-        } else if (showEntities.get() && mc.hitResult.getType() == HitResult.Type.ENTITY && mc.hitResult instanceof EntityHitResult ehr) {
+        if (showEntities.get() && mc.hitResult != null && mc.hitResult.getType() == HitResult.Type.ENTITY && mc.hitResult instanceof EntityHitResult ehr) {
             Entity ent = ehr.getEntity();
             String title = ent.getDisplayName().getString();
-            String subStr;
-            if (ent instanceof LivingEntity le) {
-                subStr = String.format("❤ %.1f / %.1f · %.1fm", le.getHealth(), le.getMaxHealth(), mc.player.distanceTo(ent));
-            } else {
-                String id = BuiltInRegistries.ENTITY_TYPE.getKey(ent.getType()).getPath();
-                subStr = String.format("%s · %.1fm", id, mc.player.distanceTo(ent));
-            }
-            int w = Math.max(92, Math.max(mc.font.width(title), mc.font.width(subStr)) + 16);
-            int h = 26;
+            String subStr = (ent instanceof LivingEntity le)
+                    ? String.format(Locale.ROOT, "❤ %.1f / %.1f · %.1fm", le.getHealth(), le.getMaxHealth(), mc.player.distanceTo(ent))
+                    : String.format(Locale.ROOT, "%s · %.1fm", BuiltInRegistries.ENTITY_TYPE.getKey(ent.getType()).getPath(), mc.player.distanceTo(ent));
+            int w = Math.round(Math.max(92 * sc, Math.max(YeHdFont.widthF(title, fTitle, true), YeHdFont.widthF(subStr, fSub, false)) + 16 * sc));
+            int h = Math.round(26 * sc);
             int x = slot != null ? slot.resolveX(sw, w) : (sw - w) / 2;
             int y = slot != null ? slot.resolveY(sh, h) : 6;
 
-            AppleUiRenderer.drawRoundedRect(g, x + 1, y + 2, w, h, 6, 0x55000000);
-            AppleUiRenderer.drawRoundedRect(g, x, y, w, h, 6, 0xDF0D111A);
-            g.renderOutline(x, y, w, h, 0x26FFFFFF);
-            g.drawString(mc.font, title, x + 8, y + 4, 0xFFF8FAFC, false);
-            g.drawString(mc.font, subStr, x + 8, y + 15, 0xFF94A3B8, false);
+            drawHudCard(g, x, y, w, h, editMode);
+            drawHudText(g, title, x + 8 * sc, y + 4 * sc, fTitle, resolvePrimaryColor(), true);
+            drawHudText(g, subStr, x + 8 * sc, y + 14.5f * sc, fSub, 0xFF94A3B8, false);
+            return;
+        }
+
+        if (editMode) {
+            int w = Math.round(108 * sc), h = Math.round(26 * sc);
+            int x = slot != null ? slot.resolveX(sw, w) : (sw - w) / 2;
+            int y = slot != null ? slot.resolveY(sh, h) : 6;
+            drawHudCard(g, x, y, w, h, true);
+            drawHudText(g, ConfigManager.tr("方块信息预览", "Block Info"), x + 8 * sc, y + 7 * sc, fTitle, resolvePrimaryColor(), true);
         }
     }
 
     private static String resolveToolTag(BlockState state) {
-        if (state.getDestroySpeed(null, BlockPos.ZERO) < 0) return "不可破坏";
-        if (state.is(BlockTags.MINEABLE_WITH_PICKAXE)) return "镐";
-        if (state.is(BlockTags.MINEABLE_WITH_AXE)) return "斧";
-        if (state.is(BlockTags.MINEABLE_WITH_SHOVEL)) return "锹";
-        if (state.is(BlockTags.MINEABLE_WITH_HOE)) return "锄";
-        return "徒手/任意";
+        if (state.getDestroySpeed(null, BlockPos.ZERO) < 0) return ConfigManager.tr("不可破坏", "Unbreakable");
+        if (state.is(BlockTags.MINEABLE_WITH_PICKAXE)) return ConfigManager.tr("镐", "Pickaxe");
+        if (state.is(BlockTags.MINEABLE_WITH_AXE)) return ConfigManager.tr("斧", "Axe");
+        if (state.is(BlockTags.MINEABLE_WITH_SHOVEL)) return ConfigManager.tr("锹", "Shovel");
+        if (state.is(BlockTags.MINEABLE_WITH_HOE)) return ConfigManager.tr("锄", "Hoe");
+        return ConfigManager.tr("任意工具", "Any");
     }
 }

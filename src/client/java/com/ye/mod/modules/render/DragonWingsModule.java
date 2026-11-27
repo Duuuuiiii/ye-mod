@@ -66,6 +66,14 @@ public class DragonWingsModule extends Module {
             "wingColor", "染色", "原色或自定义染色/流光", WingColor.DEFAULT
     ));
 
+    public final BoolSetting syncGlobalColor = addSetting(new BoolSetting(
+            "syncGlobalColor", "同步全局色彩", "跟随「全局色彩」模块的实时颜色或流光", false
+    ));
+
+    public final BoolSetting onlyWhenGliding = addSetting(new BoolSetting(
+            "onlyWhenGliding", "仅滑翔显示", "仅在使用鞘翅滑翔飞行时展开显示翅膀", false
+    ));
+
     public final DoubleSetting scale = addSetting(new DoubleSetting(
             "scale", "大小", "缩放翅膀整体尺寸", 1.0, 0.5, 2.0, 0.05
     ));
@@ -103,7 +111,17 @@ public class DragonWingsModule extends Module {
         setEnabled(true, true);
     }
 
+    public boolean shouldRenderWings(boolean isFallFlying) {
+        if (!isEnabled()) return false;
+        if (onlyWhenGliding.get() && !isFallFlying) return false;
+        if (hideWithElytra.get() && isFallFlying) return false;
+        return true;
+    }
+
     public int getTintColor(long timeMs) {
+        if (syncGlobalColor.get()) {
+            return com.ye.mod.modules.visual.GlobalColorModule.resolveArgb(true, 0xFFFFFFFF, 0);
+        }
         WingColor wc = wingColor.get();
         if (wc == WingColor.CHROMA) {
             float hue = ((timeMs % 4000L) / 4000.0f);

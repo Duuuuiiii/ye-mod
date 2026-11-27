@@ -2,11 +2,10 @@ package com.ye.mod.modules.visual;
 
 import com.ye.mod.core.Category;
 import com.ye.mod.core.Module;
+import com.ye.mod.core.YeSoundPresets;
 import com.ye.mod.core.setting.BoolSetting;
 import com.ye.mod.core.setting.DoubleSetting;
 import com.ye.mod.core.setting.EnumSetting;
-import net.minecraft.client.Minecraft;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 
@@ -14,7 +13,8 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Multi-layered 256x256 3D Shockwave + Star-Flare Hit Effect (rendered via YeWorldFxRenderer).
+ * Multi-layered 256x256 3D Shockwave + Star-Flare Hit Effect with rich Hit Sound Presets
+ * (Meow 喵叫, Error报错, 电子木鱼, 紫晶清鸣, 灵动气泡, 经典叮声, 街机重击, 静音)!
  */
 public class HitFeedbackModule extends Module {
     public enum HitPreset {
@@ -37,21 +37,30 @@ public class HitFeedbackModule extends Module {
     public record HitPulse(Vec3 pos, long startMs, float rotOffset) {}
 
     public final EnumSetting<HitPreset> preset = addSetting(new EnumSetting<>(
-            "preset", "预设", "星芒闪耀 / 绯红冲击 / 圣金辉耀 / 虚空震荡", HitPreset.STARBURST
+            "preset", "视觉预设", "星芒闪耀 / 绯红冲击 / 圣金辉耀 / 虚空震荡", HitPreset.STARBURST
+    ));
+
+    public final BoolSetting syncGlobalColor = addSetting(new BoolSetting(
+            "syncGlobalColor", "同步全局色彩", "打击冲击波颜色跟随全局色彩模块", false
     ));
 
     public final DoubleSetting scale = addSetting(new DoubleSetting(
-            "scale", "大小", "命中特效扩散尺寸", 1.0, 0.5, 2.0, 0.1
+            "scale", "特效大小", "命中特效扩散尺寸", 1.0, 0.5, 2.0, 0.1
     ));
 
-    public final BoolSetting hitSound = addSetting(new BoolSetting(
-            "hitSound", "音效", "命中播放清脆反馈音", true
+    public final EnumSetting<YeSoundPresets.SoundType> hitSoundType = addSetting(new EnumSetting<>(
+            "hitSoundType", "打击音效", "喵叫 / Error报错 / 电子木鱼 / 紫晶 / 气泡 / 叮声 / 暴击 / 静音",
+            YeSoundPresets.SoundType.EXPERIENCE
     ));
+
+    public final DoubleSetting soundVolume = addSetting(new DoubleSetting(
+            "soundVolume", "音效音量", "调节命中反馈声音大小", 0.80, 0.1, 1.5, 0.05
+    ).visible(() -> hitSoundType.get() != YeSoundPresets.SoundType.MUTE));
 
     private final List<HitPulse> pulses = new CopyOnWriteArrayList<>();
 
     public HitFeedbackModule() {
-        super("hit_feedback", "打击特效", "Hit FX", "多层高清星芒闪光与立体扩散冲击波", Category.VISUAL);
+        super("hit_feedback", "打击特效", "Hit FX", "多层星芒扩散冲击波与自定义打击音效（喵/Error/木鱼等）", Category.VISUAL);
     }
 
     @Override
@@ -61,14 +70,11 @@ public class HitFeedbackModule extends Module {
 
     public void onAttackEntity(Entity target) {
         if (!isEnabled() || target == null) return;
-        Minecraft mc = Minecraft.getInstance();
         long now = System.currentTimeMillis();
         pulses.add(new HitPulse(target.position().add(0, target.getBbHeight() * 0.56, 0), now, (now % 360)));
         while (pulses.size() > 16) pulses.remove(0);
 
-        if (hitSound.get() && mc.player != null) {
-            mc.player.playSound(SoundEvents.EXPERIENCE_ORB_PICKUP, 0.45f, 1.35f);
-        }
+        YeSoundPresets.playUi(hitSoundType.get(), soundVolume.get().floatValue());
     }
 
     public List<HitPulse> getPulses() {

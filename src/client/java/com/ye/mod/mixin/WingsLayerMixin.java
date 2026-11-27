@@ -26,7 +26,7 @@ public abstract class WingsLayerMixin {
         boolean isSelf = mc.player != null && avatarState.id == mc.player.getId();
 
         DragonWingsModule wings = ModuleManager.get(DragonWingsModule.class);
-        if (wings != null && wings.isEnabled() && wings.hideElytra.get() && (!wings.onlySelf.get() || isSelf)) {
+        if (wings != null && wings.shouldRenderWings(avatarState.isFallFlying) && wings.hideElytra.get() && (!wings.onlySelf.get() || isSelf)) {
             ci.cancel();
             return;
         }

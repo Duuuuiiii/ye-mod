@@ -2,52 +2,65 @@ package com.ye.mod.modules.visual;
 
 import com.ye.mod.core.Category;
 import com.ye.mod.core.Module;
+import com.ye.mod.core.setting.BoolSetting;
 import com.ye.mod.core.setting.DoubleSetting;
 import com.ye.mod.core.setting.EnumSetting;
 import net.minecraft.client.Minecraft;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * 256x256 High-Resolution Ground Step Decals (no wireframe lines).
+ * Crisp 3D Glowing Voxel/Block Matrix Footprints (足迹):
+ * Replaces blurry 2D circle textures with razor-sharp, layered 3D glowing pixel-blocks
+ * (Cyber Matrix Tiles, Molten Magma Embers, Frost Crystal Prisms, Golden Jade Seals)!
  */
 public class StepDecalsModule extends Module {
     public enum Style {
-        LAVA_SCORCH("熔岩焦痕", 0xFFF97316),
-        CYBER_RUNE("赛博矩阵", 0xFF22D3EE),
-        VOID_ASTROLABE("虚空星盘", 0xFFA855F7),
-        STAR_SIGIL("星芒法阵", 0xFFFACC15);
+        CYBER_MATRIX("赛博方格", 0xFF22D3EE, 0xFF0EA5E9),
+        MAGMA_EMBER("熔岩方块", 0xFFF97316, 0xFFFACC15),
+        FROST_CRYSTAL("冰晶棱块", 0xFF7DD3FC, 0xFFF8FAFC),
+        GOLD_SEAL("鎏金方印", 0xFFFACC15, 0xFFF59E0B);
 
         public final String label;
-        public final int previewRgb;
-        Style(String label, int previewRgb) {
+        public final int outerArgb;
+        public final int coreArgb;
+
+        Style(String label, int outerArgb, int coreArgb) {
             this.label = label;
-            this.previewRgb = previewRgb;
+            this.outerArgb = outerArgb;
+            this.coreArgb = coreArgb;
         }
     }
 
-    public record Decal(double x, double y, double z, float yaw, long spawnMs) {}
+    public record Decal(double x, double y, double z, float yaw, boolean leftFoot, long spawnMs) {}
 
     public final EnumSetting<Style> style = addSetting(new EnumSetting<>(
-            "style", "样式", "熔岩焦痕 / 赛博矩阵 / 虚空星盘 / 星芒法阵", Style.CYBER_RUNE
+            "style", "样式", "赛博方格 / 熔岩方块 / 冰晶棱块 / 鎏金方印", Style.CYBER_MATRIX
+    ));
+
+    public final BoolSetting syncGlobalColor = addSetting(new BoolSetting(
+            "syncGlobalColor", "同步全局色彩", "立体方块足迹颜色跟随全局色彩模块", false
     ));
 
     public final DoubleSetting scale = addSetting(new DoubleSetting(
-            "scale", "大小", "地面足迹阵纹尺寸", 0.65, 0.35, 1.30, 0.05
+            "scale", "大小", "地面立体方块足迹尺寸", 0.42, 0.25, 0.85, 0.05
     ));
 
-    private final List<Decal> decals = new CopyOnWriteArrayList<>();
+    private final List<Decal> decals = new ArrayList<>();
     private double lastX = Double.NaN, lastZ = Double.NaN;
+    private boolean nextLeftFoot = true;
 
     public StepDecalsModule() {
-        super("step_decals", "足迹", "Step Decals", "行走时地面浮现 256×256 高清发光印记", Category.VISUAL);
+        super("step_decals", "足迹", "Footsteps", "行走时脚下生成清晰立体的发光方块矩阵印记", Category.VISUAL);
     }
 
     @Override
     protected void onDisable() {
-        decals.clear();
+        synchronized (decals) {
+            decals.clear();
+        }
         lastX = Double.NaN;
     }
 
@@ -58,26 +71,37 @@ public class StepDecalsModule extends Module {
         if (mc.player == null || mc.level == null) return;
 
         long now = System.currentTimeMillis();
-        Iterator<Decal> it = decals.iterator();
-        while (it.hasNext()) {
-            Decal d = it.next();
-            if (now - d.spawnMs > 2600L) decals.remove(d);
+        synchronized (decals) {
+            Iterator<Decal> it = decals.iterator();
+            while (it.hasNext()) {
+                if (now - it.next().spawnMs > 2400L) it.remove();
+            }
         }
 
         if (!mc.player.onGround()) return;
         double px = mc.player.getX();
-        double py = mc.player.getY() + 0.025;
+        double py = mc.player.getY() + 0.015;
         double pz = mc.player.getZ();
 
-        if (Double.isNaN(lastX) || Math.hypot(px - lastX, pz - lastZ) >= 0.78) {
+        if (Double.isNaN(lastX) || Math.hypot(px - lastX, pz - lastZ) >= 0.72) {
             lastX = px;
             lastZ = pz;
-            decals.add(new Decal(px, py, pz, mc.player.getYRot(), now));
-            while (decals.size() > 36) decals.remove(0);
+            float yaw = mc.player.getYRot();
+            double rad = Math.toRadians(yaw);
+            double sideSign = nextLeftFoot ? 0.16 : -0.16;
+            nextLeftFoot = !nextLeftFoot;
+            double fx = px + Math.cos(rad) * sideSign;
+            double fz = pz + Math.sin(rad) * sideSign;
+            synchronized (decals) {
+                decals.add(new Decal(fx, py, fz, yaw, !nextLeftFoot, now));
+                while (decals.size() > 42) decals.remove(0);
+            }
         }
     }
 
-    public List<Decal> getDecals() {
-        return decals;
+    public List<Decal> snapshotDecals() {
+        synchronized (decals) {
+            return decals.isEmpty() ? List.of() : new ArrayList<>(decals);
+        }
     }
 }

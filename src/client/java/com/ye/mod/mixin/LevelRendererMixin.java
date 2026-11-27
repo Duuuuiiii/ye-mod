@@ -31,6 +31,10 @@ public abstract class LevelRendererMixin {
 
     @Inject(method = "submitEntities", at = @At("TAIL"))
     private void ye$submitHighResWorldFx(PoseStack poseStack, LevelRenderState state, SubmitNodeCollector collector, CallbackInfo ci) {
+        com.ye.mod.modules.render.EntityEspModule esp = com.ye.mod.core.ModuleManager.get(com.ye.mod.modules.render.EntityEspModule.class);
+        if (esp != null && esp.consumeOutlineFlag() && state != null) {
+            state.haveGlowingEntities = true;
+        }
         YeWorldFxRenderer.submitWorldEffects(poseStack, state, collector);
     }
 }

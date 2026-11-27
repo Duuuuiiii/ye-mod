@@ -2,6 +2,7 @@ package com.ye.mod.modules.visual;
 
 import com.ye.mod.core.Category;
 import com.ye.mod.core.Module;
+import com.ye.mod.core.setting.BoolSetting;
 import com.ye.mod.core.setting.DoubleSetting;
 import com.ye.mod.core.setting.EnumSetting;
 import net.minecraft.client.Minecraft;
@@ -27,6 +28,10 @@ public class SpeedLinesModule extends Module {
 
     public final EnumSetting<ColorPreset> color = addSetting(new EnumSetting<>(
             "color", "颜色", "白 / 青 / 金 / 红", ColorPreset.WHITE
+    ));
+
+    public final BoolSetting syncGlobalColor = addSetting(new BoolSetting(
+            "syncGlobalColor", "同步全局色彩", "速度线颜色跟随全局色彩模块", false
     ));
 
     public final DoubleSetting density = addSetting(new DoubleSetting(
@@ -59,7 +64,7 @@ public class SpeedLinesModule extends Module {
         float cy = sh * 0.5f;
         int maxR = (int) Math.ceil(Math.hypot(cx, cy)) + 12;
         long framePhase = System.currentTimeMillis() / 38L;
-        int rgb = color.get().rgb;
+        int rgb = GlobalColorModule.resolveRgb(syncGlobalColor.get(), color.get().rgb, 4);
         int lines = Math.max(16, (int) Math.round(density.get()));
 
         var pose = g.pose();

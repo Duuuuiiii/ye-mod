@@ -1,7 +1,10 @@
 package com.ye.mod.mixin;
 
 import com.ye.mod.core.ModuleManager;
+import com.ye.mod.modules.hud.HudElementModule;
+import com.ye.mod.modules.hud.HudElements;
 import com.ye.mod.modules.render.AntiLagModule;
+import com.ye.mod.modules.render.EntityEspModule;
 import com.ye.mod.modules.render.LavaEspModule;
 import com.ye.mod.modules.render.NoRenderModule;
 import com.ye.mod.modules.visual.AmbienceModule;
@@ -10,14 +13,12 @@ import com.ye.mod.modules.visual.CrosshairModule;
 import com.ye.mod.modules.visual.DamagePopupsModule;
 import com.ye.mod.modules.visual.HealthPlatesModule;
 import com.ye.mod.modules.visual.HitCrosshairModule;
-import com.ye.mod.modules.visual.HudModule;
 import com.ye.mod.modules.visual.IdleWallpaperModule;
 import com.ye.mod.modules.visual.LowHpVignetteModule;
 import com.ye.mod.modules.visual.NoFovModule;
 import com.ye.mod.modules.visual.SpeedLinesModule;
-import com.ye.mod.modules.world.PortalSyncModule;
 import com.ye.mod.modules.world.StashRadarModule;
-import com.ye.mod.modules.world.WthitModule;
+import com.ye.mod.ui.YeMouseScreen;
 import com.ye.mod.ui.YeQuickMenu;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
@@ -45,8 +46,8 @@ public abstract class GuiMixin {
 
     @Inject(method = "renderEffects", at = @At("HEAD"), cancellable = true)
     private void ye$hideVanillaPotionIcons(GuiGraphics guiGraphics, DeltaTracker deltaTracker, CallbackInfo ci) {
-        HudModule hud = ModuleManager.get(HudModule.class);
-        if (hud != null && hud.shouldHideVanillaPotions()) {
+        HudElements.PotionsHud pot = ModuleManager.get(HudElements.PotionsHud.class);
+        if (pot != null && pot.shouldHideVanillaPotions()) {
             ci.cancel();
         }
     }
@@ -126,21 +127,17 @@ public abstract class GuiMixin {
         SpeedLinesModule speedLines = ModuleManager.get(SpeedLinesModule.class);
         if (speedLines != null) speedLines.render(guiGraphics);
 
+        EntityEspModule entityEsp = ModuleManager.get(EntityEspModule.class);
+        if (entityEsp != null) entityEsp.render2d(guiGraphics, deltaTracker.getGameTimeDeltaPartialTick(false));
+
         DamagePopupsModule dmg = ModuleManager.get(DamagePopupsModule.class);
         if (dmg != null) dmg.render(guiGraphics);
 
         HealthPlatesModule hpBar = ModuleManager.get(HealthPlatesModule.class);
         if (hpBar != null) hpBar.render(guiGraphics);
 
-        WthitModule wthit = ModuleManager.get(WthitModule.class);
-        if (wthit != null) wthit.render(guiGraphics);
-
-        boolean editingHud = Minecraft.getInstance().screen instanceof com.ye.mod.ui.YeMouseScreen;
-        HudModule hud = ModuleManager.get(HudModule.class);
-        if (hud != null) hud.render(guiGraphics, editingHud);
-
-        PortalSyncModule portalSync = ModuleManager.get(PortalSyncModule.class);
-        if (portalSync != null) portalSync.renderHud(guiGraphics);
+        boolean editingHud = Minecraft.getInstance().screen instanceof YeMouseScreen;
+        HudElementModule.renderAllActive(guiGraphics, editingHud);
 
         StashRadarModule stashRadar = ModuleManager.get(StashRadarModule.class);
         if (stashRadar != null) stashRadar.renderHud(guiGraphics);

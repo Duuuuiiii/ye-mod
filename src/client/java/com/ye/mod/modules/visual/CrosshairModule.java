@@ -353,12 +353,20 @@ public class CrosshairModule extends Module {
             "color", "颜色", "白 / 青 / 绿 / 粉 / 金 / 红", ColorPreset.WHITE
     ));
 
+    public final BoolSetting syncGlobalColor = addSetting(new BoolSetting(
+            "syncGlobalColor", "同步全局色彩", "准星颜色跟随全局色彩模块", false
+    ));
+
     public final BoolSetting outline = addSetting(new BoolSetting(
             "outline", "描边", "1px 暗色轮廓增强亮背景对比", true
     ));
 
     public CrosshairModule() {
         super("crosshair", "准星", "Crosshair", "18款像素级四向对称准星预设", Category.VISUAL);
+    }
+
+    public int getActiveArgb() {
+        return GlobalColorModule.resolveArgb(syncGlobalColor.get(), color.get().argb, 2);
     }
 
     public void render(GuiGraphics g) {
@@ -370,7 +378,7 @@ public class CrosshairModule extends Module {
         // Exact vanilla 15x15 crosshair center pixel!
         int cx = (g.guiWidth() - 1) / 2;
         int cy = (g.guiHeight() - 1) / 2;
-        renderAtCenter(g, preset.get(), cx, cy, color.get().argb, outline.get());
+        renderAtCenter(g, preset.get(), cx, cy, getActiveArgb(), outline.get());
     }
 
     public static void renderAtCenter(GuiGraphics g, Preset p, int cx, int cy, int col, boolean outline) {

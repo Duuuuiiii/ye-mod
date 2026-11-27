@@ -45,6 +45,10 @@ public class SoulRingsModule extends Module {
             "rank", "预设配色", "整体魂环品阶预设", RingRank.MIXED
     ));
 
+    public final BoolSetting syncGlobalColor = addSetting(new BoolSetting(
+            "syncGlobalColor", "同步全局色彩", "所有魂环层统一跟随全局色彩与追光相位", false
+    ));
+
     public final DoubleSetting ringCount = addSetting(new DoubleSetting(
             "ringCount", "数量", "悬浮魂环层数", 4.0, 1.0, 6.0, 1.0
     ));
@@ -103,6 +107,9 @@ public class SoulRingsModule extends Module {
     }
 
     public int pickRingRgb(int idx) {
+        if (syncGlobalColor.get()) {
+            return GlobalColorModule.resolveRgb(true, 0x38BDF8, idx);
+        }
         if (customMode.get() && idx >= 0 && idx < perRingColor.length) {
             return perRingColor[idx].get().rgb;
         }

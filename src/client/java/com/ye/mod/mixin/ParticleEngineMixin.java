@@ -3,10 +3,12 @@ package com.ye.mod.mixin;
 import com.ye.mod.core.ModuleManager;
 import com.ye.mod.modules.render.AntiLagModule;
 import com.ye.mod.modules.render.NoRenderModule;
+import com.ye.mod.modules.world.AutoLogModule;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleEngine;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -15,6 +17,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(ParticleEngine.class)
 public abstract class ParticleEngineMixin {
+
+    @Inject(method = "createTrackingEmitter(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/particles/ParticleOptions;I)V", at = @At("HEAD"))
+    private void ye$detectTotemPop(Entity entity, ParticleOptions options, int lifetime, CallbackInfo ci) {
+        if (options != null && options.getType() == ParticleTypes.TOTEM_OF_UNDYING) {
+            AutoLogModule autoLog = ModuleManager.get(AutoLogModule.class);
+            if (autoLog != null) {
+                autoLog.onEntityTotemPop(entity);
+            }
+        }
+    }
 
     @Inject(method = "createParticle", at = @At("HEAD"), cancellable = true)
     private void ye$filterCreateParticle(ParticleOptions options, double x, double y, double z,

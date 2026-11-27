@@ -30,6 +30,10 @@ public class HitCrosshairModule extends Module {
             "color", "颜色", "命中时 X 标记颜色", ColorPreset.WHITE
     ));
 
+    public final BoolSetting syncGlobalColor = addSetting(new BoolSetting(
+            "syncGlobalColor", "同步全局色彩", "命中准星颜色跟随全局色彩模块", false
+    ));
+
     public final DoubleSetting size = addSetting(new DoubleSetting(
             "size", "臂长", "对称 X 斜线像素长度", 5.0, 3.0, 10.0, 1.0
     ));
@@ -60,7 +64,8 @@ public class HitCrosshairModule extends Module {
 
         float t = elapsed / 230.0f;
         int alpha = Math.max(0, Math.min(255, Math.round((1.0f - t) * 255.0f)));
-        int col = (alpha << 24) | color.get().rgb;
+        int rgb = GlobalColorModule.resolveRgb(syncGlobalColor.get(), color.get().rgb, 3);
+        int col = (alpha << 24) | rgb;
         int outCol = (Math.round(alpha * 0.65f) << 24);
 
         // Exact vanilla crosshair center pixel!
