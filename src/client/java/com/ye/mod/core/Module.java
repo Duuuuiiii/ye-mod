@@ -8,7 +8,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Base class for all modular features in Ye.
+ * Base class for all modular features in Ye, supporting single-module factory/template reset.
  */
 public abstract class Module {
     protected final Minecraft mc = Minecraft.getInstance();
@@ -21,6 +21,7 @@ public abstract class Module {
     private final List<Setting<?>> settings = new ArrayList<>();
 
     private boolean enabled;
+    private boolean defaultEnabled;
     private int keybind = -1;
 
     protected Module(String id, String name, String subtitle, String description, Category category) {
@@ -36,33 +37,55 @@ public abstract class Module {
         return setting;
     }
 
-    public String getId() {
-        return id;
+    public void captureDefaultState() {
+        this.defaultEnabled = this.enabled;
     }
 
-    public String getName() {
-        return name;
+    public boolean isDefaultEnabled() {
+        return defaultEnabled;
     }
 
-    public String getSubtitle() {
-        return subtitle;
+    /**
+     * Resets ONLY this module's settings, keybind, and enabled state back to default!
+     */
+    public void resetToDefault() {
+        for (Setting<?> s : settings) {
+            s.resetSilent();
+        }
+        this.keybind = -1;
+        if (this.enabled != this.defaultEnabled) {
+            this.enabled = this.defaultEnabled;
+            if (this.enabled) onEnable();
+            else onDisable();
+        }
+        ConfigManager.saveAsync();
     }
 
-    public String getDescription() {
-        return description;
+    public void resetToDefaultSilent() {
+        for (Setting<?> s : settings) {
+            s.resetSilent();
+        }
+        this.keybind = -1;
+        if (this.enabled != this.defaultEnabled) {
+            this.enabled = this.defaultEnabled;
+            try {
+                if (this.enabled) onEnable();
+                else onDisable();
+            } catch (Throwable ignored) {}
+        }
     }
 
-    public Category getCategory() {
-        return category;
-    }
+    public String getId() { return id; }
+    public String getName() { return name; }
+    public String getSubtitle() { return subtitle; }
+    public String getDescription() { return description; }
+    public Category getCategory() { return category; }
 
     public List<Setting<?>> getSettings() {
         return Collections.unmodifiableList(settings);
     }
 
-    public boolean isEnabled() {
-        return enabled;
-    }
+    public boolean isEnabled() { return enabled; }
 
     public void setEnabled(boolean enabled) {
         setEnabled(enabled, false);
@@ -72,12 +95,20 @@ public abstract class Module {
         if (this.enabled == enabled) return;
         this.enabled = enabled;
         if (!silent) {
-            if (enabled) {
-                onEnable();
-            } else {
-                onDisable();
-            }
+            if (enabled) onEnable();
+            else onDisable();
             ConfigManager.saveAsync();
+        }
+    }
+
+    public void applyLoadedEnabled(boolean targetEnabled, boolean fireCallbacks) {
+        if (this.enabled == targetEnabled) return;
+        this.enabled = targetEnabled;
+        if (fireCallbacks) {
+            try {
+                if (targetEnabled) onEnable();
+                else onDisable();
+            } catch (Throwable ignored) {}
         }
     }
 
@@ -85,9 +116,7 @@ public abstract class Module {
         setEnabled(!enabled, false);
     }
 
-    public int getKeybind() {
-        return keybind;
-    }
+    public int getKeybind() { return keybind; }
 
     public void setKeybind(int keybind) {
         this.keybind = keybind;
@@ -99,8 +128,6 @@ public abstract class Module {
     }
 
     protected void onEnable() {}
-
     protected void onDisable() {}
-
     public void onTick() {}
 }

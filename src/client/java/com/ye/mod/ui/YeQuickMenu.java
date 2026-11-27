@@ -31,10 +31,9 @@ import java.util.Map;
 
 /**
  * 3D Layered, Silky-Animated Floating UI (F9 Arrow UI / F10 Mouse UI):
- * - 3 Category Tabs (玩家模型 / 视觉渲染 / 特定功能) + 设置
- * - Strictly clamped smooth scrolling with minimalist scroll indicator (zero infinite scroll!)
- * - Per-module keybind button in every module detail header
- * - Live high-res previews, animated switches/sliders, localized enum labels
+ * - 3 Category Tabs (玩家模型 / 视觉渲染 / 特定功能) + 设置 (含完整多配置档管理与分享码)
+ * - Strictly clamped smooth scrolling with minimalist scroll indicator
+ * - Per-module keybind & single-module independent reset button in detail header
  */
 public final class YeQuickMenu {
     private enum TopSection {
@@ -58,8 +57,8 @@ public final class YeQuickMenu {
         }
     }
 
-    public static final int WIN_W = 384;
-    public static final int WIN_H = 276;
+    public static final int WIN_W = 388;
+    public static final int WIN_H = 282;
     private static final int EDGE_MARGIN = 16;
     private static final int GRID_COLS = 4;
 
@@ -71,6 +70,14 @@ public final class YeQuickMenu {
 
     public static int listeningKeySlot = 0; // 0=none, 1=menuKey, 2=mouseUnlockKey
     public static Module listeningModuleKey = null;
+
+    // Inline profile naming state: 0=none, 1=create new profile, 2=rename active profile
+    public static int profileInputMode = 0;
+    public static String profileInputBuffer = "";
+
+    private static String toastText = "";
+    private static int toastColor = 0xFF22C55E;
+    private static long toastUntilMs = 0L;
 
     private static TopSection activeSection = TopSection.PLAYER_MODEL;
     private static Module activeModule = null;
@@ -92,6 +99,12 @@ public final class YeQuickMenu {
 
     public static boolean isOpen() { return open; }
 
+    public static void showToast(String msg, int color) {
+        toastText = msg;
+        toastColor = color;
+        toastUntilMs = System.currentTimeMillis() + 2400L;
+    }
+
     public static void toggleOpen() {
         open = !open;
         playClick();
@@ -99,6 +112,7 @@ public final class YeQuickMenu {
             openDropdown = null;
             listeningKeySlot = 0;
             listeningModuleKey = null;
+            profileInputMode = 0;
             ConfigManager.saveAsync();
         }
     }
@@ -109,6 +123,7 @@ public final class YeQuickMenu {
             openDropdown = null;
             listeningKeySlot = 0;
             listeningModuleKey = null;
+            profileInputMode = 0;
         }
     }
 
@@ -167,7 +182,7 @@ public final class YeQuickMenu {
 
         HIT_RECTS.clear();
 
-        // 1. 3D Elevated Glassmorphic Window Shell + Header Bar
+        // 1. 3D Elevated Window Shell + Header Bar
         AppleUiRenderer.drawElevatedWindow(g, wx, wy, WIN_W, WIN_H, 12);
         AppleUiRenderer.drawRoundedRect(g, wx + 1, wy + 1, WIN_W - 2, 28, 11, AppleUiRenderer.bgHeader());
         g.fill(wx + 8, wy + 28, wx + WIN_W - 8, wy + 29, 0x22FFFFFF);
@@ -219,7 +234,8 @@ public final class YeQuickMenu {
             HIT_RECTS.add(new HitRect(bx, wy + 5, bw, 18, () -> switchSection(sec), null, null));
         }
 
-        String hint = mouseUnlocked ? "左键开关·右键设置·拖拽HUD" : (keyName(ConfigManager.getMouseUnlockKey()) + "鼠标·空格设置");
+        String hint = mouseUnlocked ? ("档:" + ConfigManager.getActiveProfile())
+                : (keyName(ConfigManager.getMouseUnlockKey()) + "鼠标·空格设置");
         if (tx + font.width(hint) + 10 < wx + WIN_W) {
             AppleUiRenderer.drawText(g, font, hint, wx + WIN_W - 9 - font.width(hint), wy + 10, AppleUiRenderer.textTertiary());
         }
@@ -244,6 +260,19 @@ public final class YeQuickMenu {
         if (openDropdown != null && mouseUnlocked) {
             renderDropdown(g, font, openDropdown, mouseX, mouseY, accent);
         }
+
+        // Floating Toast Banner above window
+        long rem = toastUntilMs - System.currentTimeMillis();
+        if (rem > 0 && !toastText.isEmpty()) {
+            float alpha = Math.min(1.0f, rem / 300.0f);
+            int tw = font.width(toastText) + 20;
+            int txBox = wx + (WIN_W - tw) / 2;
+            int tyBox = Math.max(4, wy - 22);
+            AppleUiRenderer.drawRoundedRect(g, txBox, tyBox, tw, 18, 6, AppleUiRenderer.withAlpha(0xEE0D121D, alpha));
+            g.renderOutline(txBox, tyBox, tw, 18, AppleUiRenderer.withAlpha(toastColor, alpha));
+            AppleUiRenderer.drawCenteredText(g, font, toastText, txBox + tw / 2, tyBox + 5,
+                    AppleUiRenderer.withAlpha(toastColor, alpha));
+        }
     }
 
     private static void switchSection(TopSection sec) {
@@ -254,6 +283,7 @@ public final class YeQuickMenu {
         activeModule = null;
         openDropdown = null;
         listeningModuleKey = null;
+        profileInputMode = 0;
         selectedIndex = 0;
         scrollOffset = 0.0;
         targetScroll = 0.0;
@@ -305,7 +335,6 @@ public final class YeQuickMenu {
                 int txtCol = m.isEnabled() ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary();
                 AppleUiRenderer.drawCenteredText(g, font, name, cx + cellW / 2, cy + 10, txtCol);
 
-                // Bottom status / keybind micro-row
                 String sub = m.getKeybind() > 0 ? ("[" + keyName(m.getKeybind()) + "]")
                         : (m.isEnabled() ? "ON" : "OFF");
                 int subCol = m.isEnabled() ? 0xCCFFFFFF : AppleUiRenderer.textTertiary();
@@ -349,11 +378,11 @@ public final class YeQuickMenu {
 
     private static void renderModuleDetail(GuiGraphics g, Font font, int x, int y, int w, int h,
                                            int mx, int my, boolean mouseUnlocked, int accent) {
-        // Detail Header: Back button + Title + Per-Module Keybind Button + Animated Switch
-        boolean backHov = mouseUnlocked && inBounds(mx, my, x, y, 36, 18);
-        AppleUiRenderer.drawElevatedCard(g, x, y, 36, 18, 6, 0f, backHov ? 1f : 0f, accent);
-        AppleUiRenderer.drawCenteredText(g, font, "←", x + 18, y + 5, AppleUiRenderer.textPrimary());
-        HIT_RECTS.add(new HitRect(x, y, 36, 18, () -> {
+        // Detail Header: Back + Module Title + [重置] Single-Module Reset + [键: ...] Keybind + Switch
+        boolean backHov = mouseUnlocked && inBounds(mx, my, x, y, 32, 18);
+        AppleUiRenderer.drawElevatedCard(g, x, y, 32, 18, 6, 0f, backHov ? 1f : 0f, accent);
+        AppleUiRenderer.drawCenteredText(g, font, "←", x + 16, y + 5, AppleUiRenderer.textPrimary());
+        HIT_RECTS.add(new HitRect(x, y, 32, 18, () -> {
             playClick();
             activeModule = null;
             listeningModuleKey = null;
@@ -365,13 +394,13 @@ public final class YeQuickMenu {
         }, null, null));
 
         String mName = ConfigManager.english ? activeModule.getSubtitle() : activeModule.getName();
-        AppleUiRenderer.drawText(g, font, mName, x + 42, y + 5, AppleUiRenderer.textPrimary());
+        AppleUiRenderer.drawText(g, font, mName, x + 38, y + 5, AppleUiRenderer.textPrimary());
 
-        // Per-module Keybind Pill (Left-click bind, Right-click clear)
+        // Per-module Keybind Pill
         boolean listeningThis = (listeningModuleKey == activeModule);
-        String kbText = listeningThis ? "按键..." : ("键: " + (activeModule.getKeybind() > 0 ? keyName(activeModule.getKeybind()) : "无"));
-        int kbW = Math.max(46, font.width(kbText) + 12);
-        int kbX = x + w - 34 - kbW - 6;
+        String kbText = listeningThis ? "按键..." : ("键:" + (activeModule.getKeybind() > 0 ? keyName(activeModule.getKeybind()) : "无"));
+        int kbW = Math.max(42, font.width(kbText) + 10);
+        int kbX = x + w - 32 - kbW - 4;
         AppleUiRenderer.drawRoundedRect(g, kbX, y + 1, kbW, 16, 5,
                 listeningThis ? 0xFFEF4444 : AppleUiRenderer.bgCardHover());
         AppleUiRenderer.drawCenteredText(g, font, kbText, kbX + kbW / 2, y + 5,
@@ -387,6 +416,22 @@ public final class YeQuickMenu {
                     activeModule.setKeybind(-1);
                     listeningModuleKey = null;
                 }, null));
+
+        // Single-Module Reset to Default Pill ("重置")
+        String rstTxt = ConfigManager.tr("重置", "Reset");
+        int rstW = Math.max(32, font.width(rstTxt) + 10);
+        int rstX = kbX - rstW - 4;
+        boolean rstHov = mouseUnlocked && inBounds(mx, my, rstX, y + 1, rstW, 16);
+        AppleUiRenderer.drawRoundedRect(g, rstX, y + 1, rstW, 16, 5,
+                rstHov ? 0xFFE11D48 : AppleUiRenderer.bgCardHover());
+        AppleUiRenderer.drawCenteredText(g, font, rstTxt, rstX + rstW / 2, y + 5,
+                rstHov ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textSecondary());
+        HIT_RECTS.add(new HitRect(rstX, y + 1, rstW, 16, () -> {
+            playClick();
+            activeModule.resetToDefault();
+            openDropdown = null;
+            showToast("已将「" + mName + "」恢复默认", 0xFF38BDF8);
+        }, null, null));
 
         float mSwitch = AppleUiRenderer.animChannel("dsw_" + activeModule.getId(), activeModule.isEnabled() ? 1f : 0f, 18f);
         AppleUiRenderer.drawPillSwitch(g, x + w - 30, y + 2, 30, 15, mSwitch, accent);
@@ -408,7 +453,6 @@ public final class YeQuickMenu {
 
         ry += YePreviewRenderer.renderModulePreviewCard(g, font, activeModule, x, ry, rowW);
 
-        // Skin / Cape gallery with crisp face/cape thumbnails
         if (activeModule instanceof CustomCapeModule cm) {
             for (CapeManager.CapeEntry ce : CapeManager.getAllCapes()) {
                 if (ry + 22 >= listY && ry <= listY + listH) {
@@ -430,7 +474,6 @@ public final class YeQuickMenu {
                 ry += 23;
             }
         } else if (activeModule instanceof CustomSkinModule sm) {
-            // 2-column compact gallery for the 50 bundled HD skins!
             List<SkinManager.SkinEntry> skins = SkinManager.getAllSkins();
             int colW = (rowW - 4) / 2;
             for (int i = 0; i < skins.size(); i++) {
@@ -442,7 +485,6 @@ public final class YeQuickMenu {
                     boolean sel = se.id().equals(sm.selectedSkin.get());
                     boolean hov = mouseUnlocked && openDropdown == null && inBounds(mx, my, cx, cy, colW, 20);
                     AppleUiRenderer.drawElevatedCard(g, cx, cy, colW, 20, 5, sel ? 1f : 0f, hov ? 1f : 0f, accent);
-                    // Base face (8,8) + Hat overlay (40,8)
                     g.blit(RenderPipelines.GUI_TEXTURED, se.textureId(), cx + 4, cy + 2, 8.0f, 8.0f, 16, 16, 8, 8, 64, 64);
                     g.blit(RenderPipelines.GUI_TEXTURED, se.textureId(), cx + 4, cy + 2, 40.0f, 8.0f, 16, 16, 8, 8, 64, 64);
                     String sName = font.plainSubstrByWidth(se.displayName(), colW - 26);
@@ -598,104 +640,246 @@ public final class YeQuickMenu {
         int ry = startRy;
         int rowW = w - 6;
 
-        // 1. Dark / Light Theme
-        AppleUiRenderer.drawElevatedCard(g, x, ry, rowW, 22, 6, 0f,
-                (mouseUnlocked && inBounds(mx, my, x, ry, rowW, 22)) ? 1f : 0f, accent);
-        AppleUiRenderer.drawText(g, font, ConfigManager.tr("界面外观", "Appearance"), x + 8, ry + 7, AppleUiRenderer.textPrimary());
+        // ================= 1. CONFIG PROFILE MANAGER SECTION =================
+        String hdr = ConfigManager.tr(
+                "配置档案 · 账号: " + ConfigManager.getCurrentAccountName() + " (当前: " + ConfigManager.getActiveProfile() + ")",
+                "Profiles · User: " + ConfigManager.getCurrentAccountName() + " (" + ConfigManager.getActiveProfile() + ")");
+        AppleUiRenderer.drawText(g, font, hdr, x + 2, ry, AppleUiRenderer.textSecondary());
+        ry += 13;
+
+        // Profile Pills Grid (3 columns)
+        List<String> profiles = ConfigManager.listAvailableProfiles();
+        int pCols = 3;
+        int pGap = 5;
+        int pCellW = (rowW - (pCols - 1) * pGap) / pCols;
+        for (int i = 0; i < profiles.size(); i++) {
+            String pName = profiles.get(i);
+            int pcx = x + (i % pCols) * (pCellW + pGap);
+            int pcy = ry + (i / pCols) * 21;
+            boolean sel = pName.equalsIgnoreCase(ConfigManager.getActiveProfile());
+            boolean hov = mouseUnlocked && inBounds(mx, my, pcx, pcy, pCellW, 18);
+            AppleUiRenderer.drawElevatedCard(g, pcx, pcy, pCellW, 18, 5, sel ? 1f : 0f, hov ? 1f : 0f, accent);
+            String disp = pName.equalsIgnoreCase(ConfigManager.DEFAULT_PROFILE)
+                    ? ConfigManager.tr("default·默认", "default")
+                    : font.plainSubstrByWidth(pName, pCellW - 10);
+            AppleUiRenderer.drawCenteredText(g, font, disp, pcx + pCellW / 2, pcy + 5,
+                    sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
+            if (pcy + 18 > y && pcy < y + h) {
+                HIT_RECTS.add(new HitRect(pcx, pcy, pCellW, 18, () -> {
+                    playClick();
+                    profileInputMode = 0;
+                    ConfigManager.switchToProfile(pName, true);
+                    showToast("已切换配置: " + pName, accent);
+                }, null, null));
+            }
+        }
+        ry += ((profiles.size() + pCols - 1) / pCols) * 21 + 3;
+
+        // Inline Text Input Box (when creating or renaming a profile)
+        if (profileInputMode != 0) {
+            AppleUiRenderer.drawRoundedRect(g, x, ry, rowW, 22, 6, 0xEE090D16);
+            g.renderOutline(x, ry, rowW, 22, accent);
+            String prefix = (profileInputMode == 1) ? "新建名称: " : "重命名为: ";
+            String cursor = ((System.currentTimeMillis() / 450L) % 2 == 0) ? "|" : "";
+            AppleUiRenderer.drawText(g, font, prefix + profileInputBuffer + cursor, x + 7, ry + 7, 0xFFF8FAFC);
+
+            int okX = x + rowW - 44;
+            AppleUiRenderer.drawRoundedRect(g, okX, ry + 3, 40, 16, 4, accent);
+            AppleUiRenderer.drawCenteredText(g, font, "确定", okX + 20, ry + 7, AppleUiRenderer.TEXT_PRIMARY);
+            if (ry + 22 > y && ry < y + h) {
+                HIT_RECTS.add(new HitRect(okX, ry + 3, 40, 16, YeQuickMenu::confirmProfileInput, null, null));
+            }
+            ry += 26;
+        }
+
+        // 2x3 Action Grid for Config Operations
+        int halfW = (rowW - 6) / 2;
+        drawActionBtn(g, font, x, ry, halfW, ConfigManager.tr("+ 新建配置档", "+ New Profile"), mx, my, mouseUnlocked, accent, y, h, () -> {
+            playClick();
+            profileInputMode = 1;
+            profileInputBuffer = ConfigManager.getCurrentAccountName() + "_pvp";
+        });
+        drawActionBtn(g, font, x + halfW + 6, ry, halfW, ConfigManager.tr("重命名当前配置", "Rename Profile"), mx, my, mouseUnlocked, accent, y, h, () -> {
+            playClick();
+            if (ConfigManager.getActiveProfile().equalsIgnoreCase(ConfigManager.DEFAULT_PROFILE)) {
+                showToast("出厂 default 不可重命名", 0xFFEF4444);
+            } else {
+                profileInputMode = 2;
+                profileInputBuffer = ConfigManager.getActiveProfile();
+            }
+        });
+        ry += 22;
+
+        drawActionBtn(g, font, x, ry, halfW, ConfigManager.tr("设为新号默认模板", "Set as Template"), mx, my, mouseUnlocked, accent, y, h, () -> {
+            playClick();
+            ConfigManager.saveCurrentAsDefaultTemplate();
+            showToast("✓ 已保存为新玩家继承模板", 0xFF22C55E);
+        });
+        drawActionBtn(g, font, x + halfW + 6, ry, halfW, ConfigManager.tr("恢复出厂 default", "Reset to Default"), mx, my, mouseUnlocked, accent, y, h, () -> {
+            playClick();
+            ConfigManager.resetCurrentToFactoryDefault();
+            showToast("✓ 已恢复出厂默认参数", 0xFF38BDF8);
+        });
+        ry += 22;
+
+        drawActionBtn(g, font, x, ry, halfW, ConfigManager.tr("复制剪贴板配置码", "Copy Share Code"), mx, my, mouseUnlocked, accent, y, h, () -> {
+            playClick();
+            String code = ConfigManager.exportShareCodeToClipboard();
+            if (code != null) showToast("✓ 已复制配置码 (" + code.length() + "字)", 0xFF22C55E);
+            else showToast("复制配置码失败", 0xFFEF4444);
+        });
+        drawActionBtn(g, font, x + halfW + 6, ry, halfW, ConfigManager.tr("粘贴导入配置码", "Paste Share Code"), mx, my, mouseUnlocked, accent, y, h, () -> {
+            playClick();
+            if (ConfigManager.importShareCodeFromClipboard()) {
+                showToast("✓ 已从剪贴板导入整套配置!", 0xFF22C55E);
+            } else {
+                showToast("剪贴板无有效 YE1 配置码", 0xFFEF4444);
+            }
+        });
+        ry += 22;
+
+        drawActionBtn(g, font, x, ry, rowW, ConfigManager.tr("打开 configs 配置文件夹 (导入/导出 .json)", "Open configs Folder"), mx, my, mouseUnlocked, accent, y, h, () -> {
+            playClick();
+            ConfigManager.openConfigsFolder();
+        });
+        ry += 26;
+
+        // ================= 2. UI APPEARANCE & HOTKEYS SECTION =================
+        AppleUiRenderer.drawText(g, font, ConfigManager.tr("界面与快捷键", "UI & Hotkeys"), x + 2, ry, AppleUiRenderer.textSecondary());
+        ry += 13;
+
+        // Appearance
+        AppleUiRenderer.drawElevatedCard(g, x, ry, rowW, 21, 6, 0f,
+                (mouseUnlocked && inBounds(mx, my, x, ry, rowW, 21)) ? 1f : 0f, accent);
+        AppleUiRenderer.drawText(g, font, ConfigManager.tr("深浅外观", "Appearance"), x + 8, ry + 6, AppleUiRenderer.textPrimary());
         String tVal = ConfigManager.lightTheme ? ConfigManager.tr("浅色", "Light") : ConfigManager.tr("深色", "Dark");
-        AppleUiRenderer.drawRoundedRect(g, x + rowW - 52, ry + 3, 46, 16, 5, accent);
-        AppleUiRenderer.drawCenteredText(g, font, tVal, x + rowW - 29, ry + 7, AppleUiRenderer.TEXT_PRIMARY);
-        HIT_RECTS.add(new HitRect(x, ry, rowW, 22, () -> {
-            playClick();
-            AppleUiRenderer.toggleTheme();
-        }, null, null));
-        ry += 26;
+        AppleUiRenderer.drawRoundedRect(g, x + rowW - 52, ry + 3, 46, 15, 5, accent);
+        AppleUiRenderer.drawCenteredText(g, font, tVal, x + rowW - 29, ry + 6, AppleUiRenderer.TEXT_PRIMARY);
+        if (ry + 21 > y && ry < y + h) {
+            HIT_RECTS.add(new HitRect(x, ry, rowW, 21, () -> {
+                playClick();
+                AppleUiRenderer.toggleTheme();
+            }, null, null));
+        }
+        ry += 24;
 
-        // 2. Language
-        AppleUiRenderer.drawElevatedCard(g, x, ry, rowW, 22, 6, 0f,
-                (mouseUnlocked && inBounds(mx, my, x, ry, rowW, 22)) ? 1f : 0f, accent);
-        AppleUiRenderer.drawText(g, font, ConfigManager.tr("语言", "Language"), x + 8, ry + 7, AppleUiRenderer.textPrimary());
+        // Language
+        AppleUiRenderer.drawElevatedCard(g, x, ry, rowW, 21, 6, 0f,
+                (mouseUnlocked && inBounds(mx, my, x, ry, rowW, 21)) ? 1f : 0f, accent);
+        AppleUiRenderer.drawText(g, font, ConfigManager.tr("语言", "Language"), x + 8, ry + 6, AppleUiRenderer.textPrimary());
         String lVal = ConfigManager.english ? "EN" : "中文";
-        AppleUiRenderer.drawRoundedRect(g, x + rowW - 52, ry + 3, 46, 16, 5, accent);
-        AppleUiRenderer.drawCenteredText(g, font, lVal, x + rowW - 29, ry + 7, AppleUiRenderer.TEXT_PRIMARY);
-        HIT_RECTS.add(new HitRect(x, ry, rowW, 22, () -> {
-            playClick();
-            ConfigManager.english = !ConfigManager.english;
-            ConfigManager.saveAsync();
-        }, null, null));
-        ry += 26;
+        AppleUiRenderer.drawRoundedRect(g, x + rowW - 52, ry + 3, 46, 15, 5, accent);
+        AppleUiRenderer.drawCenteredText(g, font, lVal, x + rowW - 29, ry + 6, AppleUiRenderer.TEXT_PRIMARY);
+        if (ry + 21 > y && ry < y + h) {
+            HIT_RECTS.add(new HitRect(x, ry, rowW, 21, () -> {
+                playClick();
+                ConfigManager.english = !ConfigManager.english;
+                ConfigManager.saveAsync();
+            }, null, null));
+        }
+        ry += 24;
 
-        // 3. Arrow Key UI Hotkey ("方向键UI")
-        AppleUiRenderer.drawElevatedCard(g, x, ry, rowW, 22, 6, 0f,
-                (mouseUnlocked && inBounds(mx, my, x, ry, rowW, 22)) ? 1f : 0f, accent);
-        AppleUiRenderer.drawText(g, font, ConfigManager.tr("方向键UI", "Arrow UI"), x + 8, ry + 7, AppleUiRenderer.textPrimary());
+        // Arrow Key UI Hotkey ("方向键UI")
+        AppleUiRenderer.drawElevatedCard(g, x, ry, rowW, 21, 6, 0f,
+                (mouseUnlocked && inBounds(mx, my, x, ry, rowW, 21)) ? 1f : 0f, accent);
+        AppleUiRenderer.drawText(g, font, ConfigManager.tr("方向键UI", "Arrow UI"), x + 8, ry + 6, AppleUiRenderer.textPrimary());
         String mkVal = listeningKeySlot == 1 ? ConfigManager.tr("请按键...", "Press...") : keyName(ConfigManager.getMenuKey());
-        AppleUiRenderer.drawRoundedRect(g, x + rowW - 62, ry + 3, 56, 16, 5, listeningKeySlot == 1 ? 0xFFEF4444 : accent);
-        AppleUiRenderer.drawCenteredText(g, font, mkVal, x + rowW - 34, ry + 7, AppleUiRenderer.TEXT_PRIMARY);
-        HIT_RECTS.add(new HitRect(x, ry, rowW, 22, () -> {
-            playClick();
-            listeningModuleKey = null;
-            listeningKeySlot = (listeningKeySlot == 1) ? 0 : 1;
-        }, null, null));
+        AppleUiRenderer.drawRoundedRect(g, x + rowW - 62, ry + 3, 56, 15, 5, listeningKeySlot == 1 ? 0xFFEF4444 : accent);
+        AppleUiRenderer.drawCenteredText(g, font, mkVal, x + rowW - 34, ry + 6, AppleUiRenderer.TEXT_PRIMARY);
+        if (ry + 21 > y && ry < y + h) {
+            HIT_RECTS.add(new HitRect(x, ry, rowW, 21, () -> {
+                playClick();
+                listeningModuleKey = null;
+                listeningKeySlot = (listeningKeySlot == 1) ? 0 : 1;
+            }, null, null));
+        }
+        ry += 24;
+
+        // Mouse UI Hotkey ("鼠标UI")
+        AppleUiRenderer.drawElevatedCard(g, x, ry, rowW, 21, 6, 0f,
+                (mouseUnlocked && inBounds(mx, my, x, ry, rowW, 21)) ? 1f : 0f, accent);
+        AppleUiRenderer.drawText(g, font, ConfigManager.tr("鼠标UI", "Mouse UI"), x + 8, ry + 6, AppleUiRenderer.textPrimary());
+        String umVal = listeningKeySlot == 2 ? ConfigManager.tr("请按键...", "Press...") : keyName(ConfigManager.getMouseUnlockKey());
+        AppleUiRenderer.drawRoundedRect(g, x + rowW - 62, ry + 3, 56, 15, 5, listeningKeySlot == 2 ? 0xFFEF4444 : accent);
+        AppleUiRenderer.drawCenteredText(g, font, umVal, x + rowW - 34, ry + 6, AppleUiRenderer.TEXT_PRIMARY);
+        if (ry + 21 > y && ry < y + h) {
+            HIT_RECTS.add(new HitRect(x, ry, rowW, 21, () -> {
+                playClick();
+                listeningModuleKey = null;
+                listeningKeySlot = (listeningKeySlot == 2) ? 0 : 2;
+            }, null, null));
+        }
         ry += 26;
 
-        // 4. Mouse UI Hotkey ("鼠标UI")
-        AppleUiRenderer.drawElevatedCard(g, x, ry, rowW, 22, 6, 0f,
-                (mouseUnlocked && inBounds(mx, my, x, ry, rowW, 22)) ? 1f : 0f, accent);
-        AppleUiRenderer.drawText(g, font, ConfigManager.tr("鼠标UI", "Mouse UI"), x + 8, ry + 7, AppleUiRenderer.textPrimary());
-        String umVal = listeningKeySlot == 2 ? ConfigManager.tr("请按键...", "Press...") : keyName(ConfigManager.getMouseUnlockKey());
-        AppleUiRenderer.drawRoundedRect(g, x + rowW - 62, ry + 3, 56, 16, 5, listeningKeySlot == 2 ? 0xFFEF4444 : accent);
-        AppleUiRenderer.drawCenteredText(g, font, umVal, x + rowW - 34, ry + 7, AppleUiRenderer.TEXT_PRIMARY);
-        HIT_RECTS.add(new HitRect(x, ry, rowW, 22, () -> {
-            playClick();
-            listeningModuleKey = null;
-            listeningKeySlot = (listeningKeySlot == 2) ? 0 : 2;
-        }, null, null));
-        ry += 28;
-
-        // 5. Concise Pure Accent Color Swatches (蓝 / 紫 / 金 / 红 / 绿 / 粉)
+        // Concise Pure Accent Color Swatches (蓝 / 紫 / 金 / 红 / 绿 / 粉)
         AppleUiRenderer.drawText(g, font, ConfigManager.tr("主题色", "Theme Color"), x + 2, ry, AppleUiRenderer.textSecondary());
-        ry += 14;
+        ry += 13;
         ConfigManager.ThemeAccent[] accents = ConfigManager.ThemeAccent.values();
         int cw = (rowW - 25) / 6;
         for (int i = 0; i < accents.length; i++) {
             ConfigManager.ThemeAccent ta = accents[i];
             int cx = x + i * (cw + 5);
             boolean sel = ConfigManager.themeAccent == ta;
-            boolean hov = mouseUnlocked && inBounds(mx, my, cx, ry, cw, 22);
-            AppleUiRenderer.drawElevatedCard(g, cx, ry, cw, 22, 6, sel ? 1f : 0f, hov ? 1f : 0f, ta.argb);
+            boolean hov = mouseUnlocked && inBounds(mx, my, cx, ry, cw, 21);
+            AppleUiRenderer.drawElevatedCard(g, cx, ry, cw, 21, 6, sel ? 1f : 0f, hov ? 1f : 0f, ta.argb);
             if (!sel) {
-                AppleUiRenderer.drawCircle(g, cx + 6, ry + 6, 10, ta.argb);
+                AppleUiRenderer.drawCircle(g, cx + 6, ry + 5, 10, ta.argb);
             }
             String label = ConfigManager.english ? ta.en : ta.zh;
-            AppleUiRenderer.drawCenteredText(g, font, label, cx + cw / 2 + (sel ? 0 : 5), ry + 7,
+            AppleUiRenderer.drawCenteredText(g, font, label, cx + cw / 2 + (sel ? 0 : 5), ry + 6,
                     sel ? AppleUiRenderer.TEXT_PRIMARY : AppleUiRenderer.textPrimary());
-            HIT_RECTS.add(new HitRect(cx, ry, cw, 22, () -> {
-                playClick();
-                ConfigManager.themeAccent = ta;
-                ConfigManager.saveAsync();
-            }, null, null));
+            if (ry + 21 > y && ry < y + h) {
+                HIT_RECTS.add(new HitRect(cx, ry, cw, 21, () -> {
+                    playClick();
+                    ConfigManager.themeAccent = ta;
+                    ConfigManager.saveAsync();
+                }, null, null));
+            }
         }
-        ry += 28;
+        ry += 26;
 
-        // 6. Reset Window & HUD Positions
-        AppleUiRenderer.drawElevatedCard(g, x, ry, rowW, 20, 6, 0f,
-                (mouseUnlocked && inBounds(mx, my, x, ry, rowW, 20)) ? 1f : 0f, accent);
-        AppleUiRenderer.drawCenteredText(g, font, ConfigManager.tr("重置菜单与HUD位置", "Reset Window & HUD"),
-                x + rowW / 2, ry + 6, AppleUiRenderer.textPrimary());
-        HIT_RECTS.add(new HitRect(x, ry, rowW, 20, () -> {
+        drawActionBtn(g, font, x, ry, rowW, ConfigManager.tr("重置菜单与HUD窗口位置", "Reset Window & HUD Pos"), mx, my, mouseUnlocked, accent, y, h, () -> {
             playClick();
             ConfigManager.widgetX = -1;
             ConfigManager.widgetY = -1;
             ConfigManager.resetHudSlotsDefault();
             ConfigManager.saveAsync();
-        }, null, null));
+            showToast("已重置菜单与 HUD 坐标", accent);
+        });
         ry += 24;
 
         int contentH = ry - startRy;
         maxScroll = Math.max(0.0, contentH - h);
         drawScrollbar(g, x + w - 2, y, h, contentH, accent);
         g.disableScissor();
+    }
+
+    private static void drawActionBtn(GuiGraphics g, Font font, int x, int y, int w, String text,
+                                      int mx, int my, boolean mouseUnlocked, int accent, int clipY, int clipH, Runnable onClick) {
+        boolean hov = mouseUnlocked && inBounds(mx, my, x, y, w, 19);
+        AppleUiRenderer.drawElevatedCard(g, x, y, w, 19, 5, 0f, hov ? 1f : 0f, accent);
+        AppleUiRenderer.drawCenteredText(g, font, text, x + w / 2, y + 5, AppleUiRenderer.textPrimary());
+        if (y + 19 > clipY && y < clipY + clipH) {
+            HIT_RECTS.add(new HitRect(x, y, w, 19, onClick, null, null));
+        }
+    }
+
+    public static void confirmProfileInput() {
+        playClick();
+        String name = profileInputBuffer.trim();
+        if (!name.isEmpty()) {
+            if (profileInputMode == 1) {
+                String created = ConfigManager.createNewProfile(name);
+                showToast("✓ 已新建并切换配置: " + created, 0xFF22C55E);
+            } else if (profileInputMode == 2) {
+                if (ConfigManager.renameActiveProfile(name)) {
+                    showToast("✓ 已重命名为: " + ConfigManager.getActiveProfile(), 0xFF22C55E);
+                } else {
+                    showToast("重命名失败", 0xFFEF4444);
+                }
+            }
+        }
+        profileInputMode = 0;
     }
 
     private static void drawScrollbar(GuiGraphics g, int barX, int viewY, int viewH, int contentH, int accent) {
@@ -754,6 +938,10 @@ public final class YeQuickMenu {
     public static boolean handleEsc() {
         if (!open) return false;
         playClick();
+        if (profileInputMode != 0) {
+            profileInputMode = 0;
+            return true;
+        }
         if (listeningModuleKey != null) {
             listeningModuleKey = null;
             return true;
@@ -822,7 +1010,6 @@ public final class YeQuickMenu {
                     handleEsc();
                 }
 
-                // Auto-scroll keyboard selection into view
                 int row = selectedIndex / GRID_COLS;
                 double rowTop = row * 44.0;
                 if (rowTop < targetScroll) targetScroll = rowTop;

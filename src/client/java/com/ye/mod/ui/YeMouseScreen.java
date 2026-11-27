@@ -6,6 +6,7 @@ import com.ye.mod.core.setting.DoubleSetting;
 import com.ye.mod.modules.visual.HudModule;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
@@ -16,7 +17,7 @@ import java.util.List;
 /**
  * Transparent mouse-UI & RusherHack-style HUD Layout Editor (toggled with F10):
  * - Drag & magnetic-snap ANY HUD widget directly on screen with live snap alignment guides!
- * - Interact with YeQuickMenu cards, sliders, dropdowns, and per-module keybinds!
+ * - Supports inline text typing for creating/renaming Config Profiles!
  */
 public class YeMouseScreen extends Screen {
     private boolean draggingWindow = false;
@@ -47,7 +48,6 @@ public class YeMouseScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // Draw magnetic snap guide lines while dragging a HUD element
         if (draggingHudSlot != null) {
             int cx = this.width / 2;
             int cy = this.height / 2;
@@ -81,7 +81,6 @@ public class YeMouseScreen extends Screen {
         double mx = event.x();
         double my = event.y();
 
-        // 1. Check YeQuickMenu interactive hit rects first
         List<YeQuickMenu.HitRect> rects = YeQuickMenu.getHitRects();
         for (int i = rects.size() - 1; i >= 0; i--) {
             YeQuickMenu.HitRect r = rects.get(i);
@@ -105,7 +104,6 @@ public class YeMouseScreen extends Screen {
             }
         }
 
-        // 2. Drag YeQuickMenu window by header bar
         int wx = YeQuickMenu.getWinX(this.width);
         int wy = YeQuickMenu.getWinY(this.height);
         if (event.button() == 0 && mx >= wx && mx <= wx + YeQuickMenu.WIN_W && my >= wy && my <= wy + 29) {
@@ -115,7 +113,6 @@ public class YeMouseScreen extends Screen {
             return true;
         }
 
-        // 3. Drag any visible RusherHack HUD widget on screen (when clicking outside menu)
         if (event.button() == 0 && !YeQuickMenu.isPointInsideMenuOrDropdown(mx, my, this.width, this.height)) {
             HudModule hm = ModuleManager.get(HudModule.class);
             if (hm != null && hm.isEnabled()) {
@@ -183,8 +180,42 @@ public class YeMouseScreen extends Screen {
     }
 
     @Override
+    public boolean charTyped(CharacterEvent event) {
+        if (YeQuickMenu.profileInputMode != 0) {
+            String ch = event.codepointAsString();
+            if (ch != null && !ch.isEmpty() && YeQuickMenu.profileInputBuffer.length() < 24) {
+                String clean = ch.replaceAll("[\\\\/:*?\"<>|\\r\\n]", "");
+                YeQuickMenu.profileInputBuffer += clean;
+            }
+            return true;
+        }
+        return super.charTyped(event);
+    }
+
+    @Override
     public boolean keyPressed(KeyEvent event) {
         int key = event.key();
+
+        // Inline Profile Name Editor
+        if (YeQuickMenu.profileInputMode != 0) {
+            if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+                YeQuickMenu.confirmProfileInput();
+                return true;
+            }
+            if (key == GLFW.GLFW_KEY_ESCAPE) {
+                YeQuickMenu.playClick();
+                YeQuickMenu.profileInputMode = 0;
+                return true;
+            }
+            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+                if (!YeQuickMenu.profileInputBuffer.isEmpty()) {
+                    YeQuickMenu.profileInputBuffer = YeQuickMenu.profileInputBuffer.substring(
+                            0, YeQuickMenu.profileInputBuffer.length() - 1);
+                }
+                return true;
+            }
+            return true;
+        }
 
         // Per-module keybind capture
         if (YeQuickMenu.listeningModuleKey != null) {

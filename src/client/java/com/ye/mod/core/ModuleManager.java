@@ -21,6 +21,7 @@ public final class ModuleManager {
     private ModuleManager() {}
 
     public static void register(Module module) {
+        module.captureDefaultState();
         MODULES.add(module);
         BY_CLASS.put(module.getClass(), module);
         BY_ID.put(module.getId(), module);
@@ -61,7 +62,6 @@ public final class ModuleManager {
         Minecraft mc = Minecraft.getInstance();
         if (mc == null) return;
 
-        // Handle module keybinds only when no screen is open
         if (mc.screen == null && mc.getWindow() != null) {
             long handle = mc.getWindow().handle();
             for (Module m : MODULES) {

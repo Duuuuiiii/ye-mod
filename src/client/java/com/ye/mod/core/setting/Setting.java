@@ -26,25 +26,11 @@ public abstract class Setting<T> {
         this.value = defaultValue;
     }
 
-    public String getId() {
-        return id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public T getDefaultValue() {
-        return defaultValue;
-    }
-
-    public T get() {
-        return value;
-    }
+    public String getId() { return id; }
+    public String getName() { return name; }
+    public String getDescription() { return description; }
+    public T getDefaultValue() { return defaultValue; }
+    public T get() { return value; }
 
     public void set(T value) {
         this.value = value;
@@ -56,6 +42,13 @@ public abstract class Setting<T> {
 
     public void reset() {
         set(defaultValue);
+    }
+
+    public void resetSilent() {
+        this.value = defaultValue;
+        if (onChange != null) {
+            onChange.accept(defaultValue);
+        }
     }
 
     public boolean isVisible() {

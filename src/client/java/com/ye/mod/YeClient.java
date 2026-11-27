@@ -50,6 +50,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
+import net.minecraft.client.Minecraft;
 import net.minecraft.world.InteractionResult;
 import org.lwjgl.glfw.GLFW;
 
@@ -57,11 +58,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Client entrypoint for the Ye 1.21.11 Fabric mod (v1.7.0).
+ * Client entrypoint for the Ye 1.21.11 Fabric mod (v1.7.1).
  */
 public class YeClient implements ClientModInitializer {
     private static boolean prevMenuKeyDown = false;
     private static boolean prevMouseKeyDown = false;
+    private static int accountCheckTicks = 0;
     private static final Map<Integer, Boolean> PREV_NAV_KEYS = new HashMap<>();
 
     @Override
@@ -125,12 +127,22 @@ public class YeClient implements ClientModInitializer {
             return InteractionResult.PASS;
         });
 
-        ConfigManager.load();
+        String initialUser = "Player";
+        try {
+            if (Minecraft.getInstance() != null && Minecraft.getInstance().getUser() != null) {
+                initialUser = Minecraft.getInstance().getUser().getName();
+            }
+        } catch (Throwable ignored) {}
+        ConfigManager.initSystem(initialUser);
         PlayerStatsManager.init();
 
         ClientLifecycleEvents.CLIENT_STARTED.register(client -> {
             CapeManager.init();
             SkinManager.init();
+            if (client.getUser() != null) {
+                ConfigManager.checkAccountSwitch(client.getUser().getName());
+            }
+            ConfigManager.markRuntimeReady();
             BorderlessFullscreenModule bf = ModuleManager.get(BorderlessFullscreenModule.class);
             if (bf != null) {
                 bf.applyOnStartupIfEnabled();
@@ -143,6 +155,17 @@ public class YeClient implements ClientModInitializer {
         });
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            // Periodically check if player switched Minecraft accounts in-session
+            if (++accountCheckTicks >= 40) {
+                accountCheckTicks = 0;
+                String who = client.player != null
+                        ? client.player.getGameProfile().name()
+                        : (client.getUser() != null ? client.getUser().getName() : null);
+                if (who != null) {
+                    ConfigManager.checkAccountSwitch(who);
+                }
+            }
+
             if (client.screen == null && client.getWindow() != null) {
                 long handle = client.getWindow().handle();
                 int key = ConfigManager.getMenuKey();
