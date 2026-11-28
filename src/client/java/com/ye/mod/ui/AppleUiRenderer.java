@@ -49,7 +49,7 @@ public final class AppleUiRenderer {
     }
 
     public static boolean isGlass() {
-        return ConfigManager.uiTheme == ConfigManager.UiTheme.GAUSSIAN_GLASS;
+        return ConfigManager.gaussianGlass || ConfigManager.uiTheme == ConfigManager.UiTheme.GAUSSIAN_GLASS;
     }
 
     public static void beginFrame() {
@@ -140,8 +140,8 @@ public final class AppleUiRenderer {
     public static int textTertiary()  { return lerpColor(0xFF64748B, 0xFF64748B, themeAnim); }
 
     public static void cycleUiTheme() {
-        ConfigManager.UiTheme[] vals = ConfigManager.UiTheme.values();
-        ConfigManager.uiTheme = vals[(ConfigManager.uiTheme.ordinal() + 1) % vals.length];
+        ConfigManager.uiTheme = (ConfigManager.uiTheme == ConfigManager.UiTheme.LIGHT)
+                ? ConfigManager.UiTheme.DARK : ConfigManager.UiTheme.LIGHT;
         ConfigManager.lightTheme = (ConfigManager.uiTheme == ConfigManager.UiTheme.LIGHT);
         lightTheme = ConfigManager.lightTheme;
         ConfigManager.saveAsync();

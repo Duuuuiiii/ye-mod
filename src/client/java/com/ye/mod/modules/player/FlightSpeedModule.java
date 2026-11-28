@@ -125,6 +125,19 @@ public class FlightSpeedModule extends Module {
 
         if (applyFreecam.get()) {
             syncExternalFreecamSpeed(spd);
+            // Also directly scale detached Freecam camera entity velocity if present
+            if (mc.getCameraEntity() != null && mc.getCameraEntity() != mc.player) {
+                float yawRad = (float) Math.toRadians(mc.getCameraEntity().getYRot());
+                double fwd = (mc.options.keyUp.isDown() ? 1 : 0) - (mc.options.keyDown.isDown() ? 1 : 0);
+                double str = (mc.options.keyLeft.isDown() ? 1 : 0) - (mc.options.keyRight.isDown() ? 1 : 0);
+                double vert = (mc.options.keyJump.isDown() ? 1 : 0) - (mc.options.keyShift.isDown() ? 1 : 0);
+                if (fwd != 0 || str != 0 || vert != 0) {
+                    double bpt = spd * 10.0;
+                    double vx = (-Math.sin(yawRad) * fwd + Math.cos(yawRad) * str) * bpt;
+                    double vz = (Math.cos(yawRad) * fwd + Math.sin(yawRad) * str) * bpt;
+                    mc.getCameraEntity().setDeltaMovement(vx, vert * bpt, vz);
+                }
+            }
         }
 
         boolean isFlyingNow = mc.player.getAbilities().flying || mc.player.isSpectator();
@@ -195,6 +208,20 @@ public class FlightSpeedModule extends Module {
                 Object setting = spdField.get(fc);
                 if (setting != null) {
                     setting.getClass().getMethod("set", Object.class).invoke(setting, yeSpeed * 10.0);
+                }
+            }
+        } catch (Throwable ignored) {}
+
+        // 3) Standalone Freecam mod (net.xolt.freecam)
+        try {
+            Class<?> modCfg = Class.forName("net.xolt.freecam.config.ModConfig");
+            Object inst = modCfg.getField("INSTANCE").get(null);
+            if (inst != null) {
+                Object movement = inst.getClass().getField("movement").get(inst);
+                if (movement != null) {
+                    double v = Math.max(0.1, yeSpeed * 10.0);
+                    movement.getClass().getField("horizontalSpeed").setDouble(movement, v);
+                    movement.getClass().getField("verticalSpeed").setDouble(movement, v);
                 }
             }
         } catch (Throwable ignored) {}

@@ -1287,11 +1287,19 @@ public final class YeQuickMenu {
         }, null, null, null);
 
         AppleUiRenderer.drawElevatedCard(g, rxCol, ry, halfW, 22, 6, 0f, (mouseUnlocked && inBounds(mx, my, rxCol, ry, halfW, 22)) ? 1f : 0f, accent);
-        YeHdFont.draw(g, ConfigManager.tr("外观主题", "Theme"), rxCol + 8, YeHdFont.vCenterY(ry, 22, 8.5f), 8.5f, AppleUiRenderer.textPrimary(), false, false);
-        String thLbl = ConfigManager.english ? ConfigManager.uiTheme.en : ConfigManager.uiTheme.zh;
-        AppleUiRenderer.drawRoundedRect(g, rxCol + halfW - 60, ry + 3, 54, 16, 5, accent);
-        YeHdFont.drawCenteredInBox(g, thLbl, rxCol + halfW - 60, ry + 3, 54, 16, 8.1f, 0xFFFFFFFF, false, true);
-        addClippedHit(rxCol, ry, halfW, 22, y, y + h, () -> { playClick(); AppleUiRenderer.cycleUiTheme(); }, null, null, null);
+        YeHdFont.draw(g, ConfigManager.tr("深浅色", "Theme"), rxCol + 8, YeHdFont.vCenterY(ry, 22, 8.5f), 8.5f, AppleUiRenderer.textPrimary(), false, false);
+        String thLbl = (ConfigManager.uiTheme == ConfigManager.UiTheme.LIGHT) ? ConfigManager.tr("浅色", "Light") : ConfigManager.tr("深色", "Dark");
+        int gBtnW = 46;
+        AppleUiRenderer.drawRoundedRect(g, rxCol + halfW - 50 - gBtnW, ry + 3, gBtnW, 16, 5, ConfigManager.gaussianGlass ? accent : AppleUiRenderer.bgCardHover());
+        YeHdFont.drawCenteredInBox(g, ConfigManager.tr("玻璃", "Glass"), rxCol + halfW - 50 - gBtnW, ry + 3, gBtnW, 16, 7.8f, ConfigManager.gaussianGlass ? 0xFFFFFFFF : AppleUiRenderer.textSecondary(), false, ConfigManager.gaussianGlass);
+        addClippedHit(rxCol + halfW - 50 - gBtnW, ry + 3, gBtnW, 16, y, y + h, () -> {
+            playClick();
+            ConfigManager.gaussianGlass = !ConfigManager.gaussianGlass;
+            ConfigManager.saveAsync();
+        }, null, null, null);
+        AppleUiRenderer.drawRoundedRect(g, rxCol + halfW - 46, ry + 3, 40, 16, 5, accent);
+        YeHdFont.drawCenteredInBox(g, thLbl, rxCol + halfW - 46, ry + 3, 40, 16, 8.1f, 0xFFFFFFFF, false, true);
+        addClippedHit(rxCol + halfW - 46, ry + 3, 40, 16, y, y + h, () -> { playClick(); AppleUiRenderer.cycleUiTheme(); }, null, null, null);
         ry += 26;
 
         // Row 2: Panel Opacity Slider (with double-click exact input!) + Font Switch (自带字体 vs 客户端字体)

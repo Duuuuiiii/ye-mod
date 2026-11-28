@@ -47,7 +47,7 @@ import java.util.zip.GZIPOutputStream;
  * - 0px edge-flush HUD clamping + 9-zone magnetic auto-snap
  */
 public final class ConfigManager {
-    public static final String MOD_VERSION = "1.7.7";
+    public static final String MOD_VERSION = "1.7.8";
     public static final String DEFAULT_PROFILE = "default";
     public static final String SHARED_PROFILE = "main";
     public static final String TEMPLATE_FILE_STEM = "template";
@@ -113,6 +113,7 @@ public final class ConfigManager {
     private static volatile int mouseUnlockKey = org.lwjgl.glfw.GLFW.GLFW_KEY_F10;
     public static volatile UiStyle uiStyle = UiStyle.SILKY;
     public static volatile UiTheme uiTheme = UiTheme.DARK;
+    public static volatile boolean gaussianGlass = false;
     public static volatile boolean lightTheme = false;
     public static volatile float uiOpacity = 0.92f;
     public static volatile float uiBlurStrength = 0.48f;
@@ -832,6 +833,7 @@ public final class ConfigManager {
             } else if (root.has("lightTheme") && root.get("lightTheme").getAsBoolean()) {
                 uiTheme = UiTheme.LIGHT;
             }
+            if (root.has("gaussianGlass")) gaussianGlass = root.get("gaussianGlass").getAsBoolean();
             lightTheme = (uiTheme == UiTheme.LIGHT);
 
             if (root.has("uiOpacity")) uiOpacity = Math.max(0.25f, Math.min(1.0f, root.get("uiOpacity").getAsFloat()));
@@ -982,6 +984,7 @@ public final class ConfigManager {
         root.addProperty("widgetY", widgetY);
         root.addProperty("uiStyle", uiStyle.name());
         root.addProperty("uiTheme", uiTheme.name());
+        root.addProperty("gaussianGlass", gaussianGlass);
         root.addProperty("lightTheme", uiTheme == UiTheme.LIGHT);
         root.addProperty("uiOpacity", uiOpacity);
         root.addProperty("uiBlurStrength", uiBlurStrength);

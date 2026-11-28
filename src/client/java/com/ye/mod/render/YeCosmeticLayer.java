@@ -338,32 +338,32 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
 
         switch (preset) {
             case CLOUD_NIMBUS -> {
-                // Billowing Multi-Layered Somersault Cloud (筋斗祥云) + Golden Thunder Trim & Floating Tail Puffs!
-                float bob = (float) Math.sin((now / 260.0) * wSpeed) * 0.045f;
+                // Soft Fluffy Sun Wukong Somersault Cloud (悟空蓬松筋斗云)
+                float bob = (float) Math.sin((now / 280.0) * wSpeed) * 0.05f;
                 poseStack.translate(0.0f, 0.92f + bob, 0.0f);
                 poseStack.scale(sc, sc, sc);
                 collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
                     int cPure = 0xF5FFFBEB;
-                    int cWarm = 0xEEFEF3C7;
-                    int cGold = (0xEE << 24) | (goldArgb & 0x00FFFFFF);
-                    // Central main cloud cushion
-                    drawBox(pose, vc, 0xF000F0, cPure, -0.52f, -0.14f, -0.68f, 0.52f, 0.16f, 0.58f);
-                    drawBox(pose, vc, 0xF000F0, cWarm, -0.66f, -0.06f, -0.48f, 0.66f, 0.18f, 0.42f);
-                    // Front billowing crest
-                    drawBox(pose, vc, 0xF000F0, cPure, -0.38f, -0.22f, -0.88f, 0.38f, 0.12f, -0.52f);
-                    drawBox(pose, vc, 0xF000F0, cGold, -0.42f, -0.10f, -0.92f, 0.42f, -0.03f, -0.86f);
-                    // Side cloud curls
-                    drawBox(pose, vc, 0xF000F0, cPure, -0.78f, -0.12f, -0.25f, -0.52f, 0.12f, 0.28f);
-                    drawBox(pose, vc, 0xF000F0, cPure, 0.52f, -0.12f, -0.25f, 0.78f, 0.12f, 0.28f);
-                    // Golden auspicious trim bands
-                    drawBox(pose, vc, 0xF000F0, cGold, -0.56f, 0.15f, -0.60f, 0.56f, 0.19f, 0.50f);
+                    int cSoft = 0xEEFDE68A;
+                    int cGold = (0xE8 << 24) | (goldArgb & 0x00FFFFFF);
+                    // Fluffy multi-puff main cloud cluster
+                    drawBox(pose, vc, 0xF000F0, cPure, -0.44f, -0.16f, -0.52f, 0.44f, 0.14f, 0.44f);
+                    drawBox(pose, vc, 0xF000F0, cSoft, -0.58f, -0.10f, -0.38f, 0.58f, 0.16f, 0.34f);
+                    drawBox(pose, vc, 0xF000F0, cPure, -0.30f, -0.24f, -0.36f, 0.30f, 0.06f, 0.24f);
+                    // Front & side soft rounded puffs
+                    drawBox(pose, vc, 0xF000F0, cPure, -0.32f, -0.20f, -0.74f, 0.32f, 0.10f, -0.42f);
+                    drawBox(pose, vc, 0xF000F0, cGold, -0.22f, -0.26f, -0.66f, 0.22f, -0.04f, -0.46f);
+                    drawBox(pose, vc, 0xF000F0, cPure, -0.72f, -0.14f, -0.24f, -0.42f, 0.12f, 0.24f);
+                    drawBox(pose, vc, 0xF000F0, cPure, 0.42f, -0.14f, -0.24f, 0.72f, 0.12f, 0.24f);
+                    drawBox(pose, vc, 0xF000F0, cSoft, -0.64f, -0.06f, -0.46f, -0.36f, 0.14f, -0.12f);
+                    drawBox(pose, vc, 0xF000F0, cSoft, 0.36f, -0.06f, -0.46f, 0.64f, 0.14f, -0.12f);
                     if (trail) {
-                        for (int i = 1; i <= 3; i++) {
-                            float tz = 0.55f + i * 0.34f;
-                            float ty = (float) Math.sin((now / 180.0) * wSpeed - i) * 0.06f;
-                            float hw = Math.max(0.12f, 0.40f - i * 0.09f);
-                            int a = Math.max(60, 235 - i * 50);
-                            drawBox(pose, vc, 0xF000F0, (a << 24) | 0x00FEF3C7, -hw, ty - 0.08f, tz, hw, ty + 0.10f, tz + 0.26f);
+                        for (int i = 1; i <= 4; i++) {
+                            float tz = 0.42f + i * 0.28f;
+                            float ty = (float) Math.sin((now / 190.0) * wSpeed - i) * 0.055f;
+                            float hw = Math.max(0.10f, 0.34f - i * 0.06f);
+                            int a = Math.max(70, 235 - i * 42);
+                            drawBox(pose, vc, 0xF000F0, (a << 24) | 0x00FFFBEB, -hw, ty - 0.09f, tz, hw, ty + 0.09f, tz + 0.24f);
                         }
                     }
                 });
@@ -439,29 +439,29 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
                 poseStack.popPose();
             }
             case GIANT_SHURIKEN -> {
-                // High-Speed Spinning 4-Bladed Wind Demon Shuriken under feet!
+                // Iconic Naruto 4-Bladed Pinwheel Shuriken with hollow center ring & swept silver edges!
                 poseStack.translate(0.0f, 1.48f, 0.0f);
                 poseStack.scale(sc, sc, sc);
-                float spin = (float) (((now / 7.0) * wSpeed) % 360.0);
+                float spin = (float) (((now / 6.5) * wSpeed) % 360.0);
                 poseStack.mulPose(Axis.YP.rotationDegrees(spin));
                 collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(YeHighResTextures.SWORD_RUNE_TEX), (pose, vc) -> {
                     int steelDark = 0xFF1E293B;
-                    int steelEdge = 0xFFE2E8F0;
-                    // Center hub ring
-                    drawBox(pose, vc, packedLight, steelDark, -0.26f, -0.025f, -0.26f, 0.26f, 0.025f, 0.26f);
-                    drawBox(pose, vc, 0xF000F0, accentArgb, -0.14f, -0.032f, -0.14f, 0.14f, 0.032f, 0.14f);
-                    // 4 symmetrical beveled blades
-                    drawBox(pose, vc, packedLight, steelDark, -0.16f, -0.02f, -1.05f, 0.16f, 0.02f, -0.26f);
-                    drawBox(pose, vc, 0xF000F0, steelEdge, 0.04f, -0.012f, -1.18f, 0.22f, 0.012f, -0.35f);
-
-                    drawBox(pose, vc, packedLight, steelDark, -0.16f, -0.02f, 0.26f, 0.16f, 0.02f, 1.05f);
-                    drawBox(pose, vc, 0xF000F0, steelEdge, -0.22f, -0.012f, 0.35f, -0.04f, 0.012f, 1.18f);
-
-                    drawBox(pose, vc, packedLight, steelDark, -1.05f, -0.02f, -0.16f, -0.26f, 0.02f, 0.16f);
-                    drawBox(pose, vc, 0xF000F0, steelEdge, -1.18f, -0.012f, -0.22f, -0.35f, 0.012f, -0.04f);
-
-                    drawBox(pose, vc, packedLight, steelDark, 0.26f, -0.02f, -0.16f, 1.05f, 0.02f, 0.16f);
-                    drawBox(pose, vc, 0xF000F0, steelEdge, 0.35f, -0.012f, 0.04f, 1.18f, 0.012f, 0.22f);
+                    int steelEdge = 0xFFF1F5F9;
+                    // Hollow center ring (4 frame bars)
+                    drawBox(pose, vc, packedLight, steelDark, -0.24f, -0.024f, -0.24f, 0.24f, 0.024f, -0.13f);
+                    drawBox(pose, vc, packedLight, steelDark, -0.24f, -0.024f, 0.13f, 0.24f, 0.024f, 0.24f);
+                    drawBox(pose, vc, packedLight, steelDark, -0.24f, -0.024f, -0.13f, -0.13f, 0.024f, 0.13f);
+                    drawBox(pose, vc, packedLight, steelDark, 0.13f, -0.024f, -0.13f, 0.24f, 0.024f, 0.13f);
+                    // 4 swept Naruto-style pinwheel blades
+                    for (int b = 0; b < 4; b++) {
+                        poseStack.pushPose();
+                        poseStack.mulPose(Axis.YP.rotationDegrees(b * 90.0f));
+                        var bp = poseStack.last();
+                        drawBox(bp, vc, packedLight, steelDark, -0.12f, -0.018f, -0.95f, 0.10f, 0.018f, -0.24f);
+                        drawBox(bp, vc, 0xF000F0, steelEdge, 0.06f, -0.012f, -1.16f, 0.20f, 0.012f, -0.32f);
+                        drawBox(bp, vc, 0xF000F0, steelEdge, -0.04f, -0.012f, -1.24f, 0.12f, 0.012f, -0.92f);
+                        poseStack.popPose();
+                    }
                 });
             }
             case PAPER_GLIDER -> {
