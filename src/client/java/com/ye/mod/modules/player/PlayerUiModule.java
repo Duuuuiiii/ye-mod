@@ -169,14 +169,16 @@ public class PlayerUiModule extends Module {
         smoothFoodPct += (rawFoodPct - smoothFoodPct) * (1.0f - (float) Math.exp(-16.0f * dt));
 
         float barW = 82.0f;
-        float barH = 7.5f;
-        float baseY = sh - 38.0f + slideY;
+        float barH = 8.0f;
+        float slideDown = hotbarHideProg * 54.0f;
+        if (hotbarHideProg >= 0.98f) return;
+        float baseY = sh - 38.0f + slideDown;
         float leftX = sw * 0.5f - 91.0f;
         float rightX = sw * 0.5f + 91.0f - barW;
 
-        // 1. Health Bar + Damage Trail + Golden Absorption Overlay (Left above hotbar)
+        // 1. Health Bar + Bright Outline + Damage Trail + Golden Absorption Overlay
         AppleUiRenderer.drawRoundedRect(g, leftX - 1.0f, baseY - 1.0f, barW + 2.0f, barH + 2.0f, rad + 0.8f, 0xCC090D16);
-        AppleUiRenderer.drawRoundedOutline(g, leftX - 1.0f, baseY - 1.0f, barW + 2.0f, barH + 2.0f, rad + 0.8f, 1.0f, 0x2AFFFFFF);
+        AppleUiRenderer.drawRoundedOutline(g, leftX - 1.0f, baseY - 1.0f, barW + 2.0f, barH + 2.0f, rad + 0.8f, 1.0f, 0x78E2E8F0);
         if (trailHpPct > smoothHpPct + 0.005f) {
             AppleUiRenderer.drawRoundedRect(g, leftX, baseY, barW * trailHpPct, barH, rad, 0xCCFDE68A);
         }
@@ -193,18 +195,18 @@ public class PlayerUiModule extends Module {
             YeHdFont.drawCentered(g, hpTxt, leftX + barW * 0.5f, baseY - 0.8f, 7.2f, 0xFFF8FAFC, true, true);
         }
 
-        // 2. Armor Slim Bar (Above Health if armor > 0)
+        // 2. Armor Slim Bar (Above Health if armor > 0 and not hidden)
         int armor = p.getArmorValue();
-        if (armor > 0) {
+        if (armor > 0 && !hideArmorBar.get()) {
             float armPct = Math.min(1.0f, armor / 20.0f);
             float ay = baseY - 7.0f;
             AppleUiRenderer.drawRoundedRect(g, leftX - 0.8f, ay - 0.8f, barW + 1.6f, 4.6f, rad * 0.7f, 0xBB090D16);
             AppleUiRenderer.drawRoundedRect(g, leftX, ay, barW * armPct, 3.0f, rad * 0.6f, 0xFF38BDF8);
         }
 
-        // 3. Hunger + Golden Saturation Rim Bar (Right above hotbar)
+        // 3. Hunger + Bright Outline + Golden Saturation Rim Bar (Right above hotbar)
         AppleUiRenderer.drawRoundedRect(g, rightX - 1.0f, baseY - 1.0f, barW + 2.0f, barH + 2.0f, rad + 0.8f, 0xCC090D16);
-        AppleUiRenderer.drawRoundedOutline(g, rightX - 1.0f, baseY - 1.0f, barW + 2.0f, barH + 2.0f, rad + 0.8f, 1.0f, 0x2AFFFFFF);
+        AppleUiRenderer.drawRoundedOutline(g, rightX - 1.0f, baseY - 1.0f, barW + 2.0f, barH + 2.0f, rad + 0.8f, 1.0f, 0x78E2E8F0);
         // Right-to-left fill matching vanilla hunger symmetry
         float foodW = barW * smoothFoodPct;
         AppleUiRenderer.drawRoundedRect(g, rightX + (barW - foodW), baseY, foodW, barH, rad, 0xFFF59E0B);

@@ -55,12 +55,18 @@ public final class SkinManager {
             {"anime_saber", "阿尔托莉雅 · 圣剑王"},
             {"anime_kurumi", "时崎狂三 · 梦魇精灵"},
             {"anime_rei", "绫波丽 · 零号机"},
+            {"anime_asuka", "明日香 · 贰号机"},
+            {"dream", "Dream · 经典笑脸"},
             // === Chinese Classic Creators (国内经典主播) ===
             {"cn_zimin", "籽岷 · 经典蓝衫"},
             {"cn_xiaoshen", "小神先生 · 经典皮肤"},
             {"cn_muyu", "木鱼 · 经典像素"},
             {"cn_xiaoben", "小本 · 经典皮肤"},
             {"cn_xiatiany", "夏天Y · 经典皮肤"},
+            {"cn_youran", "悠然小天 · 经典皮肤"},
+            {"cn_kage", "卡哥 · 经典皮肤"},
+            {"cn_dazui", "大嘴 · 经典皮肤"},
+            {"cn_dahai", "大海 · 经典皮肤"},
             // === 50 Classic PvP & Creator Skins ===
             {"technoblade", "皇冠战猪 Technoblade"},
             {"ranboo", "双色末影 Ranboo"},
