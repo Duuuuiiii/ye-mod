@@ -47,7 +47,7 @@ import java.util.zip.GZIPOutputStream;
  * - 0px edge-flush HUD clamping + 9-zone magnetic auto-snap
  */
 public final class ConfigManager {
-    public static final String MOD_VERSION = "1.7.6";
+    public static final String MOD_VERSION = "1.7.7";
     public static final String DEFAULT_PROFILE = "default";
     public static final String SHARED_PROFILE = "main";
     public static final String TEMPLATE_FILE_STEM = "template";

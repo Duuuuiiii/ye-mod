@@ -48,12 +48,12 @@ public class HitFeedbackModule extends Module {
     public final EnumSetting<YeSoundPresets.CombatSoundType> normalHitSound = addSetting(new EnumSetting<>(
             "hitSoundType", "普通攻击音效", "普通攻击命中生物时的声音",
             YeSoundPresets.CombatSoundType.EXPERIENCE
-    ).functionGroup().gridPicker());
+    ).onChange(st -> YeSoundPresets.playCombat(st, 0.85f, 1.0f)).functionGroup().gridPicker());
 
     public final EnumSetting<YeSoundPresets.CombatSoundType> critHitSound = addSetting(new EnumSetting<>(
             "critSoundType", "暴击命中音效", "跳劈暴击命中生物时的声音",
             YeSoundPresets.CombatSoundType.ARCADE_CRIT
-    ).functionGroup().gridPicker());
+    ).onChange(st -> YeSoundPresets.playCombat(st, 0.85f, 1.15f)).functionGroup().gridPicker());
 
     public final BoolSetting replaceVanillaSound = addSetting(new BoolSetting(
             "replaceVanillaSound", "替换原版打击声", "使用自定义打击/暴击音效时静音原版挥砍肉击声", true

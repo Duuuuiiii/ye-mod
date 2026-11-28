@@ -170,6 +170,9 @@ public abstract class GuiMixin {
         EntityEspModule entityEsp = ModuleManager.get(EntityEspModule.class);
         if (entityEsp != null) entityEsp.render2d(guiGraphics, partialTick);
 
+        com.ye.mod.modules.visual.NameTagModule nameTags = ModuleManager.get(com.ye.mod.modules.visual.NameTagModule.class);
+        if (nameTags != null) nameTags.render2d(guiGraphics, partialTick);
+
         DamagePopupsModule dmg = ModuleManager.get(DamagePopupsModule.class);
         if (dmg != null) dmg.render(guiGraphics);
 
