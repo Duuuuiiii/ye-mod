@@ -508,13 +508,13 @@ public class StashRadarModule extends Module {
             }
             if (counts.isEmpty()) continue;
 
-            Vec3 top = new Vec3(t.pos.getX() + 0.5, t.pos.getY() + 1.15, t.pos.getZ() + 0.5);
-            double[] scr = com.ye.mod.render.YeWorldFxRenderer.worldToScreen(top, g.guiWidth(), g.guiHeight());
+            float[] scr = com.ye.mod.render.YeWorldFxRenderer.projectWorldToGui(
+                    t.pos.getX() + 0.5, t.pos.getY() + 1.15, t.pos.getZ() + 0.5, g.guiWidth(), g.guiHeight());
             if (scr == null) continue;
 
             shownContainers++;
-            int sx = (int) Math.round(scr[0]);
-            int sy = (int) Math.round(scr[1]);
+            int sx = Math.round(scr[0]);
+            int sy = Math.round(scr[1]);
             int row = 0;
             for (var entry : counts.entrySet()) {
                 if (row >= 5) break;
