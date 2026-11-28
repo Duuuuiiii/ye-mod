@@ -1108,9 +1108,9 @@ public final class HudElements {
                         lookY = cy - 4.0f * sc;
                     }
                     default -> {
-                        // Fixed non-mirrored look direction: turning right turns preview naturally right
-                        float relYaw = net.minecraft.util.Mth.wrapDegrees(subject.getYRot());
-                        lookX = cx + relYaw * 0.85f * sc;
+                        // Smooth continuous yaw without +/-180 jump when spinning
+                        float contYaw = subject.getYRot();
+                        lookX = cx + (float) Math.sin(Math.toRadians(contYaw)) * 45.0f * sc;
                         lookY = cy - subject.getXRot() * 0.95f * sc;
                     }
                 }
@@ -1141,11 +1141,15 @@ public final class HudElements {
         }
     }
 
-    // ==================== 12. STORAGE COUNT HUD (储存数量) ====================
+    // ==================== 12. STORAGE COUNT HUD (储存数量 — 细分开箱子/潜影盒/木桶) ====================
     public static final class StorageCountHud extends HudElementModule {
+        public final BoolSetting showChests = addSetting(new BoolSetting("showChests", "显示箱子数量", "统计周围箱子个数 (0时不显示)", true).functionGroup());
+        public final BoolSetting showShulkers = addSetting(new BoolSetting("showShulkers", "显示潜影盒数量", "统计周围潜影盒个数 (0时不显示)", true).functionGroup());
+        public final BoolSetting showBarrels = addSetting(new BoolSetting("showBarrels", "显示木桶数量", "统计周围木桶个数 (0时不显示)", true).functionGroup());
+
         public StorageCountHud() {
             super("hud_radar_mod", "hud_radar", "储存数量", "Storage Count",
-                    "单独统计周围加载区块内的储存容器总数与潜影盒数量",
+                    "分别统计周围箱子、潜影盒与木桶数量（数量为0自动隐藏）",
                     true, false, ColorStyle.ROYAL_GOLD, 12);
             addResetPositionButton();
         }
@@ -1155,13 +1159,19 @@ public final class HudElements {
             ConfigManager.HudSlot slot = getSlot();
             if (slot == null) return;
             com.ye.mod.modules.world.StashRadarModule sr = ModuleManager.get(com.ye.mod.modules.world.StashRadarModule.class);
-            int total = (sr != null) ? sr.getTotalStorageCount() : 0;
+            int chests = (sr != null) ? sr.getChestCount() : 0;
             int shulkers = (sr != null) ? sr.getShulkerCount() : 0;
-            if (!editMode && (sr == null || !sr.isEnabled()) && total == 0) return;
+            int barrels = (sr != null) ? sr.getBarrelCount() : 0;
+            if (editMode && chests == 0 && shulkers == 0 && barrels == 0) {
+                chests = 4; shulkers = 2; barrels = 1;
+            }
+            List<String> parts = new ArrayList<>();
+            if (showChests.get() && chests > 0) parts.add(ConfigManager.tr("箱子: ", "Chests: ") + chests);
+            if (showShulkers.get() && shulkers > 0) parts.add(ConfigManager.tr("潜影盒: ", "Shulkers: ") + shulkers);
+            if (showBarrels.get() && barrels > 0) parts.add(ConfigManager.tr("木桶: ", "Barrels: ") + barrels);
+            if (parts.isEmpty()) return;
 
-            String txt = ConfigManager.tr(
-                    String.format("储存: %d (潜影盒 %d)", total, shulkers),
-                    String.format("Storage: %d (Shulkers %d)", total, shulkers));
+            String txt = String.join(" · ", parts);
             float sc = scale.get().floatValue();
             float fSize = 8.6f * sc;
             int w = Math.round(YeHdFont.widthF(txt, fSize, false) + 12 * sc);

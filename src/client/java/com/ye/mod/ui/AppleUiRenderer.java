@@ -55,13 +55,13 @@ public final class AppleUiRenderer {
     public static void beginFrame() {
         long now = System.nanoTime();
         long diff = now - lastFrameNs;
-        if (diff >= 1_500_000L) {
+        if (diff >= 400_000L) {
             frameDt = Math.max(0.001f, Math.min(0.05f, diff / 1_000_000_000.0f));
             lastFrameNs = now;
         }
         lightTheme = (ConfigManager.uiTheme == ConfigManager.UiTheme.LIGHT);
         float target = lightTheme ? 1.0f : 0.0f;
-        themeAnim = isMechanical() ? target : smooth(themeAnim, target, 18.0f, frameDt);
+        themeAnim = isMechanical() ? target : smooth(themeAnim, target, 24.0f, frameDt);
     }
 
     public static float dt() {

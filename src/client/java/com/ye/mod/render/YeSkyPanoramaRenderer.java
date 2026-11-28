@@ -293,6 +293,7 @@ public final class YeSkyPanoramaRenderer {
         PoseStack ps = new PoseStack();
         ps.mulPose(Axis.YP.rotationDegrees(rotDeg));
         var buf = mc.renderBuffers().bufferSource();
+        com.mojang.blaze3d.opengl.GlStateManager._depthMask(false);
         VertexConsumer vc = buf.getBuffer(RenderTypes.entityTranslucent(tex));
         PoseStack.Pose pose = ps.last();
 
@@ -324,6 +325,7 @@ public final class YeSkyPanoramaRenderer {
             }
         }
         buf.endBatch(RenderTypes.entityTranslucent(tex));
+        com.mojang.blaze3d.opengl.GlStateManager._depthMask(true);
     }
 
     private static void emitSkyVert(PoseStack.Pose pose, VertexConsumer vc, float x, float y, float z, float u, float v, int argb) {

@@ -53,7 +53,7 @@ public class FlightSpeedModule extends Module {
 
     // Quick Preset Slots (e.g. 7 -> 0.01, 0 -> 0.60, 8 -> 0.05)
     public final KeybindSetting presetKey1 = addSetting(new KeybindSetting(
-            "presetKey1", "微调档快捷键", "切换至精细微移速度档位", GLFW.GLFW_KEY_7
+            "presetKey1", "微调档快捷键", "切换至精细微移速度档位", -1
     ).functionGroup());
     public final DoubleSetting presetVal1 = addSetting(new DoubleSetting(
             "presetVal1", "微调档速度", "微调档对应的飞行速度值", 0.01, 0.002, 2.00, 0.01

@@ -319,6 +319,26 @@ public class StashRadarModule extends Module {
         return isEnabled() ? shulkerCount : 0;
     }
 
+    public int getChestCount() {
+        if (!isEnabled()) return 0;
+        int c = 0;
+        for (StorageTarget t : cached) {
+            if (t.kind == ContainerKind.CHEST) c++;
+        }
+        return c;
+    }
+
+    public int getBarrelCount() {
+        if (!isEnabled()) return 0;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return 0;
+        int c = 0;
+        for (StorageTarget t : cached) {
+            if (t.kind == ContainerKind.CHEST && mc.level.getBlockEntity(t.pos) instanceof BarrelBlockEntity) c++;
+        }
+        return c;
+    }
+
     public void emitGizmos(Vec3 tracerStart) {
         if (!isEnabled()) return;
         Minecraft mc = Minecraft.getInstance();

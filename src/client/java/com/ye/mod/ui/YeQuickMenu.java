@@ -110,6 +110,11 @@ public final class YeQuickMenu {
     private static double maxScroll = 0.0;
     private static double savedFeaturesScroll = 0.0;
     private static double savedHudScroll = 0.0;
+    private static long lastClosedMs = 0L;
+    private static Module lastClosedModule = null;
+    private static TopSection lastClosedSection = TopSection.FEATURES;
+    public static int minWinX = -1, minWinY = -1;
+    public static final int MIN_WIN_W = 58, MIN_WIN_H = 22;
 
     private static EnumSetting<?> openDropdown = null;
     private static int dropX, dropY, dropW;
@@ -160,12 +165,30 @@ public final class YeQuickMenu {
         open = !open;
         playClick();
         if (!open) {
+            lastClosedMs = System.currentTimeMillis();
+            lastClosedModule = activeModule;
+            lastClosedSection = activeSection;
             closeOverlays();
             ConfigManager.saveAsync();
+        } else {
+            if (lastClosedModule != null && System.currentTimeMillis() - lastClosedMs <= 10_000L) {
+                activeSection = lastClosedSection;
+                activeModule = lastClosedModule;
+            }
         }
     }
 
     public static void setOpen(boolean v) {
+        if (open && !v) {
+            lastClosedMs = System.currentTimeMillis();
+            lastClosedModule = activeModule;
+            lastClosedSection = activeSection;
+        } else if (!open && v) {
+            if (lastClosedModule != null && System.currentTimeMillis() - lastClosedMs <= 10_000L) {
+                activeSection = lastClosedSection;
+                activeModule = lastClosedModule;
+            }
+        }
         open = v;
         if (!open) closeOverlays();
     }
@@ -248,9 +271,9 @@ public final class YeQuickMenu {
     public static boolean isPointInsideMenuOrOverlay(double mx, double my, int sw, int sh) {
         if (ConfigManager.rusherSidebar && inBounds(mx, my, sw - 27, (sh - 68) / 2, 24, 68)) return true;
         if (ConfigManager.uiMinimized) {
-            int minW = 58, minH = 22;
-            int minX = sw - minW - 12, minY = 10;
-            return inBounds(mx, my, minX, minY, minW, minH);
+            int mx0 = (minWinX >= 0) ? Math.max(4, Math.min(sw - MIN_WIN_W - 4, minWinX)) : (sw - MIN_WIN_W - 12);
+            int my0 = (minWinY >= 0) ? Math.max(4, Math.min(sh - MIN_WIN_H - 4, minWinY)) : 10;
+            return inBounds(mx, my, mx0, my0, MIN_WIN_W, MIN_WIN_H);
         }
         if (YePickerModal.isOpen() || confirmMessage != null || tutorialModalOpen) return true;
         int ww = currentWinW(true), wh = currentWinH(true);
@@ -308,21 +331,23 @@ public final class YeQuickMenu {
 
         int accent = ConfigManager.getAccentColor();
 
-        // Compact Minimized "Yer" Floating Bar
+        // Compact Minimized "Yer" Floating Bar (draggable, spawns at click position!)
         if (mouseUnlocked && ConfigManager.uiMinimized) {
             HIT_RECTS.clear();
-            int minW = 58, minH = 22;
-            int minX = sw - minW - 12, minY = 10;
+            int minX = (minWinX >= 0) ? Math.max(4, Math.min(sw - MIN_WIN_W - 4, minWinX)) : (sw - MIN_WIN_W - 12);
+            int minY = (minWinY >= 0) ? Math.max(4, Math.min(sh - MIN_WIN_H - 4, minWinY)) : 10;
+            minWinX = minX;
+            minWinY = minY;
             int rad = mech ? 0 : 7;
-            AppleUiRenderer.drawElevatedWindow(g, minX, minY, minW, minH, rad);
-            AppleUiRenderer.drawRoundedOutline(g, minX, minY, minW, minH, rad, 1.2f, accent);
+            AppleUiRenderer.drawElevatedWindow(g, minX, minY, MIN_WIN_W, MIN_WIN_H, rad);
+            AppleUiRenderer.drawRoundedOutline(g, minX, minY, MIN_WIN_W, MIN_WIN_H, rad, 1.2f, accent);
             AppleUiRenderer.drawRoundedRect(g, minX + 6, minY + 5, 3, 12, 1.5f, accent);
-            YeHdFont.draw(g, "Yer", minX + 13, YeHdFont.vCenterY(minY, minH, 9.5f), 9.5f, AppleUiRenderer.textPrimary(), false, true);
-            YeHdFont.draw(g, "+", minX + minW - 14, YeHdFont.vCenterY(minY, minH, 9.5f), 9.5f, accent, false, true);
-            HIT_RECTS.add(new HitRect(minX, minY, minW, minH, () -> {
+            YeHdFont.draw(g, "Yer", minX + 13, YeHdFont.vCenterY(minY, MIN_WIN_H, 9.5f), 9.5f, AppleUiRenderer.textPrimary(), false, true);
+            YeHdFont.draw(g, "+", minX + MIN_WIN_W - 14, YeHdFont.vCenterY(minY, MIN_WIN_H, 9.5f), 9.5f, accent, false, true);
+            HIT_RECTS.add(new HitRect(minX + MIN_WIN_W - 18, minY, 18, MIN_WIN_H, () -> {
                 playClick();
                 ConfigManager.uiMinimized = false;
-            }, null, null, 8));
+            }, null, null, 9));
             renderRusherSidebar(g, sw, sh, mouseX, mouseY, true);
             renderToastOnly(g, sw, sh);
             return;
@@ -414,6 +439,8 @@ public final class YeQuickMenu {
             YeHdFont.drawCenteredInBox(g, "—", minBtnX, minBtnY, minBtnW, 16, 8.2f, minHov ? 0xFFFFFFFF : AppleUiRenderer.textSecondary(), false, true);
             HIT_RECTS.add(new HitRect(minBtnX, minBtnY, minBtnW, 16, () -> {
                 playClick();
+                minWinX = minBtnX - MIN_WIN_W + minBtnW;
+                minWinY = minBtnY;
                 ConfigManager.uiMinimized = true;
             }, null, null, 3));
 

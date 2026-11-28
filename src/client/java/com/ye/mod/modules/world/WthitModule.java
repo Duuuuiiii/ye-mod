@@ -12,6 +12,7 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -35,9 +36,12 @@ public class WthitModule extends HudElementModule {
             "showEntities", "包含生物实体", "准星指向生物或实体时显示血量与距离", true
     ).functionGroup());
 
+    private float smoothBreakRatio = 0.0f;
+    private BlockPos lastBreakPos = null;
+
     public WthitModule() {
         super("wthit", "hud_wthit", "方块信息", "Block Info",
-                "显示准星指向方块与生物的中文名称、推荐工具、挖掘进度及坐标",
+                "显示准星指向方块与生物的中文名称、钻石工具图标、平滑挖掘进度及坐标",
                 false, true, ColorStyle.ICE_CYAN, 10);
         addResetPositionButton();
     }
@@ -56,20 +60,29 @@ public class WthitModule extends HudElementModule {
                 ItemStack icon = state.getBlock().asItem().getDefaultInstance();
                 String title = YeZhCnDict.blockName(state.getBlock());
                 StringBuilder sub = new StringBuilder();
-                if (showToolHint.get()) sub.append(resolveToolTag(state));
                 if (showCoords.get()) {
-                    if (!sub.isEmpty()) sub.append(" · ");
                     sub.append(pos.getX()).append(", ").append(pos.getY()).append(", ").append(pos.getZ());
                 }
                 int breakStage = (mc.gameMode != null && mc.gameMode.isDestroying()) ? mc.gameMode.getDestroyStage() : -1;
-                int breakPct = breakStage >= 0 ? Math.min(100, (breakStage + 1) * 10) : -1;
-                if (breakPct > 0 && showToolHint.get()) sub.append(" · ").append(breakPct).append("%");
+                if (!pos.equals(lastBreakPos)) {
+                    lastBreakPos = pos;
+                    smoothBreakRatio = 0.0f;
+                }
+                float targetRatio = breakStage >= 0 ? Math.min(1.0f, (breakStage + 1) / 10.0f) : 0.0f;
+                smoothBreakRatio += (targetRatio - smoothBreakRatio) * 0.28f;
+                int breakPct = breakStage >= 0 ? Math.max(1, Math.min(100, Math.round(smoothBreakRatio * 100.0f))) : -1;
+                if (breakPct > 0 && showToolHint.get()) {
+                    if (!sub.isEmpty()) sub.append(" · ");
+                    sub.append(breakPct).append("%");
+                }
 
                 String subStr = sub.toString();
+                ItemStack toolIcon = showToolHint.get() ? resolveToolIcon(state) : ItemStack.EMPTY;
                 float padX = 7.0f * sc;
                 float iconSize = icon.isEmpty() ? 0.0f : 16.0f * sc;
                 float iconGap = icon.isEmpty() ? 0.0f : 6.0f * sc;
-                float textBlockW = Math.max(YeHdFont.widthF(title, fTitle, true), YeHdFont.widthF(subStr, fSub, false));
+                float toolW = toolIcon.isEmpty() ? 0.0f : 14.0f * sc;
+                float textBlockW = Math.max(YeHdFont.widthF(title, fTitle, true) + toolW, YeHdFont.widthF(subStr, fSub, false));
                 int w = Math.round(Math.max(88 * sc, padX * 2.0f + iconSize + iconGap + textBlockW));
                 int h = Math.round((subStr.isEmpty() ? 22 : 28) * sc + (breakPct > 0 ? 5 * sc : 0));
                 int x = slot != null ? slot.resolveX(sw, w) : (sw - w) / 2;
@@ -97,7 +110,15 @@ public class WthitModule extends HudElementModule {
                 if (breakPct > 0) {
                     float bx = x + 6 * sc, by = y + h - 5 * sc, bw = w - 12 * sc;
                     AppleUiRenderer.drawRoundedRect(g, bx, by, bw, 3 * sc, 1.5f * sc, 0xFF1E293B);
-                    AppleUiRenderer.drawRoundedRect(g, bx, by, bw * (breakPct / 100.0f), 3 * sc, 1.5f * sc, resolvePrimaryColor());
+                    AppleUiRenderer.drawRoundedRect(g, bx, by, bw * Math.max(0.02f, smoothBreakRatio), 3 * sc, 1.5f * sc, resolvePrimaryColor());
+                }
+                if (!toolIcon.isEmpty()) {
+                    var tp = g.pose();
+                    tp.pushMatrix();
+                    tp.translate(x + w - padX - 11.0f * sc, y + 3.5f * sc);
+                    tp.scale(0.68f * sc, 0.68f * sc);
+                    g.renderItem(toolIcon, 0, 0);
+                    tp.popMatrix();
                 }
                 return;
             }
@@ -128,6 +149,14 @@ public class WthitModule extends HudElementModule {
             drawHudText(g, ConfigManager.tr("草方块", "Grass Block"), x + 8 * sc, y + 4 * sc, fTitle, resolvePrimaryColor(), true);
             drawHudText(g, "0, 64, 0", x + 8 * sc, y + 14.5f * sc, fSub, 0xFF94A3B8, false);
         }
+    }
+
+    private static ItemStack resolveToolIcon(BlockState state) {
+        if (state.is(BlockTags.MINEABLE_WITH_PICKAXE)) return new ItemStack(Items.DIAMOND_PICKAXE);
+        if (state.is(BlockTags.MINEABLE_WITH_AXE)) return new ItemStack(Items.DIAMOND_AXE);
+        if (state.is(BlockTags.MINEABLE_WITH_SHOVEL)) return new ItemStack(Items.DIAMOND_SHOVEL);
+        if (state.is(BlockTags.MINEABLE_WITH_HOE)) return new ItemStack(Items.DIAMOND_HOE);
+        return ItemStack.EMPTY;
     }
 
     private static String resolveToolTag(BlockState s) {

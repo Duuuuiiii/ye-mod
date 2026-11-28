@@ -41,8 +41,12 @@ public class BlockSearchModule extends Module {
     ).functionGroup());
 
     public final BoolSetting traceNearest = addSetting(new BoolSetting(
-            "traceNearest", "追踪最近目标", "自动向距离最近或手动锁定的搜索结果绘制引导线", true
+            "traceNearest", "启用追踪线", "向搜索到的目标方块绘制引导线（默认关闭）", false
     ).functionGroup());
+
+    public final BoolSetting traceEveryBlock = addSetting(new BoolSetting(
+            "traceEveryBlock", "每个方块单独连线", "开启后每个目标各画一条线，关闭则相连方块合并为一条线", false
+    ).visible(traceNearest::get).functionGroup());
 
     public final BoolSetting soundOnFind = addSetting(new BoolSetting(
             "soundOnFind", "发现提示音", "扫描到新目标方块坐标时播放提示音", true

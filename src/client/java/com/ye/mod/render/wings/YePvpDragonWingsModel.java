@@ -141,8 +141,9 @@ public class YePvpDragonWingsModel {
             float x1 = (ox + widthX) / 16.0f;
             float tu0 = (left ? u0 : u1) / 30.0f;
             float tu1 = (left ? u1 : u0) / 30.0f;
-            float tv0 = (v0 + (v1 - v0) * t0) / 30.0f;
-            float tv1 = (v0 + (v1 - v0) * t1) / 30.0f;
+            // Flip V so the sculpted wing membrane scallops hang downward cleanly
+            float tv0 = (v1 - (v1 - v0) * t0) / 30.0f;
+            float tv1 = (v1 - (v1 - v0) * t1) / 30.0f;
 
             emit(pose, vc, x0, y0, zArch0, argb, tu0, tv0, light, 0f, 0f, 1f);
             emit(pose, vc, x1, y0, zArch0, argb, tu1, tv0, light, 0f, 0f, 1f);

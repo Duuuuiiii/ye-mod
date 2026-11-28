@@ -24,6 +24,9 @@ public class YeMouseScreen extends Screen {
     private int hudDragOffX = 0;
     private int hudDragOffY = 0;
 
+    private boolean draggingMinBar = false;
+    private int minDragOffX = 0, minDragOffY = 0;
+
     private YeQuickMenu.SliderBinding draggingSlider = null;
     private int sliderX = 0;
     private int sliderW = 100;
@@ -144,6 +147,15 @@ public class YeMouseScreen extends Screen {
         lastClickX = mx;
         lastClickY = my;
 
+        // 0.5 Drag minimized "Yer" bar when clicking its left handle area
+        if (btn == 0 && ConfigManager.uiMinimized && mx >= YeQuickMenu.minWinX && mx <= YeQuickMenu.minWinX + YeQuickMenu.MIN_WIN_W - 18
+                && my >= YeQuickMenu.minWinY && my <= YeQuickMenu.minWinY + YeQuickMenu.MIN_WIN_H) {
+            draggingMinBar = true;
+            minDragOffX = (int) mx - YeQuickMenu.minWinX;
+            minDragOffY = (int) my - YeQuickMenu.minWinY;
+            return true;
+        }
+
         // 1. Check 2D HSV Color Picker Interactive Dragging first if open!
         if (btn == 0 && (YeQuickMenu.openColorSetting != null || YeQuickMenu.openThemeCustomColor)) {
             int svX = YeQuickMenu.pickerX + 8;
@@ -232,6 +244,11 @@ public class YeMouseScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
+        if (draggingMinBar && event.button() == 0) {
+            YeQuickMenu.minWinX = Math.max(4, Math.min(this.width - YeQuickMenu.MIN_WIN_W - 4, (int) event.x() - minDragOffX));
+            YeQuickMenu.minWinY = Math.max(4, Math.min(this.height - YeQuickMenu.MIN_WIN_H - 4, (int) event.y() - minDragOffY));
+            return true;
+        }
         if (draggingHsvSquare && event.button() == 0) {
             updateHsvFromMouse(event.x(), event.y());
             return true;
@@ -255,6 +272,10 @@ public class YeMouseScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
+        if (draggingMinBar) {
+            draggingMinBar = false;
+            return true;
+        }
         if (draggingHsvSquare || draggingHueBar) {
             draggingHsvSquare = false;
             draggingHueBar = false;

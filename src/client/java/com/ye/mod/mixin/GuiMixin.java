@@ -187,6 +187,9 @@ public abstract class GuiMixin {
             stashRadar.render2d(guiGraphics, partialTick);
         }
 
+        com.ye.mod.modules.world.BreakProgressModule bp = ModuleManager.get(com.ye.mod.modules.world.BreakProgressModule.class);
+        if (bp != null) bp.render2d(guiGraphics);
+
         AntiLagModule antiLag = ModuleManager.get(AntiLagModule.class);
         if (antiLag != null) antiLag.renderHudAlert(guiGraphics);
 

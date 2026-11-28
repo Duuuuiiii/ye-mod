@@ -55,6 +55,14 @@ public class CameraTweaksModule extends Module {
             "noHurtShake", "受伤镜头不晃动", "取消受击时的屏幕倾斜抖动", false
     ).functionGroup());
 
+    public final BoolSetting sprintFov = addSetting(new BoolSetting(
+            "sprintFov", "冲刺视仰角(FOV)", "控制奔跑、飞行等状态下的动态视野缩放", true
+    ).functionGroup());
+
+    public final DoubleSetting sprintFovScale = addSetting(new DoubleSetting(
+            "sprintFovScale", "视仰角变化幅度", "调节动态视野缩放程度 (0.0=关闭, 1.0=原版)", 1.0, 0.0, 2.0, 0.1
+    ).visible(sprintFov::get).functionGroup());
+
     private float currentDist = 0.0f;
     private long lastFrameNs = 0L;
 

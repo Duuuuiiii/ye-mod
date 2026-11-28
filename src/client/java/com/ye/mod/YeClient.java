@@ -8,6 +8,7 @@ import com.ye.mod.core.ModuleManager;
 import com.ye.mod.core.YeZhCnDict;
 import com.ye.mod.modules.hud.HudElements;
 import com.ye.mod.modules.player.FlightSpeedModule;
+import com.ye.mod.modules.player.InventorySorterModule;
 import com.ye.mod.modules.player.PlayerUiModule;
 import com.ye.mod.modules.player.SmartAfkModule;
 import com.ye.mod.modules.render.AccessoriesModule;
@@ -44,6 +45,8 @@ import com.ye.mod.modules.visual.IdleWallpaperModule;
 import com.ye.mod.modules.visual.LowHpVignetteModule;
 import com.ye.mod.modules.visual.MotionBlurModule;
 import com.ye.mod.modules.visual.NoFovModule;
+import com.ye.mod.modules.visual.ParticleManagerModule;
+import com.ye.mod.modules.visual.ShaderOutlineModule;
 import com.ye.mod.modules.visual.ShaderPackModule;
 import com.ye.mod.modules.visual.SinCityFilterModule;
 import com.ye.mod.modules.visual.SoulAscendModule;
@@ -55,7 +58,9 @@ import com.ye.mod.modules.visual.ZoomModule;
 import com.ye.mod.modules.world.AutoLogModule;
 import com.ye.mod.modules.world.BlockEspModule;
 import com.ye.mod.modules.world.BlockSearchModule;
+import com.ye.mod.modules.world.BreakProgressModule;
 import com.ye.mod.modules.world.LogoutGhostsModule;
+import com.ye.mod.modules.world.PacketMineModule;
 import com.ye.mod.modules.world.PortalFinderModule;
 import com.ye.mod.modules.world.StashRadarModule;
 import com.ye.mod.modules.world.WthitModule;
@@ -102,8 +107,10 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new GlobalColorModule());
         ModuleManager.register(new ShaderPackModule());
         ModuleManager.register(new EnchantGlintModule());
+        ModuleManager.register(new ShaderOutlineModule());
         ModuleManager.register(new MotionBlurModule());
         ModuleManager.register(new CameraTweaksModule());
+        ModuleManager.register(new ParticleManagerModule());
         ModuleManager.register(new EntityEspModule());
         ModuleManager.register(new SoulRingsModule());
         ModuleManager.register(new AmbienceModule());
@@ -122,6 +129,7 @@ public class YeClient implements ClientModInitializer {
 
         // 3. 特定功能 (UTILITY)
         ModuleManager.register(new PlayerUiModule());
+        ModuleManager.register(new InventorySorterModule());
         ModuleManager.register(new FlightSpeedModule());
         ModuleManager.register(new QuickChatModule());
         ModuleManager.register(new AutoLogModule());
@@ -130,6 +138,8 @@ public class YeClient implements ClientModInitializer {
         ModuleManager.register(new StashRadarModule());
         ModuleManager.register(new BlockEspModule());
         ModuleManager.register(new BlockSearchModule());
+        ModuleManager.register(new BreakProgressModule());
+        ModuleManager.register(new PacketMineModule());
         ModuleManager.register(new PortalFinderModule());
         ModuleManager.register(new LavaEspModule());
         ModuleManager.register(new TrajectoryPreviewModule());

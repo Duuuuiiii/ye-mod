@@ -3,6 +3,7 @@ package com.ye.mod.modules.render;
 import com.ye.mod.core.Category;
 import com.ye.mod.core.Module;
 import com.ye.mod.core.setting.BoolSetting;
+import com.ye.mod.core.setting.ColorSetting;
 import com.ye.mod.core.setting.DoubleSetting;
 import com.ye.mod.core.setting.EnumSetting;
 import net.minecraft.client.Minecraft;
@@ -54,6 +55,14 @@ public class TrajectoryPreviewModule extends Module {
             "markerSize", "落点标记大小", "调节独立球体或独立方块标记的尺寸", 0.45, 0.15, 1.80, 0.05
     ).visible(() -> highlightTarget.get() && endMarkerMode.get() != EndMarkerMode.BLOCK_BOX).functionGroup());
 
+    public final ColorSetting lineColor = addSetting(new ColorSetting(
+            "lineColor", "轨迹线颜色", "自定义弹道预测线与落点颜色", 0xFF38BDF8
+    ));
+
+    public final DoubleSetting lineWidth = addSetting(new DoubleSetting(
+            "lineWidth", "轨迹线粗细", "调节弹道预测线渲染宽度", 2.2, 0.8, 6.0, 0.2
+    ));
+
     public TrajectoryPreviewModule() {
         super("trajectory_preview", "弹道预测", "Trajectory", "预测珍珠、弓箭与药水飞行落点", Category.UTILITY);
     }
@@ -73,7 +82,8 @@ public class TrajectoryPreviewModule extends Module {
         float velocity = 1.5f;
         float gravity = 0.03f;
         float drag = 0.99f;
-        int color = 0xFF38BDF8;
+        int color = lineColor.getArgb();
+        float lw = lineWidth.get().floatValue();
 
         if (item instanceof BowItem) {
             if (!mc.player.isUsingItem()) return;
@@ -142,14 +152,14 @@ public class TrajectoryPreviewModule extends Module {
 
             if (blockHit.getType() != HitResult.Type.MISS) {
                 Vec3 hitPos = blockHit.getLocation();
-                Gizmos.line(prev, hitPos, color, 2.2f).setAlwaysOnTop();
+                Gizmos.line(prev, hitPos, color, lw).setAlwaysOnTop();
                 if (highlightTarget.get()) {
                     drawEndMarker(hitPos, blockHit.getBlockPos(), color);
                 }
                 return;
             }
 
-            Gizmos.line(prev, next, color, 2.0f).setAlwaysOnTop();
+            Gizmos.line(prev, next, color, lw).setAlwaysOnTop();
             prev = next;
             pos = next;
             vel = vel.scale(drag).add(0, -gravity, 0);
@@ -168,21 +178,18 @@ public class TrajectoryPreviewModule extends Module {
             Gizmos.cuboid(box, GizmoStyle.strokeAndFill(color, 2.0f, (0x55 << 24) | (color & 0x00FFFFFF))).setAlwaysOnTop();
             return;
         }
-        // 3D Wireframe Sphere at exact hitPos
+        // 3D Solid-Filled Sphere at exact hitPos
         double r = sz * 0.5;
-        final int segs = 16;
-        for (int i = 0; i < segs; i++) {
-            double a0 = (i / (double) segs) * Math.PI * 2.0;
-            double a1 = ((i + 1) / (double) segs) * Math.PI * 2.0;
-            // Equator ring (XZ)
-            Gizmos.line(hitPos.add(Math.cos(a0) * r, 0, Math.sin(a0) * r),
-                    hitPos.add(Math.cos(a1) * r, 0, Math.sin(a1) * r), color, 2.0f).setAlwaysOnTop();
-            // Meridian XY
-            Gizmos.line(hitPos.add(Math.cos(a0) * r, Math.sin(a0) * r, 0),
-                    hitPos.add(Math.cos(a1) * r, Math.sin(a1) * r, 0), color, 1.8f).setAlwaysOnTop();
-            // Meridian ZY
-            Gizmos.line(hitPos.add(0, Math.sin(a0) * r, Math.cos(a0) * r),
-                    hitPos.add(0, Math.sin(a1) * r, Math.cos(a1) * r), color, 1.8f).setAlwaysOnTop();
+        int fillCol = (0x88 << 24) | (color & 0x00FFFFFF);
+        final int latSteps = 6;
+        for (int i = 0; i < latSteps; i++) {
+            double t0 = -1.0 + 2.0 * i / latSteps;
+            double t1 = -1.0 + 2.0 * (i + 1) / latSteps;
+            double y0 = r * t0, y1 = r * t1;
+            double radMid = r * Math.sqrt(Math.max(0.05, 1.0 - ((t0 + t1) * 0.5) * ((t0 + t1) * 0.5)));
+            AABB slice = new AABB(hitPos.x - radMid, hitPos.y + y0, hitPos.z - radMid,
+                    hitPos.x + radMid, hitPos.y + y1, hitPos.z + radMid);
+            Gizmos.cuboid(slice, GizmoStyle.fill(fillCol)).setAlwaysOnTop();
         }
     }
 

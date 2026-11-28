@@ -423,6 +423,22 @@ public class YeGiantCreativeScreen extends Screen {
     @Override
     public boolean keyPressed(KeyEvent event) {
         int key = event.key();
+        var mci = net.minecraft.client.Minecraft.getInstance();
+        if (key >= GLFW.GLFW_KEY_1 && key <= GLFW.GLFW_KEY_9 && !searchFocused && hoveredTooltipStack != null && !hoveredTooltipStack.isEmpty()) {
+            int slot = key - GLFW.GLFW_KEY_1;
+            if (mci.gameMode != null) {
+                mci.gameMode.handleCreativeModeItemAdd(hoveredTooltipStack.copyWithCount(hoveredTooltipStack.getMaxStackSize()), 36 + slot);
+            }
+            YeQuickMenu.playClick();
+            return true;
+        }
+        if (mci.options.keySwapOffhand.matches(event) && !searchFocused && hoveredTooltipStack != null && !hoveredTooltipStack.isEmpty()) {
+            if (mci.gameMode != null) {
+                mci.gameMode.handleCreativeModeItemAdd(hoveredTooltipStack.copyWithCount(hoveredTooltipStack.getMaxStackSize()), 45);
+            }
+            YeQuickMenu.playClick();
+            return true;
+        }
         if (key == GLFW.GLFW_KEY_ESCAPE) {
             if (!carriedStack.isEmpty()) {
                 carriedStack = ItemStack.EMPTY;

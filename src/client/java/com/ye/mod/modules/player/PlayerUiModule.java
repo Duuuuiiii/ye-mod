@@ -47,6 +47,26 @@ public class PlayerUiModule extends Module {
             "showBarNumbers", "显示精确数值", "在生命条与饥饿条上显示精确数值", true
     ).visible(barStatus::get).functionGroup());
 
+    public final BoolSetting hideArmorBar = addSetting(new BoolSetting(
+            "hideArmorBar", "隐藏原版盔甲值", "隐藏原版护甲图标栏", false
+    ).functionGroup());
+
+    public final BoolSetting hideRecipeBook = addSetting(new BoolSetting(
+            "hideRecipeBook", "隐藏背包配方书", "打开生存背包时自动隐藏绿色配方书按钮与面板", true
+    ).functionGroup());
+
+    public final BoolSetting showShulkerSidebar = addSetting(new BoolSetting(
+            "showShulkerSidebar", "背包潜影盒清单", "打开背包或箱子时在右侧展示每个潜影盒内的物品与数量", true
+    ).functionGroup());
+
+    public final DoubleSetting invBgOpacity = addSetting(new DoubleSetting(
+            "invBgOpacity", "物品栏背景透明度", "调节背包面板背景暗化与不透明度", 0.72, 0.0, 1.0, 0.05
+    ));
+
+    public final DoubleSetting invBgBlur = addSetting(new DoubleSetting(
+            "invBgBlur", "物品栏背景模糊度", "调节打开背包时的背景模糊强度", 0.45, 0.0, 1.0, 0.05
+    ));
+
     public final BoolSetting sideSurvivalInv = addSetting(new BoolSetting(
             "sideSurvivalInv", "生存背包侧边弹出", "打开生存背包时从屏幕侧边滑出，不遮挡屏幕正中央视野", true
     ).functionGroup());

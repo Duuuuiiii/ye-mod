@@ -36,6 +36,11 @@ public abstract class ParticleEngineMixin {
             cir.setReturnValue(null);
             return;
         }
+        com.ye.mod.modules.visual.ParticleManagerModule pm = ModuleManager.get(com.ye.mod.modules.visual.ParticleManagerModule.class);
+        if (pm != null && pm.shouldBlockParticle(options)) {
+            cir.setReturnValue(null);
+            return;
+        }
         NoRenderModule noRender = ModuleManager.get(NoRenderModule.class);
         if (noRender == null || !noRender.isEnabled()) return;
 
