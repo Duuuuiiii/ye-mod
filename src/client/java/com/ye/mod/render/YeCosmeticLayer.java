@@ -657,7 +657,7 @@ public class YeCosmeticLayer extends RenderLayer<AvatarRenderState, PlayerModel>
         float cy = -1.28f + bobY;
         float cz = 0.08f;
 
-        int baseRgb = GlobalColorModule.resolveRgb(true, 0xA855F7, 2);
+        int baseRgb = 0xA855F7;
         int balloonCol = 0xFA000000 | baseRgb;
         int stringCol = 0xFFE2E8F0;
 

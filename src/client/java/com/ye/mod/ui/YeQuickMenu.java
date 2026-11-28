@@ -1842,7 +1842,8 @@ public final class YeQuickMenu {
         int dx = Math.max(6, Math.min(sw - tableW - 6, dropX));
         int dy = (dropY + boxH + 6 > sh) ? Math.max(6, dropY - 22 - boxH) : dropY;
 
-        AppleUiRenderer.drawElevatedWindow(g, dx, dy, tableW, boxH, AppleUiRenderer.isMechanical() ? 0 : 7);
+        AppleUiRenderer.drawRoundedRect(g, dx, dy, tableW, boxH, AppleUiRenderer.isMechanical() ? 0 : 7,
+                AppleUiRenderer.lightTheme ? 0xF5F8FAFC : 0xF50E131F);
         AppleUiRenderer.drawRoundedOutline(g, dx, dy, tableW, boxH, AppleUiRenderer.isMechanical() ? 0 : 7, 1.4f, accent);
         HIT_RECTS.add(new HitRect(dx, dy, tableW, boxH, () -> {}, null, null, 5));
 

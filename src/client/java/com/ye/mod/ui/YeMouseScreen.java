@@ -55,12 +55,12 @@ public class YeMouseScreen extends Screen {
         boolean isDraggingHud = (draggingHudSlot != null);
         // Background blur (applies to Glass, Dark, Light based on uiBlurStrength; cancelled during HUD drag!)
         if (!isDraggingHud && !ConfigManager.uiMinimized && YeQuickMenu.isOpen()) {
-            float blurStr = AppleUiRenderer.isGlass()
-                    ? Math.max(0.15f, ConfigManager.uiBlurStrength)
-                    : ConfigManager.uiBlurStrength;
-            if (blurStr > 0.01f) {
+            float blurStr = ConfigManager.uiBlurStrength;
+            if (AppleUiRenderer.isGlass() && blurStr > 0.01f) {
                 g.blurBeforeThisStratum();
-                int veilAlpha = Math.round(blurStr * 135.0f);
+            }
+            if (blurStr > 0.01f) {
+                int veilAlpha = Math.round(blurStr * 125.0f);
                 int veilRgb = AppleUiRenderer.lightTheme ? 0x00F1F5F9 : 0x00070B14;
                 g.fill(0, 0, this.width, this.height, (veilAlpha << 24) | veilRgb);
             }
