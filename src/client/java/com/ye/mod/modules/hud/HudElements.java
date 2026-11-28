@@ -1075,7 +1075,7 @@ public final class HudElements {
 
             float sc = scale.get().floatValue();
             boolean footer = showStatusFooter.get() || subjects.size() > 1;
-            int cellW = Math.round(82 * sc);
+            int cellW = Math.round(96 * sc);
             int gap = Math.round(6 * sc);
             int w = subjects.size() * cellW + Math.max(0, subjects.size() - 1) * gap;
             int h = Math.round((footer ? 112 : 96) * sc);
@@ -1088,7 +1088,7 @@ public final class HudElements {
                 LivingEntity subject = subjects.get(idx);
                 int cxBox = x + idx * (cellW + gap);
                 int dollBottom = y + h - Math.round((footer ? 20 : 6) * sc);
-                int dollScale = Math.max(14, Math.round(32 * sc));
+                int dollScale = Math.max(11, Math.round(22 * sc));
                 float cx = cxBox + cellW * 0.5f;
                 float cy = y + (dollBottom - y) * 0.48f;
 

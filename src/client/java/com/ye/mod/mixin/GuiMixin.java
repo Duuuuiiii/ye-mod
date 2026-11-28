@@ -182,7 +182,10 @@ public abstract class GuiMixin {
         }
 
         StashRadarModule stashRadar = ModuleManager.get(StashRadarModule.class);
-        if (stashRadar != null) stashRadar.renderHud(guiGraphics);
+        if (stashRadar != null) {
+            stashRadar.renderHud(guiGraphics);
+            stashRadar.render2d(guiGraphics, partialTick);
+        }
 
         AntiLagModule antiLag = ModuleManager.get(AntiLagModule.class);
         if (antiLag != null) antiLag.renderHudAlert(guiGraphics);
@@ -195,7 +198,6 @@ public abstract class GuiMixin {
 
         if (Minecraft.getInstance().screen == null) {
             YeQuickMenu.render(guiGraphics, -1, -1, false);
-            YeQuickMenu.renderRusherSidebar(guiGraphics, guiGraphics.guiWidth(), guiGraphics.guiHeight(), -1, -1, false);
         }
     }
 }

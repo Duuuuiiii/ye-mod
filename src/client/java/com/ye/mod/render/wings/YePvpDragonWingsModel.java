@@ -77,16 +77,13 @@ public class YePvpDragonWingsModel {
         float flap = (float) Math.sin(t);
         float lagFlap = (float) Math.sin(t - 0.85f);
 
-        // In PlayerModel.body (+X=left, +Y=down, +Z=back):
-        // Negative X rotation (-X deg) pitches the +Z wing membrane downward (+Y) like natural hanging/swept dragon wings!
-        // Negative Y rotation (-Y deg) sweeps +X bone backward (+Z) behind the player's back (never forward into head/chest!).
-        float proxX = -26.0f + (float) Math.cos(t) * 5.0f;
-        float proxY = (gliding ? -16.0f : -28.0f) + flap * (gliding ? 16.0f : 12.0f);
-        float proxZ = -18.0f + flap * 10.0f;
+        float proxX = 0.0f;
+        float proxY = (gliding ? -8.0f : -12.0f) + flap * (gliding ? 14.0f : 8.0f);
+        float proxZ = -16.0f + flap * 7.0f;
 
-        float distX = 6.0f;
-        float distY = (gliding ? 10.0f : 14.0f) + lagFlap * (gliding ? 14.0f : 10.0f);
-        float distZ = 16.0f + lagFlap * 9.0f;
+        float distX = 0.0f;
+        float distY = (gliding ? -6.0f : -10.0f) + lagFlap * (gliding ? 12.0f : 8.0f);
+        float distZ = 20.0f + lagFlap * 7.0f;
 
         setAngles(leftProximal, rightProximal, proxX, proxY, proxZ);
         setAngles(leftDistal, rightDistal, distX, distY, distZ);
@@ -134,10 +131,11 @@ public class YePvpDragonWingsModel {
         for (int i = 0; i < strips; i++) {
             float t0 = i / (float) strips;
             float t1 = (i + 1) / (float) strips;
-            float z0 = (oz + depthZ * t0) / 16.0f;
-            float z1 = (oz + depthZ * t1) / 16.0f;
-            float arch0 = (float) Math.sin(t0 * Math.PI) * (-0.95f / 16.0f);
-            float arch1 = (float) Math.sin(t1 * Math.PI) * (-0.95f / 16.0f);
+            // Hang downward (+Y) from the upper wing spar with a gentle backward camber (+Z)
+            float y0 = (oz + depthZ * t0) / 16.0f;
+            float y1 = (oz + depthZ * t1) / 16.0f;
+            float zArch0 = (float) Math.sin(t0 * Math.PI) * (0.95f / 16.0f);
+            float zArch1 = (float) Math.sin(t1 * Math.PI) * (0.95f / 16.0f);
 
             float x0 = ox / 16.0f;
             float x1 = (ox + widthX) / 16.0f;
@@ -146,10 +144,10 @@ public class YePvpDragonWingsModel {
             float tv0 = (v0 + (v1 - v0) * t0) / 30.0f;
             float tv1 = (v0 + (v1 - v0) * t1) / 30.0f;
 
-            emit(pose, vc, x0, arch0, z0, argb, tu0, tv0, light, 0f, -1f, 0f);
-            emit(pose, vc, x1, arch0, z0, argb, tu1, tv0, light, 0f, -1f, 0f);
-            emit(pose, vc, x1, arch1, z1, argb, tu1, tv1, light, 0f, -1f, 0f);
-            emit(pose, vc, x0, arch1, z1, argb, tu0, tv1, light, 0f, -1f, 0f);
+            emit(pose, vc, x0, y0, zArch0, argb, tu0, tv0, light, 0f, 0f, 1f);
+            emit(pose, vc, x1, y0, zArch0, argb, tu1, tv0, light, 0f, 0f, 1f);
+            emit(pose, vc, x1, y1, zArch1, argb, tu1, tv1, light, 0f, 0f, 1f);
+            emit(pose, vc, x0, y1, zArch1, argb, tu0, tv1, light, 0f, 0f, 1f);
         }
     }
 

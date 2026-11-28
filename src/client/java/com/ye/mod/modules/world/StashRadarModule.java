@@ -130,8 +130,12 @@ public class StashRadarModule extends Module {
     ).functionGroup());
 
     public final BoolSetting uniformOpacity = addSetting(new BoolSetting(
-            "uniformOpacity", "统一填充深浅", "相邻或重叠的同类容器保持一致透明深浅，不叠加变深", true
+            "uniformOpacity", "统一填充与合并边框", "相邻或重叠的同类容器合并外框与填充，颜色深浅一致不叠加", true
     ));
+
+    public final BoolSetting containerItemPreview = addSetting(new BoolSetting(
+            "containerItemPreview", "箱子物品悬浮预览", "在附近已读取内容的箱子/潜影盒上方悬浮显示内部物品中文名与数量", true
+    ).functionGroup());
 
     public final BoolSetting ignoreNatural = addSetting(new BoolSetting(
             "ignoreNatural", "过滤自然遗迹箱子", "自动跳过刷怪笼、矿井、沙漠神殿、地狱堡垒等自然生成箱子", true
@@ -339,15 +343,14 @@ public class StashRadarModule extends Module {
             int fillCol = (fillA << 24) | rgb;
 
             if (!uniform || bm == BoxRenderMode.OUTLINE_ONLY) {
-                if (bm == BoxRenderMode.OUTLINE_ONLY) {
+                if (bm == BoxRenderMode.OUTLINE_ONLY && !uniform) {
                     Gizmos.cuboid(box, GizmoStyle.stroke(strokeCol, width)).setAlwaysOnTop();
-                } else {
+                } else if (!uniform) {
                     Gizmos.cuboid(box, GizmoStyle.strokeAndFill(strokeCol, width, fillCol)).setAlwaysOnTop();
+                } else {
+                    rawBoxesByKind.computeIfAbsent(t.kind, k -> new ArrayList<>()).add(box);
                 }
             } else {
-                if (bm == BoxRenderMode.BOTH) {
-                    Gizmos.cuboid(box, GizmoStyle.stroke(strokeCol, width)).setAlwaysOnTop();
-                }
                 rawBoxesByKind.computeIfAbsent(t.kind, k -> new ArrayList<>()).add(box);
             }
 
@@ -360,11 +363,20 @@ public class StashRadarModule extends Module {
             for (Map.Entry<ContainerKind, List<AABB>> entry : rawBoxesByKind.entrySet()) {
                 ContainerConfig cfg = configs.get(entry.getKey());
                 int rgb = cfg.color.getRgb();
-                int fillA = Math.max(8, Math.min(240, (int) Math.round(cfg.fillAlpha.get() * 255.0)));
+                float width = cfg.lineWidth.get().floatValue();
+                BoxRenderMode bm = cfg.boxMode.get();
+                int strokeCol = (bm == BoxRenderMode.FILL_ONLY) ? 0x00000000 : (0xF0000000 | rgb);
+                int fillA = (bm == BoxRenderMode.OUTLINE_ONLY) ? 0 : Math.max(8, Math.min(240, (int) Math.round(cfg.fillAlpha.get() * 255.0)));
                 int fillCol = (fillA << 24) | rgb;
                 List<AABB> merged = mergeTouchingBoxes(entry.getValue());
                 for (AABB mb : merged) {
-                    Gizmos.cuboid(mb, GizmoStyle.fill(fillCol)).setAlwaysOnTop();
+                    if (bm == BoxRenderMode.OUTLINE_ONLY) {
+                        Gizmos.cuboid(mb, GizmoStyle.stroke(strokeCol, width)).setAlwaysOnTop();
+                    } else if (bm == BoxRenderMode.FILL_ONLY) {
+                        Gizmos.cuboid(mb, GizmoStyle.fill(fillCol)).setAlwaysOnTop();
+                    } else {
+                        Gizmos.cuboid(mb, GizmoStyle.strokeAndFill(strokeCol, width, fillCol)).setAlwaysOnTop();
+                    }
                 }
             }
         }
@@ -472,5 +484,45 @@ public class StashRadarModule extends Module {
 
     public void renderHud(GuiGraphics g) {
         // Rendered by dedicated StorageCountHud module inside HUD tab!
+    }
+
+    public void render2d(GuiGraphics g, float partialTick) {
+        if (!isEnabled() || !containerItemPreview.get()) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.player == null || mc.options.hideGui) return;
+
+        int shownContainers = 0;
+        for (StorageTarget t : cached) {
+            if (shownContainers >= 16) break;
+            if (mc.player.distanceToSqr(t.pos.getX() + 0.5, t.pos.getY() + 0.5, t.pos.getZ() + 0.5) > 24.0 * 24.0) continue;
+            BlockEntity be = mc.level.getBlockEntity(t.pos);
+            if (!(be instanceof net.minecraft.world.Container inv)) continue;
+
+            java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+            for (int i = 0; i < inv.getContainerSize(); i++) {
+                net.minecraft.world.item.ItemStack st = inv.getItem(i);
+                if (!st.isEmpty()) {
+                    String nm = com.ye.mod.core.YeZhCnDict.itemName(st);
+                    counts.merge(nm, st.getCount(), Integer::sum);
+                }
+            }
+            if (counts.isEmpty()) continue;
+
+            Vec3 top = new Vec3(t.pos.getX() + 0.5, t.pos.getY() + 1.15, t.pos.getZ() + 0.5);
+            double[] scr = com.ye.mod.render.YeWorldFxRenderer.worldToScreen(top, g.guiWidth(), g.guiHeight());
+            if (scr == null) continue;
+
+            shownContainers++;
+            int sx = (int) Math.round(scr[0]);
+            int sy = (int) Math.round(scr[1]);
+            int row = 0;
+            for (var entry : counts.entrySet()) {
+                if (row >= 5) break;
+                String line = entry.getKey() + " ×" + entry.getValue();
+                int lw = YeHdFont.width(line, 7.6f, false);
+                YeHdFont.draw(g, line, sx - lw * 0.5f, sy - (row + 1) * 9.5f, 7.6f, 0xFFF8FAFC, true, false);
+                row++;
+            }
+        }
     }
 }

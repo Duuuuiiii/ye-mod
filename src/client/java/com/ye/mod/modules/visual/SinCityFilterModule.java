@@ -15,6 +15,7 @@ import net.minecraft.resources.Identifier;
  */
 public class SinCityFilterModule extends Module {
     public enum FilterPreset {
+        HACHIMI_NOIR("黑紫压抑", "hachimi_noir", 0xFF6B21A8, 0xFF090412),
         DREAM_BLOOM("梦幻柔光", "jojo", 0xFF38BDF8, 0xFFFDE047),
         CAS_SHARPEN("超清锐化", "crt", 0xFF4ADE80, 0xFF0EA5E9),
         NATURAL_INK("原色漫描", "borderlands", 0xFFF8FAFC, 0xFF334155),

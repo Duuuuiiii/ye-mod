@@ -34,6 +34,12 @@ public abstract class MouseHandlerMixin {
 
     @Redirect(method = "turnPlayer", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;turn(DD)V"))
     private void ye$redirectTurnForFreeLook(net.minecraft.client.player.LocalPlayer player, double yRot, double xRot) {
+        ZoomModule zoom = ModuleManager.get(ZoomModule.class);
+        if (zoom != null && zoom.isEnabled() && zoom.getActiveDivisor() > 1.05) {
+            double div = zoom.getActiveDivisor();
+            yRot /= div;
+            xRot /= div;
+        }
         CameraTweaksModule cam = ModuleManager.get(CameraTweaksModule.class);
         if (cam != null && cam.isFreeLookActive()) {
             cam.onMouseTurnFreeLook(yRot, xRot);

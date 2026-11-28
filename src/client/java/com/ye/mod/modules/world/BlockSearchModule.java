@@ -56,6 +56,7 @@ public class BlockSearchModule extends Module {
     private volatile BlockPos pinnedTarget = null;
     private final Set<Long> alerted = new HashSet<>();
     private int tickCounter = 0;
+    private Level lastTrackedLevel = null;
 
     public BlockSearchModule() {
         super("block_search", "方块搜索", "Block Search", "大范围雷达检索指定方块并生成精确坐标距离清单，支持一键寻路与锁定引导", Category.UTILITY);
@@ -85,12 +86,21 @@ public class BlockSearchModule extends Module {
         this.pinnedTarget = pos;
     }
 
-    public void navigateBaritoneTo(BlockPos pos) {
+    public void navigateBaritoneWalk(BlockPos pos) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null && mc.player.connection != null && pos != null) {
             pinnedTarget = pos;
             mc.player.connection.sendChat(String.format("#goto %d %d %d", pos.getX(), pos.getY(), pos.getZ()));
-            YeQuickMenu.showToast(String.format("已发送 Baritone 寻路: %d, %d, %d", pos.getX(), pos.getY(), pos.getZ()), 0xFF34D399);
+            YeQuickMenu.showToast(String.format("走路前往: %d, %d, %d", pos.getX(), pos.getY(), pos.getZ()), 0xFF34D399);
+        }
+    }
+
+    public void navigateBaritoneFly(BlockPos pos) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null && mc.player.connection != null && pos != null) {
+            pinnedTarget = pos;
+            mc.player.connection.sendChat(String.format("#elytra %d %d %d", pos.getX(), pos.getY(), pos.getZ()));
+            YeQuickMenu.showToast(String.format("飞行前往: %d, %d, %d", pos.getX(), pos.getY(), pos.getZ()), 0xFF0EA5E9);
         }
     }
 
@@ -105,8 +115,17 @@ public class BlockSearchModule extends Module {
     public void onTick() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) {
+            lastTrackedLevel = null;
             results = List.of();
+            pinnedTarget = null;
             return;
+        }
+        if (mc.level != lastTrackedLevel) {
+            lastTrackedLevel = mc.level;
+            results = List.of();
+            pinnedTarget = null;
+            alerted.clear();
+            tickCounter = 19;
         }
         tickCounter++;
         if (tickCounter % 20 != 0) return;

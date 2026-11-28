@@ -34,6 +34,10 @@ public class ZoomModule extends Module {
     private boolean wasHolding = false;
     private long lastNs = 0L;
 
+    public double getActiveDivisor() {
+        return Math.exp(currentLogDiv);
+    }
+
     public ZoomModule() {
         super("zoom", "放大镜", "Zoom", "平滑变焦放大远景视野，支持无级倍率调节", Category.VISUAL);
         setEnabled(true, true);

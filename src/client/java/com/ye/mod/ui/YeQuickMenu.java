@@ -282,12 +282,12 @@ public final class YeQuickMenu {
         boolean mech = AppleUiRenderer.isMechanical();
 
         float targetOpen = open ? 1.0f : 0.0f;
-        openAnim = mech ? targetOpen : AppleUiRenderer.smooth(openAnim, targetOpen, 18.0f, dt);
-        pageSlide = mech ? 0.0f : AppleUiRenderer.smooth(pageSlide, 0.0f, 22.0f, dt);
+        openAnim = mech ? targetOpen : AppleUiRenderer.smooth(openAnim, targetOpen, 26.0f, dt);
+        pageSlide = mech ? 0.0f : AppleUiRenderer.smooth(pageSlide, 0.0f, 28.0f, dt);
 
         if (targetScroll > maxScroll) targetScroll = maxScroll;
         if (targetScroll < 0.0) targetScroll = 0.0;
-        scrollOffset = mech ? targetScroll : AppleUiRenderer.smooth((float) scrollOffset, (float) targetScroll, 24.0f, dt);
+        scrollOffset = mech ? targetScroll : AppleUiRenderer.smooth((float) scrollOffset, (float) targetScroll, 30.0f, dt);
         if (scrollOffset > maxScroll) scrollOffset = maxScroll;
         if (scrollOffset < 0.0) scrollOffset = 0.0;
 
@@ -525,7 +525,7 @@ public final class YeQuickMenu {
     private static void switchSection(TopSection sec) {
         if (activeSection == sec && activeModule == null) return;
         playClick();
-        pageSlide = (sec.ordinal() >= activeSection.ordinal()) ? 14.0f : -14.0f;
+        pageSlide = (sec.ordinal() > activeSection.ordinal()) ? 20.0f : -20.0f;
         activeSection = sec;
         activeModule = null;
         closeOverlays();
@@ -1204,20 +1204,28 @@ public final class YeQuickMenu {
                         r.blockName(), r.pos().getX(), r.pos().getY(), r.pos().getZ(), r.distance());
                 YeHdFont.draw(g, line, x + 7, YeHdFont.vCenterY(ry, 18, 8.0f), 8.0f, 0xFFF8FAFC, false, pinned);
 
-                int pinBtnX = x + rowW - 96;
-                AppleUiRenderer.drawRoundedRect(g, pinBtnX, ry + 2, 42, 14, 3.5f, AppleUiRenderer.bgCardHover());
-                YeHdFont.drawCenteredInBox(g, pinned ? "已锁定" : "追踪", pinBtnX, ry + 2, 42, 14, 7.6f, accent, false, true);
-                addClippedHit(pinBtnX, ry + 2, 42, 14, listY, listY + listH, () -> {
+                int pinBtnX = x + rowW - 126;
+                AppleUiRenderer.drawRoundedRect(g, pinBtnX, ry + 2, 38, 14, 3.5f, AppleUiRenderer.bgCardHover());
+                YeHdFont.drawCenteredInBox(g, pinned ? "已锁" : "追踪", pinBtnX, ry + 2, 38, 14, 7.6f, accent, false, true);
+                addClippedHit(pinBtnX, ry + 2, 38, 14, listY, listY + listH, () -> {
                     playClick();
                     bsm.setPinnedTarget(pinned ? null : r.pos());
                 }, null, null, null);
 
-                int gotoBtnX = x + rowW - 50;
-                AppleUiRenderer.drawRoundedRect(g, gotoBtnX, ry + 2, 46, 14, 3.5f, accent);
-                YeHdFont.drawCenteredInBox(g, "前往", gotoBtnX, ry + 2, 46, 14, 7.6f, 0xFFFFFFFF, false, true);
-                addClippedHit(gotoBtnX, ry + 2, 46, 14, listY, listY + listH, () -> {
+                int flyBtnX = x + rowW - 84;
+                AppleUiRenderer.drawRoundedRect(g, flyBtnX, ry + 2, 40, 14, 3.5f, 0xFF0EA5E9);
+                YeHdFont.drawCenteredInBox(g, ConfigManager.tr("飞行", "Fly"), flyBtnX, ry + 2, 40, 14, 7.6f, 0xFFFFFFFF, false, true);
+                addClippedHit(flyBtnX, ry + 2, 40, 14, listY, listY + listH, () -> {
                     playClick();
-                    bsm.navigateBaritoneTo(r.pos());
+                    bsm.navigateBaritoneFly(r.pos());
+                }, null, null, null);
+
+                int walkBtnX = x + rowW - 41;
+                AppleUiRenderer.drawRoundedRect(g, walkBtnX, ry + 2, 40, 14, 3.5f, accent);
+                YeHdFont.drawCenteredInBox(g, ConfigManager.tr("走路", "Walk"), walkBtnX, ry + 2, 40, 14, 7.6f, 0xFFFFFFFF, false, true);
+                addClippedHit(walkBtnX, ry + 2, 40, 14, listY, listY + listH, () -> {
+                    playClick();
+                    bsm.navigateBaritoneWalk(r.pos());
                 }, null, null, null);
             }
             ry += 20;

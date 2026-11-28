@@ -112,6 +112,11 @@ public final class YePickerModal {
                 String path = BuiltInRegistries.BLOCK.getKey(b).getPath();
                 String nm = YeZhCnDict.blockName(b);
                 ItemStack icon = b.asItem() != Items.AIR ? b.asItem().getDefaultInstance() : ItemStack.EMPTY;
+                if (b == Blocks.NETHER_PORTAL) {
+                    icon = new ItemStack(Items.PURPLE_STAINED_GLASS_PANE);
+                } else if (b == Blocks.END_PORTAL || b == Blocks.END_GATEWAY) {
+                    icon = new ItemStack(Items.ENDER_EYE);
+                }
                 int grp = classifyBlockTab(b, path);
                 list.add(new BlockItem(id, nm, icon, grp));
             }
@@ -300,7 +305,7 @@ public final class YePickerModal {
 
     private static void renderBlockMatrix(GuiGraphics g, int x, int y, int w, int h,
                                           int mx, int my, int accent, boolean mech, List<YeQuickMenu.HitRect> outHits) {
-        String[] tabs = {"已选与常用", "矿石矿物", "容器与功能", "自然方块", "下界末地", "红石建筑", "全部方块"};
+        String[] tabs = {"已选 (" + targetSet.size() + ")", "矿石矿物", "容器与功能", "自然方块", "下界末地", "红石建筑", "全部方块"};
         int tx = x;
         for (int i = 0; i < tabs.length; i++) {
             final int tabIdx = i;
@@ -325,7 +330,7 @@ public final class YePickerModal {
                 if (!zh.toLowerCase(Locale.ROOT).contains(q) && !bi.id.toLowerCase(Locale.ROOT).contains(q)) continue;
             } else {
                 if (selectedBlockTab == 0) {
-                    if (!targetSet.contains(bi.id) && bi.tabGroup != 1 && bi.tabGroup != 2) continue;
+                    if (!targetSet.contains(bi.id)) continue;
                 } else if (selectedBlockTab <= 5 && bi.tabGroup != selectedBlockTab) {
                     continue;
                 }
